@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "mode": "standalone",
+  "games": [
+    {
+      "slug": "rust",
+      "role": "primary"
+    },
+    {
+      "slug": "counter-strike-2",
+      "role": "companion"
+    }
+  ],
+  "components": [
+    {
+      "id": "main",
+      "fileName": "RustSurf-0.1.0.zip",
+      "label": "Rust Surf",
+      "kind": "main",
+      "required": true
+    }
+  ],
+  "requirements": [],
+  "mappings": [
+    {
+      "component": "main",
+      "from": "",
+      "to": "{managed}/RustSurf"
+    }
+  ],
+  "setup": {
+    "label": "Rust and CS2 content",
+    "launch": {
+      "kind": "exe",
+      "path": "{managed}/RustSurf/prep/python.exe",
+      "args": [
+        "{managed}/RustSurf/prep/prep.py",
+        "--rust",
+        "{game}",
+        "--cs2",
+        "{game:counter-strike-2}",
+        "--out",
+        "{managed}/RustSurf/data",
+        "--tools",
+        "{managed}/RustSurf/prep",
+        "--version",
+        "0.1.0"
+      ],
+      "cwd": "{managed}/RustSurf/prep"
+    },
+    "done": {
+      "file": "{managed}/RustSurf/data/done-0.1.0.txt"
+    }
+  },
+  "launch": {
+    "kind": "exe",
+    "path": "{managed}/RustSurf/RustSurf.exe",
+    "args": [
+      "--",
+      "--data",
+      "{managed}/RustSurf/data",
+      "--rust",
+      "{game}",
+      "--cs2",
+      "{game:counter-strike-2}"
+    ],
+    "cwd": "{managed}/RustSurf"
+  }
+}

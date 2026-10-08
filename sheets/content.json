@@ -1,0 +1,196 @@
+{
+  "_sheet": "content",
+  "_doc": "One row per piece of game content the mashup reads from the player's own installs. prep.py turns each row into one output file under the data folder. 'source' is the exact in-game path; 'reader' is the tool; 'out' is the file the game loads.",
+  "columns": [
+    "id",
+    "game",
+    "kind",
+    "source",
+    "reader",
+    "out",
+    "used_by",
+    "verified"
+  ],
+  "rows": [
+    {
+      "id": "backdrop_meshes",
+      "game": "rust",
+      "kind": "mesh",
+      "source": "content.bundle :: every LOD0 mesh under assets/content/structures/launch_site/models/, launch_site_floodlights/models/, industrial_structures/models/launch_site_silo, warehouses/models/warehouse_launch_site_a that the monument prefab places",
+      "reader": "unitypy -> glbwriter (z flipped to Godot space, materials by name)",
+      "out": "rust/mesh/*.glb (one per placed mesh, 33 on 2026-10-08)",
+      "used_by": "course backdrop via scene_launch_site placements",
+      "verified": "2026-10-08 prep run 5: 33 meshes, 61 textures, 54 placements"
+    },
+    {
+      "id": "scene_launch_site",
+      "game": "rust",
+      "kind": "placement",
+      "source": "assetscenes.bundle :: BuildPlayer-AssetScene-monument.1 :: assets/bundled/prefabs/autospawn/monument/xlarge/launch_site_1.prefab",
+      "reader": "unitypy",
+      "out": "rust/launch_site_placements.json",
+      "used_by": "course backdrop (world transform of every launch_site_* / range_* / warehouse_launch_site_* LOD0 mesh)",
+      "verified": "2026-10-08 prep run 5: 54 placements written, extents x -227..207 z -93..114"
+    },
+    {
+      "id": "tex_concrete_f_site",
+      "game": "rust",
+      "kind": "texture",
+      "source": "assets/content/structures/launch_site/models/materials/concrete_f_site.mat :: _MainTex,_BumpMap",
+      "reader": "unitypy",
+      "out": "rust/tex/concrete_f_site_{MainTex,BumpMap}.png",
+      "used_by": "ramp material 'concrete'",
+      "verified": "2026-10-08 prep: 2048x2048 PNG albedo+normal, seen on the start pad in game"
+    },
+    {
+      "id": "tex_metal_trims_site",
+      "game": "rust",
+      "kind": "texture",
+      "source": "assets/content/structures/launch_site/models/materials/metal_trims_site.mat :: _MainTex,_BumpMap",
+      "reader": "unitypy",
+      "out": "rust/tex/metal_trims_site_{MainTex,BumpMap}.png",
+      "used_by": "ramp material 'metal'",
+      "verified": "2026-10-08 prep: 2048x2048 PNG albedo+normal, seen on the start pad in game"
+    },
+    {
+      "id": "tex_site_ground",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material site_ground_concrete (Launch Site ground, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/site_ground_concrete_{albedo,normal}.png",
+      "used_by": "materials.ground",
+      "verified": "2026-10-08 prep run 8: site_ground_concrete albedo+normal exported"
+    },
+    {
+      "id": "amb_wind_rust",
+      "game": "rust",
+      "kind": "audio",
+      "source": "assets/content/sound/audioclips/ambience/ambience-desert-day-windy-dry.wav (FSB5 in audio.bundle .resource)",
+      "reader": "unitypy+vgmstream",
+      "out": "rust/audio/ambience-desert-day-windy-dry.wav",
+      "used_by": "sounds.ambience_loop",
+      "verified": "2026-10-08: name listed in audio.bundle; the field-day-windy clip decoded 24.0 s stereo 44.1k by the same path"
+    },
+    {
+      "id": "music_rust",
+      "game": "rust",
+      "kind": "audio",
+      "source": "assets/content/sound/music/themes/classic/music-classic-ambience-003.wav",
+      "reader": "unitypy+vgmstream",
+      "out": "rust/audio/music-classic-ambience-003.wav",
+      "used_by": "sounds.menu_music",
+      "verified": "2026-10-08: FSB5, 17.4 s stereo 44.1k (listed; decode path same as amb_wind_rust)"
+    },
+    {
+      "id": "sfx_step_concrete",
+      "game": "cs2",
+      "kind": "audio",
+      "source": "sounds/player/footsteps/concrete_ct_01..04.vsnd_c",
+      "reader": "vrf",
+      "out": "cs2/sounds/player/footsteps/concrete_ct_0{1..4}.wav",
+      "used_by": "sounds.footstep",
+      "verified": "2026-10-08: concrete_ct_01 -> wav 44.1k mono"
+    },
+    {
+      "id": "sfx_land_concrete",
+      "game": "cs2",
+      "kind": "audio",
+      "source": "sounds/player/footsteps/land_concrete_01.vsnd_c",
+      "reader": "vrf",
+      "out": "cs2/sounds/player/footsteps/land_concrete_01.wav",
+      "used_by": "sounds.land",
+      "verified": "2026-10-08: -> wav"
+    },
+    {
+      "id": "sfx_jump",
+      "game": "cs2",
+      "kind": "audio",
+      "source": "sounds/player/footsteps/jump_launch_01.vsnd_c",
+      "reader": "vrf",
+      "out": "cs2/sounds/player/footsteps/jump_launch_01.wav",
+      "used_by": "sounds.jump",
+      "verified": "2026-10-08: -> wav"
+    },
+    {
+      "id": "amb_wind_cs2",
+      "game": "cs2",
+      "kind": "audio",
+      "source": "sounds/ambient/common/wind/amb_wind_01.vsnd_c",
+      "reader": "vrf",
+      "out": "cs2/sounds/ambient/common/wind/amb_wind_01.mp3",
+      "used_by": "sounds.speed_wind",
+      "verified": "2026-10-08: -> mp3 (VRF keeps source encoding)"
+    },
+    {
+      "id": "model_arms",
+      "game": "cs2",
+      "kind": "model",
+      "source": "weapons/models/shared/arms/weapon_arms.vmdl_c",
+      "reader": "vrf --gltf_export_format glb --gltf_export_materials",
+      "out": "cs2/weapons/models/shared/arms/weapon_arms.glb",
+      "used_by": "viewmodel",
+      "verified": "2026-10-08: 84 nodes, 1 mesh, 1 skin, bones wpnHand_R/hand_R"
+    },
+    {
+      "id": "model_knife_ct",
+      "game": "cs2",
+      "kind": "model",
+      "source": "weapons/models/knife/knife_default_ct/weapon_knife_default_ct.vmdl_c",
+      "reader": "vrf glb",
+      "out": "cs2/weapons/models/knife/knife_default_ct/weapon_knife_default_ct.glb",
+      "used_by": "viewmodel",
+      "verified": "2026-10-08: 5 nodes, bones weapon/weapon_offset/ag1_hand_r"
+    },
+    {
+      "id": "clip_knife_draw",
+      "game": "cs2",
+      "kind": "animation",
+      "source": "animation/anims/viewmodel/knife/_default_knife/draw_knife.vnmclip_c",
+      "reader": "vrf glb --game gameinfo.gi",
+      "out": "cs2/animation/anims/viewmodel/knife/_default_knife/draw_knife.glb",
+      "used_by": "viewmodel.state draw",
+      "verified": "2026-10-08: glb with 1 animation, 63 nodes, viewmodel+knife skeletons"
+    },
+    {
+      "id": "clip_knife_idle",
+      "game": "cs2",
+      "kind": "animation",
+      "source": "animation/anims/viewmodel/knife/_default_knife/idle_knife.vnmclip_c",
+      "reader": "vrf glb",
+      "out": "cs2/animation/anims/viewmodel/knife/_default_knife/idle_knife.glb",
+      "used_by": "viewmodel.state idle",
+      "verified": "2026-10-08: ok"
+    },
+    {
+      "id": "clip_knife_inspect",
+      "game": "cs2",
+      "kind": "animation",
+      "source": "animation/anims/viewmodel/knife/_default_knife/lookat01_knife.vnmclip_c",
+      "reader": "vrf glb",
+      "out": "cs2/animation/anims/viewmodel/knife/_default_knife/lookat01_knife.glb",
+      "used_by": "viewmodel.state inspect (bind +lookatweapon)",
+      "verified": "2026-10-08: ok"
+    },
+    {
+      "id": "cfg_user_keys",
+      "game": "cs2",
+      "kind": "config",
+      "source": "{steam}/userdata/<account>/730/remote/cs2_user_keys.vcfg (fallback {game:counter-strike-2}/game/csgo/cfg/user_keys_default.vcfg)",
+      "reader": "game at runtime (vcfg parser in Input.gd)",
+      "out": "(live)",
+      "used_by": "input",
+      "verified": "2026-10-08: Cooper's file is empty so CS2 defaults apply; HUD shows source"
+    },
+    {
+      "id": "cfg_user_convars",
+      "game": "cs2",
+      "kind": "config",
+      "source": "{steam}/userdata/<account>/730/remote/cs2_user_convars.vcfg",
+      "reader": "game at runtime",
+      "out": "(live)",
+      "used_by": "input.sensitivity, hud.crosshair",
+      "verified": "2026-10-08: sensitivity 2.5, m_yaw 0.022, cl_crosshairsize 5, gap 1, thickness 0.5, style 2, dot true, color 1"
+    }
+  ]
+}

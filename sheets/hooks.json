@@ -1,0 +1,14 @@
+{
+  "_sheet": "hooks",
+  "_doc": "Every point where the mashup touches a game on the player's PC. All read-only. 'fallback' is what happens when the read fails.",
+  "columns": ["id", "game", "path", "when", "fallback", "verified"],
+  "rows": [
+    {"id": "rust_bundles", "game": "rust", "path": "{game}/Bundles/shared/{content,assetscenes,audio,textures.0-4}.bundle", "when": "prep (once)", "fallback": "prep fails with 'Rust bundle missing: <name>' and no done file; Melty shows the error", "verified": "2026-10-08: all 11 bundles map by CAB id (cabs.json)"},
+    {"id": "rust_version", "game": "rust", "path": "{game}/Bundles/shared/content.bundle UnityFS header engine version", "when": "prep", "fallback": "logged only", "verified": "6000.3.15x1"},
+    {"id": "cs2_vpk", "game": "cs2", "path": "{game:counter-strike-2}/game/csgo/pak01_dir.vpk (+ game/core/pak01_dir.vpk for skeletons)", "when": "prep (once)", "fallback": "prep fails with 'CS2 pak01_dir.vpk missing'", "verified": "2026-10-08: 135686 entries listed"},
+    {"id": "cs2_gameinfo", "game": "cs2", "path": "{game:counter-strike-2}/game/csgo/gameinfo.gi", "when": "prep (VRF --game, needed for vnmclip skeleton refs)", "fallback": "clips export without skeleton -> viewmodel disabled, message in hud", "verified": "2026-10-08"},
+    {"id": "cs2_user_keys", "game": "cs2", "path": "{steam}/userdata/*/730/remote/cs2_user_keys.vcfg, newest account first", "when": "game start", "fallback": "user_keys_default.vcfg", "verified": "2026-10-08"},
+    {"id": "cs2_user_convars", "game": "cs2", "path": "{steam}/userdata/*/730/remote/cs2_user_convars.vcfg", "when": "game start", "fallback": "sensitivity 2.5, m_yaw 0.022, crosshair style 2 size 5 gap 1 thickness 0.5", "verified": "2026-10-08"},
+    {"id": "steam_root", "game": "cs2", "path": "derived: {game:counter-strike-2}/../../.. is the Steam library root; userdata lives under the Steam install, found via HKCU\\Software\\Valve\\Steam\\SteamPath", "when": "game start", "fallback": "registry missing -> library root/userdata", "verified": "2026-10-08 on this PC: library == install, C:/Program Files (x86)/Steam"}
+  ]
+}

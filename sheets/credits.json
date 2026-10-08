@@ -1,0 +1,85 @@
+{
+  "_sheet": "credits",
+  "_doc": "Everything in the release made by someone else, with its license. 'ships' = bundled in the upload. Game content is never shipped (see games.json).",
+  "columns": [
+    "id",
+    "author",
+    "license",
+    "ships",
+    "used_for",
+    "verified"
+  ],
+  "rows": [
+    {
+      "id": "Godot Engine 4.7.2",
+      "author": "Godot Engine contributors",
+      "license": "MIT",
+      "ships": true,
+      "used_for": "the game runtime",
+      "verified": "2026-10-08 official release"
+    },
+    {
+      "id": "UnityPy 1.25.4",
+      "author": "K0lb3",
+      "license": "MIT",
+      "ships": true,
+      "used_for": "prep: reading Rust's UnityFS bundles",
+      "verified": "2026-10-08 pip, LICENSE in LICENSES/"
+    },
+    {
+      "id": "Source2Viewer-CLI (ValveResourceFormat) 20.0",
+      "author": "ValveResourceFormat contributors",
+      "license": "MIT",
+      "ships": true,
+      "used_for": "prep: reading CS2's VPK, models, clips, sounds",
+      "verified": "2026-10-08 github release 20.0, LICENSE in LICENSES/"
+    },
+    {
+      "id": "vgmstream r2117",
+      "author": "vgmstream contributors",
+      "license": "ISC-style (COPYING)",
+      "ships": true,
+      "used_for": "prep: decoding Rust's FMOD FSB5 audio",
+      "verified": "github release, COPYING read"
+    },
+    {
+      "id": "Python 3.12 embeddable",
+      "author": "Python Software Foundation",
+      "license": "PSF",
+      "ships": true,
+      "used_for": "prep runtime",
+      "verified": "2026-10-08 python-3.12.10-embed-amd64.zip from python.org"
+    },
+    {
+      "id": "Counter-Strike 2",
+      "author": "Valve",
+      "license": "player's own copy",
+      "ships": false,
+      "used_for": "sounds, knife, arms, clips, binds",
+      "verified": "own copy of the player, read at runtime, never shipped"
+    },
+    {
+      "id": "Rust",
+      "author": "Facepunch Studios",
+      "license": "player's own copy",
+      "ships": false,
+      "used_for": "Launch Site meshes, textures, ambience, music",
+      "verified": "own copy of the player, read at runtime, never shipped"
+    },
+    {
+      "id": "universal-modder",
+      "author": "rehan-remade",
+      "license": "see repo",
+      "ships": false,
+      "used_for": "modding method (not in the release)",
+      "verified": "method only, not in release"
+    }
+  ],
+  "listing": {
+    "title": "Rust Surf",
+    "license": "CC BY-NC 4.0",
+    "allowRemix": false,
+    "creator": "Cooper Porter",
+    "decided": "2026-10-08 by Cooper"
+  }
+}

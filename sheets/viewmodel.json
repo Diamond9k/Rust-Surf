@@ -1,0 +1,48 @@
+{
+  "_sheet": "viewmodel",
+  "_doc": "Where the CS2 arms+knife sit in front of the camera (metres / degrees). Tuned by eye in the running game.",
+  "columns": [
+    "id",
+    "value",
+    "unit",
+    "note",
+    "tuned"
+  ],
+  "rows": [
+    {
+      "id": "offset_x",
+      "value": 0.0,
+      "unit": "m",
+      "note": "right of camera",
+      "tuned": "2026-10-08 seen in game: arms and knife framed like CS2 at offset 0"
+    },
+    {
+      "id": "offset_y",
+      "value": 0.0,
+      "unit": "m",
+      "note": "below eye",
+      "tuned": "2026-10-08 seen in game: arms and knife framed like CS2 at offset 0"
+    },
+    {
+      "id": "offset_z",
+      "value": 0.0,
+      "unit": "m",
+      "note": "forward (-Z is forward in Godot)",
+      "tuned": "2026-10-08 seen in game: arms and knife framed like CS2 at offset 0"
+    },
+    {
+      "id": "yaw",
+      "value": 180.0,
+      "unit": "deg",
+      "note": "rig rest pose has wpn at +Z 0.43 m, so the rig faces +Z and is turned to face -Z",
+      "tuned": "2026-10-08 from bone rest positions"
+    },
+    {
+      "id": "scale",
+      "value": 1.0,
+      "unit": "x",
+      "note": "VRF glTF export is already in metres (arms aabb 1.23 m wide)",
+      "tuned": "2026-10-08 glb aabb"
+    }
+  ]
+}

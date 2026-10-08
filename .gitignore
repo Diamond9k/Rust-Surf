@@ -1,0 +1,7 @@
+.tools/
+.work/
+dist/
+data/
+*.pyc
+__pycache__/
+game/.godot/

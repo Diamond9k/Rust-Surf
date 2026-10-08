@@ -1,0 +1,31 @@
+{
+  "_sheet": "games",
+  "_doc": "One row per game the mashup reads. role matches Melty's recipe roles. folder_token is what Melty hands the mashup at launch.",
+  "columns": ["id", "slug", "role", "engine", "folder_token", "launched_by_melty", "what_it_brings", "read_from", "never_shipped", "verified"],
+  "rows": [
+    {
+      "id": "rust",
+      "slug": "rust",
+      "role": "primary",
+      "engine": "unity 6000.3.15 (IL2CPP, UnityFS bundles, FMOD FSB5 audio)",
+      "folder_token": "{game}",
+      "launched_by_melty": false,
+      "what_it_brings": "the world: Launch Site monument meshes + concrete/metal textures, wind ambience, menu music",
+      "read_from": "{game}/Bundles/shared/*.bundle via prep (lazy UnityFS reader)",
+      "never_shipped": "all Rust meshes, textures and audio stay on the player's PC; prep extracts them locally",
+      "verified": "2026-10-08 probe: content.bundle 100066 entries, 483 launch_site hits; audio.bundle FSB5 Vorbis decodes via vgmstream"
+    },
+    {
+      "id": "cs2",
+      "slug": "counter-strike-2",
+      "role": "companion",
+      "engine": "source2 (VPK pak01, vsnd_c/vmdl_c/vnmclip_c)",
+      "folder_token": "{game:counter-strike-2}",
+      "launched_by_melty": false,
+      "what_it_brings": "surf physics constants, footstep/land/jump/wind sounds, default CT knife + arms viewmodel with draw/idle/inspect clips, the player's own binds, sensitivity and crosshair",
+      "read_from": "{game:counter-strike-2}/game/csgo/pak01_dir.vpk via Source2Viewer-CLI; binds/convars from Steam userdata",
+      "never_shipped": "all CS2 sounds, models, clips stay on the player's PC; prep extracts them locally",
+      "verified": "2026-10-08 probe: VRF 20.0 exports weapon_arms.glb (84 nodes, 1 skin), knife glb, lookat01/idle/draw clips as glb animations; sounds to wav 44.1k mono"
+    }
+  ]
+}

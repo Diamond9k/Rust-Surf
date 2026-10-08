@@ -1,0 +1,17 @@
+{
+  "_sheet": "input",
+  "_doc": "One row per game action. cs2_command is the bind looked up in the player's cs2_user_keys.vcfg, then user_keys_default.vcfg; key names use CS2's names (w, SPACE, MOUSE1, CTRL...). godot_action is the InputMap action Input.gd registers.",
+  "columns": ["id", "cs2_command", "default_key", "godot_action", "used_in", "verified"],
+  "rows": [
+    {"id": "forward", "cs2_command": "+forward", "default_key": "w", "godot_action": "surf_forward", "used_in": "SurfPlayer wishdir", "verified": "2026-10-08 default file"},
+    {"id": "back", "cs2_command": "+back", "default_key": "s", "godot_action": "surf_back", "used_in": "SurfPlayer wishdir", "verified": "2026-10-08 default file"},
+    {"id": "left", "cs2_command": "+left", "default_key": "a", "godot_action": "surf_left", "used_in": "SurfPlayer wishdir", "verified": "2026-10-08 default file"},
+    {"id": "right", "cs2_command": "+right", "default_key": "d", "godot_action": "surf_right", "used_in": "SurfPlayer wishdir", "verified": "2026-10-08 default file"},
+    {"id": "jump", "cs2_command": "+jump", "default_key": "SPACE", "godot_action": "surf_jump", "used_in": "SurfPlayer.jump", "verified": "2026-10-08 default file"},
+    {"id": "duck", "cs2_command": "+duck", "default_key": "CTRL", "godot_action": "surf_duck", "used_in": "SurfPlayer.duck", "verified": "default file (key name to confirm in file)"},
+    {"id": "inspect", "cs2_command": "+lookatweapon", "default_key": "f", "godot_action": "surf_inspect", "used_in": "Viewmodel inspect", "verified": "2026-10-08 default file"},
+    {"id": "restart", "cs2_command": "(none: mashup's own)", "default_key": "r", "godot_action": "surf_restart", "used_in": "Course.restart_to_start", "verified": "mashup choice"},
+    {"id": "checkpoint_back", "cs2_command": "(none: mashup's own)", "default_key": "t", "godot_action": "surf_checkpoint", "used_in": "Course.teleport_last_checkpoint", "verified": "mashup choice"},
+    {"id": "menu", "cs2_command": "cancelselect", "default_key": "ESCAPE", "godot_action": "surf_menu", "used_in": "Hud menu", "verified": "2026-10-08 default file"}
+  ]
+}

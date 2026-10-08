@@ -1,0 +1,29 @@
+{
+  "_sheet": "movement",
+  "_doc": "Source-engine surf movement, one row per constant. Values in Hammer units (u) with the metre conversion 1 u = 0.01905 m. 'source' says where the number comes from. gen.py emits these as consts in game/scripts/gen/Movement.gd.",
+  "columns": ["id", "value_u", "value_m", "source", "used_in", "verified"],
+  "rows": [
+    {"id": "unit_to_m", "value_u": 1, "value_m": 0.01905, "source": "Source: 1 unit = 0.75 inch", "used_in": "all conversions", "verified": "constant"},
+    {"id": "gravity", "value_u": 800, "value_m": 15.24, "source": "sv_gravity 800", "used_in": "SurfPlayer.air", "verified": "CS2 default"},
+    {"id": "max_ground_speed", "value_u": 250, "value_m": 4.7625, "source": "knife run speed 250", "used_in": "SurfPlayer.ground wishspeed", "verified": "CS2 weapon_knife max speed"},
+    {"id": "accelerate", "value_u": 5.5, "value_m": 5.5, "source": "sv_accelerate 5.5", "used_in": "SurfPlayer.ground accel", "verified": "CS2 default"},
+    {"id": "air_accelerate", "value_u": 150, "value_m": 150, "source": "sv_airaccelerate 150 (surf-server convention; CS2 default 12)", "used_in": "SurfPlayer.air accel", "verified": "surf community standard"},
+    {"id": "air_speed_cap", "value_u": 30, "value_m": 0.5715, "source": "AirAccelerate wishspeed cap 30", "used_in": "SurfPlayer.air accel", "verified": "Source gamemovement.cpp AirAccelerate"},
+    {"id": "friction", "value_u": 5.2, "value_m": 5.2, "source": "sv_friction 5.2", "used_in": "SurfPlayer.ground friction", "verified": "CS2 default"},
+    {"id": "stop_speed", "value_u": 80, "value_m": 1.524, "source": "sv_stopspeed 80", "used_in": "SurfPlayer.ground friction", "verified": "CS2 default"},
+    {"id": "max_velocity", "value_u": 3500, "value_m": 66.675, "source": "sv_maxvelocity 3500", "used_in": "SurfPlayer clamp", "verified": "CS2 default"},
+    {"id": "jump_impulse", "value_u": 301.993377, "value_m": 5.753, "source": "CS:GO/CS2 jump impulse sqrt(2*800*57)", "used_in": "SurfPlayer.jump", "verified": "CS2 default"},
+    {"id": "ground_normal_min", "value_u": 0.7, "value_m": 0.7, "source": "Source: surfaces with normal.z < 0.7 are not ground (this is what makes surf work)", "used_in": "SurfPlayer.categorize_position", "verified": "Source gamemovement.cpp"},
+    {"id": "overbounce", "value_u": 1.0, "value_m": 1.0, "source": "ClipVelocity overbounce 1.0", "used_in": "SurfPlayer.clip_velocity", "verified": "Source gamemovement.cpp"},
+    {"id": "max_clip_planes", "value_u": 5, "value_m": 5, "source": "TryPlayerMove MAX_CLIP_PLANES 5, 4 bumps", "used_in": "SurfPlayer.try_player_move", "verified": "Source gamemovement.cpp"},
+    {"id": "hull_width", "value_u": 32, "value_m": 0.6096, "source": "player hull 32x32", "used_in": "SurfPlayer collider", "verified": "CS2"},
+    {"id": "hull_height", "value_u": 72, "value_m": 1.3716, "source": "standing hull 72", "used_in": "SurfPlayer collider", "verified": "CS2"},
+    {"id": "eye_height", "value_u": 64, "value_m": 1.2192, "source": "VEC_VIEW 64", "used_in": "SurfPlayer camera", "verified": "CS2"},
+    {"id": "duck_hull_height", "value_u": 54, "value_m": 1.0287, "source": "CS2 ducked hull 54", "used_in": "SurfPlayer duck", "verified": "CS2"},
+    {"id": "duck_eye_height", "value_u": 46, "value_m": 0.8763, "source": "VEC_DUCK_VIEW 46", "used_in": "SurfPlayer duck camera", "verified": "CS2"},
+    {"id": "step_height", "value_u": 18, "value_m": 0.3429, "source": "sv_stepsize 18", "used_in": "SurfPlayer.step_move", "verified": "CS2 default"},
+    {"id": "tick_rate", "value_u": 64, "value_m": 64, "source": "64 tick like CS2 (physics_ticks_per_second)", "used_in": "project.godot physics", "verified": "CS2 default tickrate"},
+    {"id": "fov_default", "value_u": 90, "value_m": 90, "source": "CS2 fov 90 (4:3 scaled)", "used_in": "camera", "verified": "CS2 default"},
+    {"id": "yaw_per_count", "value_u": 0.022, "value_m": 0.022, "source": "m_yaw * sensitivity degrees per mouse count (read live from cs2_user_convars)", "used_in": "Input.gd look", "verified": "2026-10-08 read from Cooper's convars"}
+  ]
+}

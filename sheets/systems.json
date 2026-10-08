@@ -1,0 +1,118 @@
+{
+  "_sheet": "systems",
+  "_doc": "One row per game system. Each row is one script. 'reads' lists the sheets/rows it is generated from; 'status' goes planned -> written -> tested (in the running game).",
+  "columns": [
+    "id",
+    "script",
+    "does",
+    "reads",
+    "status",
+    "evidence"
+  ],
+  "rows": [
+    {
+      "id": "launch_args",
+      "script": "game/scripts/Paths.gd",
+      "does": "parses --data, --rust, --cs2 from OS.get_cmdline_user_args(); derives Steam userdata from the CS2 folder; refuses to start with a clear message if a folder is missing",
+      "reads": "games.json",
+      "status": "tested",
+      "evidence": "tested: release build launched with --data/--rust/--cs2, and from the clean install folder"
+    },
+    {
+      "id": "content_loader",
+      "script": "game/scripts/Content.gd",
+      "does": "loads each content.json row's 'out' file from the data folder at runtime (obj/png/wav/mp3/glb/json) and caches it; missing file = visible error listing the row id",
+      "reads": "content.json",
+      "status": "tested",
+      "evidence": "tested: missing=[] in release build"
+    },
+    {
+      "id": "input",
+      "script": "game/scripts/Input.gd",
+      "does": "parses vcfg (user then default), maps each input.json row to a Godot InputMap action; reads sensitivity/m_yaw/crosshair convars",
+      "reads": "input.json, content.json cfg_* rows",
+      "status": "tested",
+      "evidence": "tested: CS2 defaults loaded; mouse 600 counts -> 33.0 deg yaw (0.022 x 2.5)"
+    },
+    {
+      "id": "movement",
+      "script": "game/scripts/SurfPlayer.gd",
+      "does": "Source movement: CategorizePosition (normal.y >= 0.7 = ground), Friction, Accelerate, AirAccelerate(cap 30u), TryPlayerMove with ClipVelocity (4 bumps, 5 planes), StepMove, jump, duck; fixed 64 Hz",
+      "reads": "movement.json",
+      "status": "tested",
+      "evidence": "tested: bot surfs r1-r4 to 1604 u/s; duplicate-plane rampbug fixed"
+    },
+    {
+      "id": "course_builder",
+      "script": "game/scripts/Course.gd",
+      "does": "builds one node per course.json row: ramps as ArrayMesh prisms + ConcavePolygonShape3D, platforms as boxes, zones as Area3D; applies materials.json; spawn + world_offset_rust",
+      "reads": "course.json, materials.json",
+      "status": "tested",
+      "evidence": "tested: all rows built; bot completes course"
+    },
+    {
+      "id": "backdrop",
+      "script": "game/scripts/Backdrop.gd",
+      "does": "places the real Launch Site meshes from launch_site_placements.json (Unity LH -> Godot RH: z = -z, quat (x,y,z,w) -> (-x,-y,z,w)), render only, no collision in v1",
+      "reads": "content.json scene_launch_site + mesh rows",
+      "status": "tested",
+      "evidence": "tested: 54 Launch Site placements, 33 meshes"
+    },
+    {
+      "id": "timer",
+      "script": "game/scripts/RunTimer.gd",
+      "does": "starts on leaving start zone, stops in end zone, splits at checkpoints; stores best time per course in user://pb_<course>.json",
+      "reads": "course.json zones",
+      "status": "tested",
+      "evidence": "tested: start on leaving zone, cp split, PB saved 19.70 s"
+    },
+    {
+      "id": "checkpoints",
+      "script": "game/scripts/Course.gd",
+      "does": "entering a checkpoint saves respawn point; kill zone or key teleports there with velocity zeroed",
+      "reads": "course.json, input.json",
+      "status": "tested",
+      "evidence": "tested: kill floor returns to cp1"
+    },
+    {
+      "id": "ghost",
+      "script": "game/scripts/Ghost.gd",
+      "does": "records pos+yaw every tick; on new PB saves user://ghost_<course>.json; plays back as translucent capsule each run",
+      "reads": "movement.json tick_rate",
+      "status": "tested",
+      "evidence": "tested: PB ghost visible in recorded run"
+    },
+    {
+      "id": "viewmodel",
+      "script": "game/scripts/Viewmodel.gd",
+      "does": "loads the CS2 arms + knife glb on their own skeletons, drives them with the clip AnimationPlayer (draw -> idle loop, inspect on +lookatweapon), and pins the knife to the wpn bone each skeleton update",
+      "reads": "content.json model_*/clip_* rows, input.json inspect",
+      "status": "tested",
+      "evidence": "tested: arms+knife, draw/idle/inspect clips play"
+    },
+    {
+      "id": "audio",
+      "script": "game/scripts/Sounds.gd",
+      "does": "one AudioStreamPlayer per sounds.json row; footstep/land/jump from SurfPlayer signals; speed_wind volume follows speed; Rust music plays on finish and stops on restart",
+      "reads": "sounds.json",
+      "status": "tested",
+      "evidence": "tested: recorded run audio non-silent"
+    },
+    {
+      "id": "hud",
+      "script": "game/scripts/Hud.gd",
+      "does": "speed (u/s like surf servers), timer, PB, checkpoint, CS2-style crosshair drawn from convars, error overlay",
+      "reads": "content.json cfg_user_convars",
+      "status": "tested",
+      "evidence": "tested: speed, timer, PB, crosshair from convars"
+    },
+    {
+      "id": "prep",
+      "script": "prep/prep.py",
+      "does": "run once by Melty before first start: extracts every content.json row from the player's Rust and CS2 installs into the data folder, writes done-<version>.txt; logs to prep.log; never copies anything it doesn't need",
+      "reads": "content.json",
+      "status": "tested",
+      "evidence": "tested: clean install from RustSurf-0.1.0.zip, bundled Python, 75 s, missing none; game then completed the course from that install"
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "_sheet": "sounds",
+  "_doc": "One row per sound event the game plays. content ids point at content.json. 'trigger' is the game event in systems.json / SurfPlayer.",
+  "columns": [
+    "id",
+    "content",
+    "trigger",
+    "volume_db",
+    "loop",
+    "pick",
+    "verified"
+  ],
+  "rows": [
+    {
+      "id": "footstep",
+      "content": "sfx_step_concrete",
+      "trigger": "SurfPlayer: on ground, speed > 0.5 m/s, every 0.35 s (CS2 step interval ~350 ms at run speed)",
+      "volume_db": -6,
+      "loop": false,
+      "pick": "random",
+      "verified": "2026-10-08 stream loads (no missing content); recorded run audio peaks -7.4 dB, -23..-30 dB while surfing"
+    },
+    {
+      "id": "land",
+      "content": "sfx_land_concrete",
+      "trigger": "SurfPlayer: became grounded with fall speed > 3 m/s",
+      "volume_db": -4,
+      "loop": false,
+      "pick": "single",
+      "verified": "2026-10-08 stream loads (no missing content); recorded run audio peaks -7.4 dB, -23..-30 dB while surfing"
+    },
+    {
+      "id": "jump",
+      "content": "sfx_jump",
+      "trigger": "SurfPlayer.jump",
+      "volume_db": -8,
+      "loop": false,
+      "pick": "single",
+      "verified": "2026-10-08 stream loads (no missing content); recorded run audio peaks -7.4 dB, -23..-30 dB while surfing"
+    },
+    {
+      "id": "speed_wind",
+      "content": "amb_wind_cs2",
+      "trigger": "always; volume scales with speed from 0 at 8 m/s to full at 40 m/s",
+      "volume_db": -10,
+      "loop": true,
+      "pick": "single",
+      "verified": "2026-10-08 stream loads (no missing content); recorded run audio peaks -7.4 dB, -23..-30 dB while surfing"
+    },
+    {
+      "id": "ambience_loop",
+      "content": "amb_wind_rust",
+      "trigger": "always while in course",
+      "volume_db": -12,
+      "loop": true,
+      "pick": "single",
+      "verified": "2026-10-08 stream loads (no missing content); recorded run audio peaks -7.4 dB, -23..-30 dB while surfing"
+    },
+    {
+      "id": "menu_music",
+      "content": "music_rust",
+      "trigger": "plays when you cross the finish; stops when you go back to the start zone",
+      "volume_db": -14,
+      "loop": true,
+      "pick": "single",
+      "verified": "2026-10-08 stream loads (no missing content); recorded run audio peaks -7.4 dB, -23..-30 dB while surfing"
+    }
+  ]
+}

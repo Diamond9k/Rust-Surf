@@ -1,0 +1,254 @@
+{
+  "_sheet": "course",
+  "_doc": "Course 'launch_linear': one row per piece. Godot metres, Y up, course runs along +X. ramps are triangular prisms the player surfs on ('ridge' = peak up, surf both faces; 'valley' = V, surf inside). pos is the piece centre; yaw/pitch in degrees (pitch < 0 slopes downhill along +X). material names a row in materials.json. 'tuned' is set after a real playtest, every row must reach tuned=true before release. Player-facing yaws (spawn, checkpoints) are Godot degrees: -90 faces +X along the course. kind 'decor' is scenery with no collision.",
+  "columns": [
+    "id",
+    "kind",
+    "shape",
+    "pos",
+    "yaw",
+    "pitch",
+    "length",
+    "half_width",
+    "height",
+    "material",
+    "order",
+    "tuned"
+  ],
+  "course_id": "launch_linear",
+  "spawn": {
+    "pos": [
+      3,
+      90.6,
+      0
+    ],
+    "yaw": -90
+  },
+  "world_offset_rust": {
+    "_doc": "where the real Launch Site prefab root sits relative to the course origin, Godot metres (prefab spans x -227..207, z -93..114, ground y about 0)",
+    "pos": [
+      180,
+      0,
+      10
+    ],
+    "yaw": 0
+  },
+  "rows": [
+    {
+      "id": "start_pad",
+      "kind": "platform",
+      "shape": "box",
+      "pos": [
+        0,
+        90,
+        0
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "length": 12,
+      "half_width": 6,
+      "height": 0.5,
+      "material": "concrete",
+      "order": 0,
+      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+    },
+    {
+      "id": "start_zone",
+      "kind": "zone_start",
+      "shape": "box",
+      "pos": [
+        3,
+        91.5,
+        0
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "length": 6,
+      "half_width": 6,
+      "height": 3,
+      "material": "none",
+      "order": 0,
+      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+    },
+    {
+      "id": "r1",
+      "kind": "ramp",
+      "shape": "ridge",
+      "pos": [
+        40,
+        82,
+        -8
+      ],
+      "yaw": 0,
+      "pitch": -9,
+      "length": 70,
+      "half_width": 10,
+      "height": 14,
+      "material": "concrete",
+      "order": 1,
+      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+    },
+    {
+      "id": "r2",
+      "kind": "ramp",
+      "shape": "valley",
+      "pos": [
+        120,
+        62,
+        0
+      ],
+      "yaw": 0,
+      "pitch": -7,
+      "length": 60,
+      "half_width": 12,
+      "height": 16,
+      "material": "metal",
+      "order": 2,
+      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+    },
+    {
+      "id": "cp1_pad",
+      "kind": "platform",
+      "shape": "box",
+      "pos": [
+        160,
+        50,
+        0
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "length": 14,
+      "half_width": 8,
+      "height": 0.5,
+      "material": "concrete",
+      "order": 3,
+      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+    },
+    {
+      "id": "cp1",
+      "kind": "checkpoint",
+      "shape": "box",
+      "pos": [
+        160,
+        52,
+        0
+      ],
+      "yaw": -90,
+      "pitch": 0,
+      "length": 14,
+      "half_width": 8,
+      "height": 4,
+      "material": "none",
+      "order": 3,
+      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+    },
+    {
+      "id": "r3",
+      "kind": "ramp",
+      "shape": "ridge",
+      "pos": [
+        209,
+        36,
+        -6
+      ],
+      "yaw": 0,
+      "pitch": -6,
+      "length": 80,
+      "half_width": 10,
+      "height": 14,
+      "material": "metal",
+      "order": 4,
+      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+    },
+    {
+      "id": "r4",
+      "kind": "ramp",
+      "shape": "valley",
+      "pos": [
+        305,
+        14,
+        0
+      ],
+      "yaw": 0,
+      "pitch": -5,
+      "length": 80,
+      "half_width": 12,
+      "height": 16,
+      "material": "concrete",
+      "order": 5,
+      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+    },
+    {
+      "id": "end_pad",
+      "kind": "platform",
+      "shape": "box",
+      "pos": [
+        362,
+        4,
+        0
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "length": 44,
+      "half_width": 14,
+      "height": 0.5,
+      "material": "concrete",
+      "order": 6,
+      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+    },
+    {
+      "id": "end_zone",
+      "kind": "zone_end",
+      "shape": "box",
+      "pos": [
+        362,
+        6.5,
+        0
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "length": 44,
+      "half_width": 14,
+      "height": 4.5,
+      "material": "none",
+      "order": 6,
+      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+    },
+    {
+      "id": "ground",
+      "kind": "decor",
+      "shape": "box",
+      "pos": [
+        180,
+        -1,
+        0
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "length": 900,
+      "half_width": 450,
+      "height": 1,
+      "material": "ground",
+      "order": 98,
+      "tuned": "2026-10-08 seen in recorded frames"
+    },
+    {
+      "id": "kill_floor",
+      "kind": "zone_kill",
+      "shape": "box",
+      "pos": [
+        180,
+        1,
+        0
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "length": 600,
+      "half_width": 300,
+      "height": 4,
+      "material": "none",
+      "order": 99,
+      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+    }
+  ]
+}

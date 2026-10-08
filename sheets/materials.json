@@ -1,0 +1,46 @@
+{
+  "_sheet": "materials",
+  "_doc": "One row per surface material the course uses. albedo/normal are content.json ids; uv_scale is metres per texture tile.",
+  "columns": [
+    "id",
+    "albedo",
+    "normal",
+    "uv_scale",
+    "roughness",
+    "verified"
+  ],
+  "rows": [
+    {
+      "id": "concrete",
+      "albedo": "tex_concrete_f_site",
+      "normal": "tex_concrete_f_site",
+      "uv_scale": 4.0,
+      "roughness": 0.9,
+      "verified": "2026-10-08 seen in game on the start pad"
+    },
+    {
+      "id": "metal",
+      "albedo": "tex_metal_trims_site",
+      "normal": "tex_metal_trims_site",
+      "uv_scale": 3.0,
+      "roughness": 0.5,
+      "verified": "2026-10-08 seen in game on the start pad"
+    },
+    {
+      "id": "ground",
+      "albedo": "tex_site_ground",
+      "normal": "tex_site_ground",
+      "uv_scale": 8.0,
+      "roughness": 0.95,
+      "verified": "2026-10-08 seen in recorded frames (Launch Site ground)"
+    },
+    {
+      "id": "none",
+      "albedo": "(none)",
+      "normal": "(none)",
+      "uv_scale": 1.0,
+      "roughness": 1.0,
+      "verified": "invisible trigger volumes"
+    }
+  ]
+}
