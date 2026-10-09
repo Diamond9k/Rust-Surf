@@ -1,6 +1,6 @@
 {
   "_sheet": "viewmodel",
-  "_doc": "Where the CS2 arms+knife sit in front of the camera (metres / degrees). Tuned by eye in the running game.",
+  "_doc": "Where the CS2 arms and weapon sit. offset_* and yaw/scale place the rig on the camera (metres/degrees). viewmodel_* are CS2's own convars in Source units, and the player's cs2_user_convars.vcfg values replace them at start.",
   "columns": [
     "id",
     "value",
@@ -43,6 +43,41 @@
       "unit": "x",
       "note": "VRF glTF export is already in metres (arms aabb 1.23 m wide)",
       "tuned": "2026-10-08 glb aabb"
+    },
+    {
+      "id": "viewmodel_fov",
+      "value": 68.0,
+      "unit": "deg (Source, horizontal at 4:3)",
+      "note": "CS2 default viewmodel_fov; rendered by a separate camera like CS2",
+      "tuned": "CS2 default value, unverified against this PC's convars"
+    },
+    {
+      "id": "viewmodel_offset_x",
+      "value": 2.5,
+      "unit": "Source units",
+      "note": "right",
+      "tuned": "CS2 default (viewmodel_presetpos 1), unverified"
+    },
+    {
+      "id": "viewmodel_offset_y",
+      "value": 0.0,
+      "unit": "Source units",
+      "note": "forward",
+      "tuned": "CS2 default (viewmodel_presetpos 1), unverified"
+    },
+    {
+      "id": "viewmodel_offset_z",
+      "value": -1.5,
+      "unit": "Source units",
+      "note": "up",
+      "tuned": "CS2 default (viewmodel_presetpos 1), unverified"
+    },
+    {
+      "id": "fill_energy",
+      "value": 0.9,
+      "unit": "x",
+      "note": "viewmodel-only key light so arms stay readable facing the sun, like CS2",
+      "tuned": "2026-10-09 by eye in captures"
     }
   ]
 }

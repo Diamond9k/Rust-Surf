@@ -19,15 +19,34 @@ var _knife_skel: Skeleton3D
 var _wpn := -1
 var _weapon_rest := Transform3D.IDENTITY
 
-func setup(c: Content, cam: Camera3D) -> void:
+## The arms keep CS2's viewmodel_fov while the world uses fov 90. Squeezing the rig in the camera
+## plane by k = tan(fov/2) / tan(viewmodel_fov/2) (both Source fovs, horizontal at 4:3) projects it
+## exactly as a separate viewmodel camera would, and the arms stay lit by the real sun and sky.
+## (A SubViewport camera was tried first: Godot did not light the viewmodel layer in it.)
+const LAYER := 1 << 19
+var _main_cam: Camera3D
+
+func setup(c: Content, cam: Camera3D, convars: Dictionary = {}) -> void:
 	content = c
+	_main_cam = cam
 	for r in Sheets.load_sheet("viewmodel")["rows"]:
 		V[r["id"]] = float(r["value"])
+	# The player's own CS2 viewmodel convars win over the sheet defaults (Source units, x right, y forward, z up).
+	for k in ["viewmodel_fov", "viewmodel_offset_x", "viewmodel_offset_y", "viewmodel_offset_z"]:
+		if convars.has(k) and str(convars[k]).is_valid_float():
+			V[k] = float(convars[k])
 	cam.add_child(self)
-	position = Vector3(V["offset_x"], V["offset_y"], V["offset_z"])
-	rotation_degrees = Vector3(0, V["yaw"], 0)
-	scale = Vector3.ONE * V["scale"]
+	var u: float = Sheets.movement()["unit_to_m"]
+	var world_fov: float = Sheets.movement()["fov_default"]
+	var k := tan(deg_to_rad(world_fov) * 0.5) / tan(deg_to_rad(V["viewmodel_fov"]) * 0.5)
+	var squeeze := Basis.from_scale(Vector3(k, k, 1.0))
+	var rig_basis := Basis.from_euler(Vector3(0, deg_to_rad(V["yaw"]), 0)).scaled(Vector3.ONE * V["scale"])
+	var off := Vector3(V["offset_x"] + V["viewmodel_offset_x"] * u, V["offset_y"] + V["viewmodel_offset_z"] * u, V["offset_z"] - V["viewmodel_offset_y"] * u)
+	transform = Transform3D(squeeze * rig_basis, squeeze * off)
 	_build()
+	for mi in _all(self, "MeshInstance3D"):
+		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_fix_materials(mi as MeshInstance3D)
 
 const ARMS_SKEL := "animation_skeletons_characters_viewmodel_vnmskel"
 const KNIFE_SKEL := "animation_skeletons_weapons_knife_default_ct_vnmskel"
@@ -187,3 +206,20 @@ func _all(n: Node, cls: String) -> Array:
 	for ch in n.get_children():
 		out += _all(ch, cls)
 	return out
+
+## VRF writes CS2 materials with no metallic factor, which glTF reads as metallic 1 (masked by the
+## metal map). Skin and gloves are set to plain dielectric so they never mirror the sky.
+func _fix_materials(mi: MeshInstance3D) -> void:
+	if mi.mesh == null:
+		return
+	for i in mi.mesh.get_surface_count():
+		var m := mi.get_active_material(i) as StandardMaterial3D
+		if m == null:
+			continue
+		m = m.duplicate() as StandardMaterial3D
+		var n := m.resource_name.to_lower()
+		if n.contains("arm") or n.contains("glove") or n.contains("sleeve") or n.contains("hand"):
+			m.metallic = 0.0
+			m.metallic_texture = null
+			m.roughness = 0.75
+		mi.set_surface_override_material(i, m)

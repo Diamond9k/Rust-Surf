@@ -30,7 +30,9 @@ func _ready() -> void:
 	col.position.y = M["hull_height"] * 0.5
 	add_child(col)
 	cam = Camera3D.new()
-	cam.fov = M["fov_default"]
+	# Source fov is horizontal at 4:3 (fov 90 = 73.74 deg vertical); Godot keeps height, so wide screens see more like CS2.
+	cam.fov = Sheets.vfov_43(M["fov_default"])
+	cam.keep_aspect = Camera3D.KEEP_HEIGHT
 	cam.near = 0.02
 	cam.far = 4000.0
 	cam.position.y = M["eye_height"]

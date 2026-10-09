@@ -10,6 +10,7 @@ import UnityPy
 import prep_rust
 from prep_rust import load_env, material_files, decode_fsb, LOG
 import prep_scene
+import normals
 
 RUST_BUNDLES = ["content.bundle", "assetscenes.bundle", "audio.bundle",
                 "textures.0.bundle", "textures.1.bundle", "textures.2.bundle", "textures.3.bundle", "textures.4.bundle"]
@@ -62,6 +63,8 @@ def rust_step(a):
     # the Launch Site itself
     n = prep_scene.extract_scene(env, out, 1024)
     LOG("scene row scene_launch_site ok (%d placements)" % n)
+    # Unity DXTnm normal maps -> RGB tangent normals (idempotent, so it also fixes 0.1.0 data folders)
+    normals.fix_dir(tex_dir, LOG)
 
 
 def cs2_step(a):

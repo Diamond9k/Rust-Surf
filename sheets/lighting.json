@@ -1,0 +1,132 @@
+{
+  "_sheet": "lighting",
+  "_doc": "Sun, sky, fog and post effects, aimed at Rust's daytime Launch Site look (hard warm sun, blue sky, pale dusty haze) and judged in Gauntlet rounds against Rust captures. Colours are linear RGB 0..1. 'tuned' says how each value was set.",
+  "columns": [
+    "id",
+    "value",
+    "note",
+    "tuned"
+  ],
+  "rows": [
+    {
+      "id": "sun_pitch",
+      "value": -52,
+      "note": "sun elevation in degrees (negative points down)",
+      "tuned": "2026-10-08 by eye: early afternoon"
+    },
+    {
+      "id": "sun_yaw",
+      "value": 140,
+      "note": "sun direction so the course runs across the light and ramps show both faces",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "sun_color",
+      "value": [
+        1.0,
+        0.94,
+        0.84
+      ],
+      "note": "warm desert sun",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "sun_energy",
+      "value": 1.8,
+      "note": "",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "shadow_distance",
+      "value": 450,
+      "note": "metres of directional shadow; the course is about 380 m long",
+      "tuned": "2026-10-08 covers the course"
+    },
+    {
+      "id": "sky_top",
+      "value": [
+        0.2,
+        0.38,
+        0.68
+      ],
+      "note": "",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "sky_horizon",
+      "value": [
+        0.7,
+        0.74,
+        0.76
+      ],
+      "note": "pale, dusty horizon",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "ground_horizon",
+      "value": [
+        0.52,
+        0.48,
+        0.42
+      ],
+      "note": "",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "ground_bottom",
+      "value": [
+        0.24,
+        0.21,
+        0.18
+      ],
+      "note": "",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "ambient_energy",
+      "value": 0.9,
+      "note": "sky light fill",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "fog_color",
+      "value": [
+        0.66,
+        0.7,
+        0.72
+      ],
+      "note": "distance haze",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "fog_density",
+      "value": 0.0016,
+      "note": "exponential fog per metre",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "fog_sun_scatter",
+      "value": 0.25,
+      "note": "",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "exposure",
+      "value": 0.85,
+      "note": "tonemap exposure (ACES)",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "ssao",
+      "value": true,
+      "note": "contact shadows in corners and under rails",
+      "tuned": "2026-10-08"
+    },
+    {
+      "id": "glow",
+      "value": true,
+      "note": "soft bloom on the sky and bright metal",
+      "tuned": "2026-10-08"
+    }
+  ]
+}
