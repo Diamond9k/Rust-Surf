@@ -14,7 +14,7 @@
   "components": [
     {
       "id": "main",
-      "fileName": "RustSurf-0.1.0.zip",
+      "fileName": "RustSurf-0.2.0.zip",
       "label": "Rust Surf",
       "kind": "main",
       "required": true
@@ -44,12 +44,12 @@
         "--tools",
         "{managed}/RustSurf/prep",
         "--version",
-        "0.1.0"
+        "0.2.0"
       ],
       "cwd": "{managed}/RustSurf/prep"
     },
     "done": {
-      "file": "{managed}/RustSurf/data/done-0.1.0.txt"
+      "file": "{managed}/RustSurf/data/done-0.2.0.txt"
     }
   },
   "launch": {
