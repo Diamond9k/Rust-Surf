@@ -89,6 +89,7 @@ func _ramp(r: Dictionary) -> StaticBody3D:
 		var dx := Vector3(2 * L, 0, 0)
 		_tri(st, pa + dx, pr + dx, pl + dx, Vector3(1, 0, 0))
 		_quad(st, Vector3(-L, -H, -W), Vector3(-L, -H, W), Vector3(L, -H, W), Vector3(L, -H, -W), Vector3.DOWN, uvs, L * 2.0, W * 2.0)
+	st.generate_tangents()  # normal maps need tangents; without them shaded faces go black
 	var mesh := st.commit()
 	var body := StaticBody3D.new()
 	var mi := MeshInstance3D.new()
@@ -106,7 +107,10 @@ func _ramp(r: Dictionary) -> StaticBody3D:
 func _quad(st: SurfaceTool, p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, n: Vector3, uvs: float, ulen: float, vlen: float) -> void:
 	var pts := [p0, p1, p2, p3]
 	var uv := [Vector2(0, 0), Vector2(ulen / uvs, 0), Vector2(ulen / uvs, vlen / uvs), Vector2(0, vlen / uvs)]
-	for tri in [[0, 1, 2], [0, 2, 3]]:
+	# Godot treats clockwise triangles as front faces; with culling off a back face shades with its
+	# normal flipped (dark ramp faces), so every triangle is wound to face along n.
+	var flip := (p1 - p0).cross(p2 - p0).dot(n) > 0.0
+	for tri in ([[0, 2, 1], [0, 3, 2]] if flip else [[0, 1, 2], [0, 2, 3]]):
 		for i in tri:
 			st.set_normal(n)
 			st.set_uv(uv[i])

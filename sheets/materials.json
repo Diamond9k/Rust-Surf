@@ -35,6 +35,38 @@
       "verified": "2026-10-08 seen in recorded frames (Launch Site ground)"
     },
     {
+      "id": "ramp_concrete",
+      "albedo": "tex_concrete_d_site",
+      "normal": "tex_concrete_d_site",
+      "uv_scale": 5.0,
+      "roughness": 0.85,
+      "verified": "2026-10-09 Gauntlet captures"
+    },
+    {
+      "id": "ramp_panels",
+      "albedo": "tex_site_panels_green",
+      "normal": "tex_site_panels_green",
+      "uv_scale": 4.0,
+      "roughness": 0.6,
+      "verified": "2026-10-09 Gauntlet captures"
+    },
+    {
+      "id": "pad",
+      "albedo": "tex_tarmac",
+      "normal": "tex_tarmac",
+      "uv_scale": 6.0,
+      "roughness": 0.9,
+      "verified": "2026-10-09 Gauntlet captures"
+    },
+    {
+      "id": "terrain",
+      "albedo": "tex_terrain_blend",
+      "normal": "tex_terrain_blend",
+      "uv_scale": 14.0,
+      "roughness": 0.95,
+      "verified": "2026-10-09 Gauntlet captures"
+    },
+    {
       "id": "none",
       "albedo": "(none)",
       "normal": "(none)",

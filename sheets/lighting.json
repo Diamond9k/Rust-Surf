@@ -84,7 +84,7 @@
     },
     {
       "id": "ambient_energy",
-      "value": 0.9,
+      "value": 1.2,
       "note": "sky light fill",
       "tuned": "2026-10-08 by eye"
     },

@@ -1,0 +1,612 @@
+{
+ "_sheet": "weapons",
+ "_doc": "Every weapon the player can hold. CS2 rows: model, viewmodel clips and shot sound are exact paths in the player's CS2 pak01_dir.vpk (checked against a listing by tools/gen_weapons.py); prep exports them to the data folder. Damage, fire rate, magazine, recoil and spread come from the player's own scripts/items/items_game.txt at runtime, never typed in. Rust rows are added by prep_weapons_rust.py.",
+ "columns": [
+  "id",
+  "game",
+  "slot",
+  "name",
+  "item",
+  "model",
+  "clips",
+  "sound_shot",
+  "verified"
+ ],
+ "rows": [
+  {
+   "id": "cs2_ak47",
+   "game": "cs2",
+   "slot": "rifle",
+   "name": "AK-47",
+   "item": "weapon_ak47",
+   "model": "weapons/models/ak47/weapon_rif_ak47.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_ak/draw_ak.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_ak/idle_ak.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_ak/shoot1_ak.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_ak/reload_ak.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_ak/lookat01_ak.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/ak47/ak47_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_m4a4",
+   "game": "cs2",
+   "slot": "rifle",
+   "name": "M4A4",
+   "item": "weapon_m4a4",
+   "model": "weapons/models/m4a4/weapon_rif_m4a4.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_m4a4/draw_m4a4.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_m4a4/idle_m4a4.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_m4a4/shoot1_m4a4.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_m4a4/reload_m4a4.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_m4a4/lookat01_m4a4.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/m4a1/m4a1_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_m4a1_silencer",
+   "game": "cs2",
+   "slot": "rifle",
+   "name": "M4A1-S",
+   "item": "weapon_m4a1_silencer",
+   "model": "weapons/models/m4a1_silencer/weapon_rif_m4a1_silencer.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/_default_rifle/draw_rifle.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/_default_rifle/idle_rifle.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/_default_rifle/shoot1_rifle.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/_default_rifle/reload_rifle.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/_default_rifle/lookat01_rifle.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/m4a1/m4a1_silencer_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_aug",
+   "game": "cs2",
+   "slot": "rifle",
+   "name": "AUG",
+   "item": "weapon_aug",
+   "model": "weapons/models/aug/weapon_rif_aug.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_aug/draw_aug.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_aug/idle_aug.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_aug/shoot1_aug.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_aug/reload_aug.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_aug/lookat01_aug.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/aug/aug_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_sg556",
+   "game": "cs2",
+   "slot": "rifle",
+   "name": "SG 553",
+   "item": "weapon_sg556",
+   "model": "weapons/models/sg556/weapon_rif_sg556.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_sg556/draw_sg556.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_sg556/idle_sg556.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_sg556/shoot1_sg556.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_sg556/reload_sg556.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_sg556/lookat01_sg556.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/sg556/sg556_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_famas",
+   "game": "cs2",
+   "slot": "rifle",
+   "name": "FAMAS",
+   "item": "weapon_famas",
+   "model": "weapons/models/famas/weapon_rif_famas.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_famas/draw_famas.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_famas/idle_famas.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_famas/shoot1_famas.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_famas/reload_famas.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_famas/lookat01_famas.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/famas/famas_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_galilar",
+   "game": "cs2",
+   "slot": "rifle",
+   "name": "Galil AR",
+   "item": "weapon_galilar",
+   "model": "weapons/models/galilar/weapon_rif_galilar.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_galilar/draw_galilar.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_galilar/idle_galilar.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_galilar/shoot1_galilar.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_galilar/reload_galilar.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_galilar/lookat01_galilar.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/galilar/galil_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_awp",
+   "game": "cs2",
+   "slot": "sniper",
+   "name": "AWP",
+   "item": "weapon_awp",
+   "model": "weapons/models/awp/weapon_snip_awp.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_awp/draw_awp.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_awp/idle_awp.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_awp/shoot1_awp.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_awp/reload_awp.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_awp/lookat01_awp.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/awp/awp_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_ssg08",
+   "game": "cs2",
+   "slot": "sniper",
+   "name": "SSG 08",
+   "item": "weapon_ssg08",
+   "model": "weapons/models/ssg08/weapon_snip_ssg08.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_ssg08/draw_ssg08.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_ssg08/idle_ssg08.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_ssg08/shoot1_ssg08.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_ssg08/reload_ssg08.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_ssg08/lookat01_ssg08.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/ssg08/ssg08_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_scar20",
+   "game": "cs2",
+   "slot": "sniper",
+   "name": "SCAR-20",
+   "item": "weapon_scar20",
+   "model": "weapons/models/scar20/weapon_snip_scar20.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_scar20/draw_scar20.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_scar20/idle_scar20.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_scar20/shoot1_scar20.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_scar20/reload_empty_scar20.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_scar20/lookat01_scar20.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/scar20/scar20_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_g3sg1",
+   "game": "cs2",
+   "slot": "sniper",
+   "name": "G3SG1",
+   "item": "weapon_g3sg1",
+   "model": "weapons/models/g3sg1/weapon_snip_g3sg1.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_g3sg1/draw_g3sg1.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/_default_rifle/idle_rifle.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_g3sg1/shoot1_g3sg1.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_g3sg1/reload_g3sg1.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_g3sg1/lookat01_g3sg1.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/g3sg1/g3sg1_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_mp9",
+   "game": "cs2",
+   "slot": "smg",
+   "name": "MP9",
+   "item": "weapon_mp9",
+   "model": "weapons/models/mp9/weapon_smg_mp9.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_mp9/draw_mp9.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_mp9/idle_mp9.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_mp9/shoot1_mp9.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_mp9/reload_mp9.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_mp9/lookat01_mp9.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/mp9/mp9_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_mac10",
+   "game": "cs2",
+   "slot": "smg",
+   "name": "MAC-10",
+   "item": "weapon_mac10",
+   "model": "weapons/models/mac10/weapon_smg_mac10.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_mac10/draw_mac10.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_mac10/idle_mac10.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_mac10/shoot1_mac10.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_mac10/reload_mac10.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_mac10/lookat01_mac10.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/mac10/mac10_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_mp7",
+   "game": "cs2",
+   "slot": "smg",
+   "name": "MP7",
+   "item": "weapon_mp7",
+   "model": "weapons/models/mp7/weapon_smg_mp7.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_mp7/draw_mp7.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_mp7/idle_mp7.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_mp7/shoot1_mp7.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_mp7/reload_mp7.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_mp7/lookat01_mp7.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/mp7/mp7_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_mp5sd",
+   "game": "cs2",
+   "slot": "smg",
+   "name": "MP5-SD",
+   "item": "weapon_mp5sd",
+   "model": "weapons/models/mp5sd/weapon_smg_mp5sd.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_mp5sd/draw_mp5sd.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_mp5sd/idle_mp5sd.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_mp5sd/shoot1_mp5sd.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_mp5sd/reload_mp5sd.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_mp5sd/lookat01_mp5sd.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/mp5/mp5_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_ump45",
+   "game": "cs2",
+   "slot": "smg",
+   "name": "UMP-45",
+   "item": "weapon_ump45",
+   "model": "weapons/models/ump45/weapon_smg_ump45.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_ump45/draw_ump45.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_ump45/idle_ump45.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_ump45/shoot1_ump45.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_ump45/reload_ump45.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_ump45/lookat01_ump45.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/ump45/ump45_02.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_p90",
+   "game": "cs2",
+   "slot": "smg",
+   "name": "P90",
+   "item": "weapon_p90",
+   "model": "weapons/models/p90/weapon_smg_p90.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_p90/draw_p90.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_p90/idle_p90.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_p90/shoot1_p90.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_p90/reload_p90.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_p90/lookat01_p90.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/p90/p90_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_bizon",
+   "game": "cs2",
+   "slot": "smg",
+   "name": "PP-Bizon",
+   "item": "weapon_bizon",
+   "model": "weapons/models/bizon/weapon_smg_bizon.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_bizon/draw_bizon.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_bizon/idle_bizon.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_bizon/shoot1_bizon.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_bizon/reload_bizon.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_bizon/lookat01_bizon.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/bizon/bizon_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_nova",
+   "game": "cs2",
+   "slot": "heavy",
+   "name": "Nova",
+   "item": "weapon_nova",
+   "model": "weapons/models/nova/weapon_shot_nova.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_nova/draw_nova.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_nova/idle_nova.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_nova/shoot1_nova.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_nova/reload_nova.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_nova/lookat01_nova.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/nova/nova-1.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_xm1014",
+   "game": "cs2",
+   "slot": "heavy",
+   "name": "XM1014",
+   "item": "weapon_xm1014",
+   "model": "weapons/models/xm1014/weapon_shot_xm1014.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_xm1014/draw_xm1014.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_xm1014/idle_xm1014.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_xm1014/shoot1_xm1014.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_xm1014/reload_xm1014.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_xm1014/lookat01_xm1014.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/xm1014/xm1014-1.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_mag7",
+   "game": "cs2",
+   "slot": "heavy",
+   "name": "MAG-7",
+   "item": "weapon_mag7",
+   "model": "weapons/models/mag7/weapon_shot_mag7.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_mag7/draw_mag7.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_mag7/idle_mag7.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_mag7/shoot1_mag7.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_mag7/reload_mag7.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_mag7/lookat01_mag7.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/mag7/mag7_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_sawedoff",
+   "game": "cs2",
+   "slot": "heavy",
+   "name": "Sawed-Off",
+   "item": "weapon_sawedoff",
+   "model": "weapons/models/sawedoff/weapon_shot_sawedoff.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_sawedoff/draw_sawedoff.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_sawedoff/idle_sawedoff.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_sawedoff/shoot1_sawedoff.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_sawedoff/reload_sawedoff.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_sawedoff/lookat01_sawedoff.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/sawedoff/sawedoff-1.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_m249",
+   "game": "cs2",
+   "slot": "heavy",
+   "name": "M249",
+   "item": "weapon_m249",
+   "model": "weapons/models/m249/weapon_mach_m249.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_m249/draw_m249.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_m249/idle_from_activity_m249.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_m249/shoot1_m249.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_m249/reload_m249.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_m249/lookat01_m249.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/m249/m249-1.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_negev",
+   "game": "cs2",
+   "slot": "heavy",
+   "name": "Negev",
+   "item": "weapon_negev",
+   "model": "weapons/models/negev/weapon_mach_negev.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/rifle/rifle_negev/draw_negev.vnmclip_c",
+    "idle": "animation/anims/viewmodel/rifle/rifle_negev/idle_from_activity_negev.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/rifle/rifle_negev/shoot1_negev.vnmclip_c",
+    "reload": "animation/anims/viewmodel/rifle/rifle_negev/reload_negev.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/rifle/rifle_negev/lookat01_negev.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/negev/negev_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_glock",
+   "game": "cs2",
+   "slot": "pistol",
+   "name": "Glock-18",
+   "item": "weapon_glock",
+   "model": "weapons/models/glock18/weapon_pist_glock18.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/pistol/pistol_glock18/draw_glock.vnmclip_c",
+    "idle": "animation/anims/viewmodel/pistol/pistol_glock18/idle_glock.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/pistol/pistol_glock18/shoot1_glock.vnmclip_c",
+    "reload": "animation/anims/viewmodel/pistol/pistol_glock18/reload_empty_glock.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/pistol/pistol_glock18/lookat01_glock.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/glock18/glock_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_hkp2000",
+   "game": "cs2",
+   "slot": "pistol",
+   "name": "P2000",
+   "item": "weapon_hkp2000",
+   "model": "weapons/models/hkp2000/weapon_pist_hkp2000.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/pistol/pistol_hkp2000/draw_hkp.vnmclip_c",
+    "idle": "animation/anims/viewmodel/pistol/pistol_hkp2000/idle_hkp.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/pistol/pistol_hkp2000/shoot1_hkp.vnmclip_c",
+    "reload": "animation/anims/viewmodel/pistol/pistol_hkp2000/reload_empty_hkp.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/pistol/pistol_hkp2000/lookat01_hkp.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/hkp2000/hkp2000_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_usp_silencer",
+   "game": "cs2",
+   "slot": "pistol",
+   "name": "USP-S",
+   "item": "weapon_usp_silencer",
+   "model": "weapons/models/usp_silencer/weapon_pist_usp_silencer.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/pistol/_default_pistol/draw_pistol.vnmclip_c",
+    "idle": "animation/anims/viewmodel/pistol/_default_pistol/idle_pistol.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/pistol/_default_pistol/shoot1_pistol.vnmclip_c",
+    "reload": "animation/anims/viewmodel/pistol/_default_pistol/reload_empty_pistol.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/pistol/_default_pistol/lookat01_pistol.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/usp/usp_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_p250",
+   "game": "cs2",
+   "slot": "pistol",
+   "name": "P250",
+   "item": "weapon_p250",
+   "model": "weapons/models/p250/weapon_pist_p250.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/pistol/pistol_p250/draw_p250.vnmclip_c",
+    "idle": "animation/anims/viewmodel/pistol/pistol_p250/idle_p250.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/pistol/pistol_p250/shoot1_p250.vnmclip_c",
+    "reload": "animation/anims/viewmodel/pistol/pistol_p250/reload_empty_p250.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/pistol/pistol_p250/lookat01_p250.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/p250/p250_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_fiveseven",
+   "game": "cs2",
+   "slot": "pistol",
+   "name": "Five-SeveN",
+   "item": "weapon_fiveseven",
+   "model": "weapons/models/fiveseven/weapon_pist_fiveseven.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/pistol/pistol_fiveseven/draw_fiveseven.vnmclip_c",
+    "idle": "animation/anims/viewmodel/pistol/pistol_fiveseven/idle_fiveseven.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/pistol/pistol_fiveseven/shoot1_fiveseven.vnmclip_c",
+    "reload": "animation/anims/viewmodel/pistol/pistol_fiveseven/reload_empty_fiveseven.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/pistol/pistol_fiveseven/lookat01_fiveseven.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/fiveseven/fiveseven_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_tec9",
+   "game": "cs2",
+   "slot": "pistol",
+   "name": "Tec-9",
+   "item": "weapon_tec9",
+   "model": "weapons/models/tec9/weapon_pist_tec9.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/pistol/pistol_tec9/draw_tec9.vnmclip_c",
+    "idle": "animation/anims/viewmodel/pistol/pistol_tec9/idle_tec9.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/pistol/pistol_tec9/shoot1_tec9.vnmclip_c",
+    "reload": "animation/anims/viewmodel/pistol/pistol_tec9/reload_tec9.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/pistol/pistol_tec9/lookat01_tec9.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/tec9/tec9_02.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_cz75a",
+   "game": "cs2",
+   "slot": "pistol",
+   "name": "CZ75-Auto",
+   "item": "weapon_cz75a",
+   "model": "weapons/models/cz75a/weapon_pist_cz75a.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/pistol/pistol_cz75a/draw_cz75a.vnmclip_c",
+    "idle": "animation/anims/viewmodel/pistol/pistol_cz75a/idle_cz75a.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/pistol/pistol_cz75a/shoot1_cz75a.vnmclip_c",
+    "reload": "animation/anims/viewmodel/pistol/pistol_cz75a/reload_cz75a.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/pistol/pistol_cz75a/lookat01_cz75a.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/cz75a/cz75_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_elite",
+   "game": "cs2",
+   "slot": "pistol",
+   "name": "Dual Berettas",
+   "item": "weapon_elite",
+   "model": "weapons/models/elite/weapon_pist_elite.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/pistol/pistol_elite/draw_elite.vnmclip_c",
+    "idle": "animation/anims/viewmodel/pistol/pistol_elite/idle_elite.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/pistol/_default_pistol/shoot1_pistol.vnmclip_c",
+    "reload": "animation/anims/viewmodel/pistol/pistol_elite/reload_elite.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/pistol/pistol_elite/lookat01_elite.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/elite/elites_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_deagle",
+   "game": "cs2",
+   "slot": "pistol",
+   "name": "Desert Eagle",
+   "item": "weapon_deagle",
+   "model": "weapons/models/deagle/weapon_pist_deagle.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/pistol/pistol_deagle/draw_deagle.vnmclip_c",
+    "idle": "animation/anims/viewmodel/pistol/pistol_deagle/idle_deagle.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/pistol/pistol_deagle/shoot1_deagle.vnmclip_c",
+    "reload": "animation/anims/viewmodel/pistol/pistol_deagle/reload_deagle.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/pistol/pistol_deagle/lookat01_deagle.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/deagle/deagle_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_revolver",
+   "game": "cs2",
+   "slot": "pistol",
+   "name": "R8 Revolver",
+   "item": "weapon_revolver",
+   "model": "weapons/models/revolver/weapon_pist_revolver.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/pistol/pistol_revolver/draw_2_revolver.vnmclip_c",
+    "idle": "animation/anims/viewmodel/pistol/pistol_revolver/idle_revolver.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/pistol/pistol_revolver/shoot1_revolver.vnmclip_c",
+    "reload": "animation/anims/viewmodel/pistol/pistol_revolver/reload_revolver.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/pistol/pistol_revolver/lookat01_revolver.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/revolver/revolver-1_01.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  },
+  {
+   "id": "cs2_taser",
+   "game": "cs2",
+   "slot": "pistol",
+   "name": "Zeus x27",
+   "item": "weapon_taser",
+   "model": "weapons/models/taser/weapon_pist_taser.vmdl_c",
+   "clips": {
+    "draw": "animation/anims/viewmodel/pistol/pistol_taser/draw_taser.vnmclip_c",
+    "idle": "animation/anims/viewmodel/pistol/pistol_taser/idle_taser.vnmclip_c",
+    "shoot1": "animation/anims/viewmodel/pistol/pistol_taser/shoot1_taser.vnmclip_c",
+    "reload": "animation/anims/viewmodel/pistol/_default_pistol/reload_empty_pistol.vnmclip_c",
+    "lookat01": "animation/anims/viewmodel/pistol/pistol_taser/lookat01_taser.vnmclip_c"
+   },
+   "sound_shot": "sounds/weapons/taser/taser_shoot.vsnd_c",
+   "verified": "paths found in the CS2 pak01_dir.vpk listing"
+  }
+ ]
+}
