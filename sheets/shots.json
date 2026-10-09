@@ -1,6 +1,6 @@
 {
   "_sheet": "shots",
-  "_doc": "Fixed camera poses for Gauntlet captures (--shots <dir>). pos is the player feet in Godot metres, yaw/pitch in degrees (yaw -90 faces +X along the course). Never move a pose between rounds; add a new row instead.",
+  "_doc": "Fixed camera poses for Gauntlet captures (--shots <dir>). pos is the player feet in Godot metres, yaw/pitch in degrees (yaw -90 faces +X along the course). Never move a pose between rounds; add a new row instead. weapon: a weapons.json id to hold for the picture (\"(none)\" holds whatever the pose starts with); lobby: true opens the aim lobby (round running, its HUD) at the pose.",
   "columns": [
     "id",
     "pos",
@@ -8,6 +8,8 @@
     "pitch",
     "frames",
     "what",
+    "weapon",
+    "lobby",
     "verified"
   ],
   "rows": [
@@ -22,6 +24,8 @@
       "pitch": -8,
       "frames": 30,
       "what": "spawn view down the course",
+      "weapon": "(none)",
+      "lobby": false,
       "verified": "2026-10-09 rendered in Gauntlet round 1 (g1)"
     },
     {
@@ -35,6 +39,8 @@
       "pitch": -15,
       "frames": 20,
       "what": "surfing the first ridge",
+      "weapon": "(none)",
+      "lobby": false,
       "verified": "2026-10-09 rendered in Gauntlet round 1 (g1)"
     },
     {
@@ -48,6 +54,8 @@
       "pitch": -12,
       "frames": 20,
       "what": "inside the first valley",
+      "weapon": "(none)",
+      "lobby": false,
       "verified": "2026-10-09 rendered in Gauntlet round 1 (g1)"
     },
     {
@@ -61,6 +69,8 @@
       "pitch": -20,
       "frames": 20,
       "what": "the Launch Site buildings from the checkpoint",
+      "weapon": "(none)",
+      "lobby": false,
       "verified": "2026-10-09 rendered in Gauntlet round 1 (g1)"
     },
     {
@@ -74,6 +84,8 @@
       "pitch": -35,
       "frames": 20,
       "what": "end pad and ground texture at foot level",
+      "weapon": "(none)",
+      "lobby": false,
       "verified": "2026-10-09 rendered in Gauntlet round 1 (g1)"
     },
     {
@@ -87,6 +99,8 @@
       "pitch": 5,
       "frames": 20,
       "what": "sky, sun and haze toward the horizon",
+      "weapon": "(none)",
+      "lobby": false,
       "verified": "2026-10-09 rendered in Gauntlet round 1 (g1)"
     },
     {
@@ -98,9 +112,41 @@
       ],
       "yaw": 180,
       "pitch": -3,
-      "frames": 60,
+      "frames": 90,
       "what": "aim lobby at the firing line: the numbered lanes, near and raised bots in a rifle-ready stance, catwalks and crates down range, with the round HUD",
-      "verified": "2026-10-09 rendered in lobby_r1_103 (lobby Gauntlet round 1): same pose; bots in the Rust full-metal-style kit (hood, facemask, chest plate) in three colourways, the near row at 4.5 m, three bots on crate stands between the rows, team-tinted score boxes; the gun is shown in its idle hold (the lobby cuts any draw clip to idle every frame of a capture)"
+      "weapon": "(none)",
+      "verified": "2026-10-09 rendered in lobby_r1_103 (lobby Gauntlet round 1): same pose; bots in the Rust full-metal-style kit (hood, facemask, chest plate) in three colourways, the near row at 4.5 m, three bots on crate stands between the rows, team-tinted score boxes; the gun is shown in its idle hold (the lobby cuts any draw clip to idle every frame of a capture)",
+      "lobby": true
+    },
+    {
+      "id": "rifle",
+      "pos": [
+        3,
+        90.6,
+        0
+      ],
+      "yaw": -90,
+      "pitch": -8,
+      "frames": 150,
+      "weapon": "cs2_ak47",
+      "what": "AK-47 in hand at spawn: viewmodel, HUD ammo and crosshair",
+      "lobby": false,
+      "verified": "2026-10-09 PC Gauntlet: 150 frames so the draw clip has finished"
+    },
+    {
+      "id": "lobby_rifle",
+      "pos": [
+        0,
+        300.05,
+        617
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "frames": 150,
+      "weapon": "cs2_m4a4",
+      "what": "M4A4 in hand in the aim lobby: viewmodel against targets, lobby HUD",
+      "verified": "2026-10-09 PC Gauntlet: 150 frames so the draw clip has finished",
+      "lobby": true
     }
   ]
 }

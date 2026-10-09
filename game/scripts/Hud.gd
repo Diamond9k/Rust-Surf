@@ -421,7 +421,7 @@ func _process(delta: float) -> void:
 	crosshair.queue_redraw()
 
 func update(speed_u: float, t: float, pb: float, running: bool) -> void:
-	speed_label.text = "%d" % int(speed_u) if speed_u >= float(H["speed_min"]) else ""  # no bare 0 at rest
+	speed_label.text = "%d u/s" % int(speed_u) if speed_u >= float(H["speed_min"]) else ""  # no bare 0 at rest
 	timer_label.text = RunTimer.fmt(maxf(t, 0.0))
 	pb_label.text = "PB " + RunTimer.fmt(pb)
 

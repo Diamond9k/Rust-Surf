@@ -153,6 +153,7 @@ def finish(a, problems, warnings, log):
     with open(done + ".tmp", "w", encoding="utf-8") as f:
         f.write("ok %s warnings=%s\n" % (a.version, warnings))
     os.replace(done + ".tmp", done)
+    log("wrote done-%s.txt; steps failed: none" % a.version)
     log("RUST SURF SETUP OK (%s)%s" % (a.version, "; warnings: " + "; ".join(warnings) if warnings else ""))
     return 0
 

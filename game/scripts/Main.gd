@@ -150,6 +150,13 @@ func _lighting() -> void:
 	env.environment = e
 	add_child(env)
 
+## Gauntlet capture hook (Shots.gd): a shots.json row may name a weapon to hold for its picture.
+func shot_setup(r: Dictionary) -> void:
+	if r.get("lobby", false) and not lobby.active:
+		lobby._enter(false)  # a lobby pose is the lobby as players see it (round running, its own HUD), at the row's own pose
+	if String(r.get("weapon", "(none)")) != "(none)":
+		weapons.give(String(r["weapon"]))
+
 func _report() -> void:
 	var lines: PackedStringArray = []
 	if content.missing.size() > 0:
@@ -167,6 +174,7 @@ func _report() -> void:
 	_err_lines = lines
 	hud.errors(lines)
 	print("Binds: %s | sens %.2f" % [sinput.source, sinput.sensitivity])  # console only: CS2 shows no such line over the view
+	print("READY course loaded; missing content %d; viewmodel %s; weapons ready %d/%d" % [content.missing.size(), "ok" if viewmodel.ok else "off", weapons.ready_ids.size(), weapons.rows.size()])
 
 func _exit_tree() -> void:
 	if content:

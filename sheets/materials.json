@@ -1,6 +1,6 @@
 {
   "_sheet": "materials",
-  "_doc": "One row per surface material the course and terrain use. albedo/normal/weather are content.json ids; uv_scale is metres per texture tile. Course.gd draws every textured row with one weathering shader: weather is a second texture mixed in by noise over weather_cover of the surface, grime is the strength of dirt streaks running down from a ramp's top edge (and its chipped lip), detail is the close-up detail overlay that keeps the texture sharp under the player. filter: aniso = mipmapped anisotropic (every shader material samples this way since world_r1). panel: cast slab size in metres on ramp faces (dark joints, a tone per slab; 0 = none); tint: albedo multiplier; crease_ao: how much the foot of a ramp face (the valley crease) is darkened and occluded. leaks: strength of Rust's dirt_stains_leaks drip decals hanging from a ramp face's top edge; debris: strength of the same atlas's gravel/litter band along the foot of a face (the crease of a valley); course.json weathering says which atlas bands. 0 turns either off. normal_depth: strength of the normal map on the course shader (1 = as Rust ships it; higher deepens the slab seams, cracks and pitting under a low sun).",
+  "_doc": "One row per surface material the course and terrain use. albedo/normal/weather are content.json ids; uv_scale is metres per texture tile. Course.gd draws every textured row with one weathering shader: weather is a second texture mixed in by noise over weather_cover of the surface, grime is the strength of dirt streaks running down from a ramp's top edge (and its chipped lip), detail is the close-up detail overlay that keeps the texture sharp under the player. filter: aniso = mipmapped anisotropic (every shader material samples this way since world_r1). panel: cast slab size in metres on ramp faces (dark joints, a tone per slab; 0 = none); tint: albedo multiplier; crease_ao: how much the foot of a ramp face (the valley crease) is darkened and occluded. leaks: strength of Rust's dirt_stains_leaks drip decals hanging from a ramp face's top edge; debris: strength of the same atlas's gravel/litter band along the foot of a face (the crease of a valley); course.json weathering says which atlas bands. 0 turns either off. normal_depth: strength of the normal map on the course shader (1 = as Rust ships it; higher deepens the slab seams, cracks and pitting under a low sun). color: a plain [r, g, b] albedo with no texture (the far ground ring), \"(none)\" for textured rows.",
   "columns": [
     "id",
     "albedo",
@@ -18,6 +18,7 @@
     "leaks",
     "debris",
     "filter",
+    "color",
     "verified"
   ],
   "rows": [
@@ -42,6 +43,7 @@
       "leaks": 0.75,
       "debris": 0.85,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-09 world_r3_1x renders (gauntlet 3): normal_depth 1.8 so the seams carry depth, by eye; 2026-10-08 seen in game on the start pad; world_r1 (gauntlet 2): leaks/debris from Rust dirt_stains_leaks decals, by eye in renders"
     },
     {
@@ -65,6 +67,7 @@
       "leaks": 0.6,
       "debris": 0.8,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-08 seen in game on the start pad; world_r1 (gauntlet 2): leaks/debris from Rust dirt_stains_leaks decals, by eye in renders"
     },
     {
@@ -88,6 +91,7 @@
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-08 seen in recorded frames (Launch Site ground)"
     },
     {
@@ -111,6 +115,7 @@
       "leaks": 0.9,
       "debris": 0,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-09 world_r1x renders (gauntlet round 1, batch 3): leaks 0.75 -> 0.9 now a third of the drip tiles hang none and the rest vary in length, by eye; 2026-10-09 world_r3_1x renders (gauntlet 3): 6 m tiles (was 10: r2 critics saw a smeared low-res ramp), normal_depth 2 and a neutral tint (was 0.8, read brown), by eye; 2026-10-09 world_r3 renders: Launch Site panel concrete instead of the beige concrete_d_site (r2 critics: untextured beige ramp), by eye; world_r1 (gauntlet 2): leaks/debris from Rust dirt_stains_leaks decals, by eye in renders"
     },
     {
@@ -134,6 +139,7 @@
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-09 Gauntlet captures"
     },
     {
@@ -157,6 +163,7 @@
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-09 world_r1x renders (gauntlet round 1, batch 3): roughness 0.55 -> 0.8, tint 0.78 -> 0.62 (critics: over-bright white strip along the ridge), by eye; 2026-10-09 world_r3_14 renders (gauntlet 3): tint 0.55 -> 0.78 for the light riveted band, by eye; 2026-10-09 world_r3 renders: ramp edge trims (r2 critics: no edge trim), by eye"
     },
     {
@@ -180,6 +187,7 @@
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-09 Gauntlet captures"
     },
     {
@@ -203,7 +211,8 @@
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
-      "verified": "2026-10-09 world_r1: terrain shader mixes it with dirt and site concrete; sampled with mips (the unmipped look read as noise to the r4 critics)"
+      "color": "(none)",
+      "verified": "2026-10-09 world_r1: terrain shader mixes it with dirt and site concrete; sampled with mips (the unmipped look read as noise to the r4 critics); PC Gauntlet r5: 3 blind judges saw the unmipped gravel speckle, mipmapped aniso confirmed"
     },
     {
       "id": "dirt",
@@ -226,6 +235,7 @@
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-09 world_r1 renders (terrain slopes and pit floor)"
     },
     {
@@ -249,6 +259,7 @@
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-09 world_r2 (gauntlet 2) renders of the Backdrop halls, by eye"
     },
     {
@@ -272,6 +283,7 @@
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-09 world_r2 (gauntlet 2) renders of the Backdrop halls, by eye"
     },
     {
@@ -295,6 +307,7 @@
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-09 world_r2 (gauntlet 2) renders of the Backdrop halls, by eye"
     },
     {
@@ -318,6 +331,7 @@
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-09 world_r2 (gauntlet 2) renders of the Backdrop halls, by eye"
     },
     {
@@ -341,6 +355,7 @@
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-09 world_r2 (gauntlet 2) renders of the Backdrop halls, by eye"
     },
     {
@@ -364,6 +379,7 @@
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "2026-10-09 world_r2 (gauntlet 2) renders of the Backdrop halls, by eye"
     },
     {
@@ -387,7 +403,36 @@
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
+      "color": "(none)",
       "verified": "invisible trigger volumes"
+    },
+    {
+      "id": "far_ground",
+      "albedo": "(none)",
+      "normal": "(none)",
+      "color": [
+        0.42,
+        0.38,
+        0.32
+      ],
+      "uv_scale": 1.0,
+      "roughness": 1.0,
+      "weather": "(none)",
+      "weather_cover": 0,
+      "grime": 0,
+      "detail": 0,
+      "panel": 0,
+      "tint": [
+        1,
+        1,
+        1
+      ],
+      "crease_ao": 0,
+      "normal_depth": 1.0,
+      "leaks": 0,
+      "debris": 0,
+      "filter": "aniso",
+      "verified": "2026-10-09 PC Gauntlet r5: plain land colour beyond the textured ground so the world runs to the horizon"
     }
   ]
 }

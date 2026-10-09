@@ -215,6 +215,24 @@
       "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
     },
     {
+      "id": "far_ground",
+      "kind": "decor",
+      "shape": "box",
+      "pos": [
+        180,
+        -1.6,
+        0
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "length": 16000,
+      "half_width": 8000,
+      "height": 1,
+      "material": "far_ground",
+      "order": 99,
+      "tuned": "2026-10-09 PC Gauntlet r5: 16 km plain ring under the 900 m ground, no more grey void at the horizon"
+    },
+    {
       "id": "kill_floor",
       "kind": "zone_kill",
       "shape": "box",

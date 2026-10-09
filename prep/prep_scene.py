@@ -1,15 +1,18 @@
-"""Launch Site placements: every selected LOD0 mesh in the monument prefab with its world transform."""
+"""Launch Site placements: every selected LOD0 (or LOD-less) mesh in the monument prefab with its world transform."""
 import os, json, time
 from prep_rust import BACKDROP_PREFIXES, SCENE_NODE, PREFAB, qmul, qrot, export_texture, write_mesh_glb, LOG
 
 
 def selected_meshes(env):
-    """(cab name, path id) -> mesh name for every backdrop LOD0 mesh in content.bundle."""
+    """(cab name, path id) -> mesh name for every backdrop LOD0 (or LOD-less, non-collision) mesh in content.bundle."""
     sel = {}
     for p, o in env.container.items():
         if o.type.name == "Mesh" and p.startswith(BACKDROP_PREFIXES):
             m = o.read()
-            if m.m_Name.endswith("LOD0"):
+            low = m.m_Name.lower()
+            # LOD0 of an LOD chain, or a mesh with no LODs at all (most rocket factory parts are plain
+            # "ObjectNNN"); never collision or shadow-only meshes
+            if m.m_Name.endswith("LOD0") or ("lod" not in low and not low.endswith("_col") and "shadowproxy" not in low):
                 af = getattr(o, "assets_file", None) or getattr(o, "assetsfile", None)
                 pid = getattr(o, "path_id", None) or getattr(o, "m_PathID", None)
                 sel[(af.name, pid)] = (m.m_Name, o)

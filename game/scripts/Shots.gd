@@ -33,6 +33,8 @@ func _ready() -> void:
 		p.cam.rotation_degrees.x = p.pitch
 		if main.has_method("shot_setup"):
 			main.shot_setup(r)
+		if main.hud:
+			main.hud.message("", 0.0)  # the start-up binds toast is not part of any pose
 		for i in int(r.get("frames", 20)):
 			await get_tree().process_frame
 		var img := get_viewport().get_texture().get_image()

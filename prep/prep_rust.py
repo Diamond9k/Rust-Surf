@@ -7,12 +7,18 @@ from glbwriter import write_glb
 
 LOG = print
 
-# backdrop selection: LOD0 meshes whose container path starts with one of these
+# backdrop selection: LOD0 (or LOD-less) meshes whose container path starts with one of these
 BACKDROP_PREFIXES = (
     "assets/content/structures/launch_site/models/",
     "assets/content/structures/launch_site_floodlights/models/",
     "assets/content/structures/industrial_structures/models/launch_site_silo",
     "assets/content/structures/warehouses/models/warehouse_launch_site_a",
+    # the big Launch Site buildings the monument prefab also places (inventory of its MeshFilters, 2026-10-09)
+    "assets/content/structures/rocket_factory_building/",
+    "assets/content/structures/rocket_crane/",
+    "assets/content/structures/office_buildings/models/space_center",
+    "assets/content/structures/perimeter_walls/",
+    "assets/content/structures/roads/models/pavement_launchsite",
 )
 SCENE_NODE = "BuildPlayer-AssetScene-monument.1"
 PREFAB = "assets/bundled/prefabs/autospawn/monument/xlarge/launch_site_1.prefab"

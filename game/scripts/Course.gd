@@ -73,7 +73,11 @@ func _material(m: Dictionary) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.roughness = float(m["roughness"])
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	if m["albedo"] != "(none)":
+	if m.get("color", "(none)") is Array:
+		# plain colour, no texture: the far ground ring has nothing to tile or shimmer, fog fades it into the horizon
+		var c: Array = m["color"]
+		mat.albedo_color = Color(c[0], c[1], c[2])
+	elif m["albedo"] != "(none)":
 		var t := content.texture(m["albedo"], "MainTex")
 		if t:
 			mat.albedo_texture = t
