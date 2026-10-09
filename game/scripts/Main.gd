@@ -133,6 +133,8 @@ func _lighting() -> void:
 
 ## Gauntlet capture hook (Shots.gd): a shots.json row may name a weapon to hold for its picture.
 func shot_setup(r: Dictionary) -> void:
+	if r.get("lobby", false) and not lobby.active:
+		lobby.toggle()  # a lobby pose is the lobby as players see it: round running, its own HUD
 	if r.has("weapon"):
 		weapons.give(String(r["weapon"]))
 
@@ -145,6 +147,7 @@ func _report() -> void:
 	_err_lines = lines
 	hud.errors(lines)
 	hud.message("Binds: %s | sens %.2f" % [sinput.source, sinput.sensitivity], 4.0)
+	print("READY course loaded; missing content %d; viewmodel %s; weapons ready %d/%d" % [content.missing.size(), "ok" if viewmodel.ok else "off", weapons.ready_ids.size(), weapons.rows.size()])
 
 func _exit_tree() -> void:
 	if content:

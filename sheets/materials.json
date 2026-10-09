@@ -8,6 +8,7 @@
     "uv_scale",
     "roughness",
     "filter",
+    "color",
     "verified"
   ],
   "rows": [
@@ -71,8 +72,8 @@
       "normal": "tex_terrain_blend",
       "uv_scale": 14.0,
       "roughness": 0.95,
-      "verified": "2026-10-09 Gauntlet captures",
-      "filter": "sharp"
+      "verified": "2026-10-09 PC Gauntlet r5: 3 blind judges saw the unmipped gravel speckle; mipmapped aniso",
+      "filter": "aniso"
     },
     {
       "id": "none",
@@ -82,6 +83,20 @@
       "roughness": 1.0,
       "verified": "invisible trigger volumes",
       "filter": "aniso"
+    },
+    {
+      "id": "far_ground",
+      "albedo": "(none)",
+      "normal": "(none)",
+      "color": [
+        0.42,
+        0.38,
+        0.32
+      ],
+      "uv_scale": 1.0,
+      "roughness": 1.0,
+      "filter": "aniso",
+      "verified": "2026-10-09 PC Gauntlet r5: plain land colour beyond the textured ground so the world runs to the horizon"
     }
   ]
 }

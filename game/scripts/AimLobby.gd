@@ -88,6 +88,7 @@ func toggle() -> void:
 		p.cam.rotation_degrees.x = 0.0
 		main.timer.reset()
 		main.ghost.stop_run(false)
+		main.hud.set_run_visible(false)  # the lobby has its own score line: no surf timer or speed
 		_start_round()
 	else:
 		active = false
@@ -97,6 +98,7 @@ func toggle() -> void:
 		_summary.visible = false
 		_clear()
 		main.hud.message("aim lobby closed, round not saved", 2.0)
+		main.hud.set_run_visible(true)
 		main.course.restart(p)
 		main.timer.reset()
 		main.ghost.stop_run(false)
@@ -183,6 +185,8 @@ func _text(layer: CanvasLayer, size: int, preset: Control.LayoutPreset, top: flo
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	l.add_theme_font_size_override("font_size", size)
+	if main.hud and main.hud.font:
+		l.add_theme_font_override("font", main.hud.font)  # same CS2 font as the rest of the HUD
 	l.add_theme_color_override("font_outline_color", Color.BLACK)
 	l.add_theme_constant_override("outline_size", 8)
 	layer.add_child(l)

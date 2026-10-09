@@ -16,6 +16,8 @@ parts = [(os.path.join(R, "dist", "RustSurf"), ""), (os.path.join(R, ".work", "p
 for base, _ in parts:
     if not os.path.isdir(base):
         sys.exit("missing " + base + " (export the game to dist/RustSurf and build .work/prepbundle first)")
+if len(os.listdir(os.path.join(R, "LICENSES"))) < 10:
+    sys.exit("LICENSES/ is missing licence files: every shipped component's licence must be in the zip")
 # the game reads res://data/<sheet>.json: refuse to package a build exported with stale sheets (run tools/export.py)
 import filecmp
 for f in os.listdir(os.path.join(R, "sheets")):

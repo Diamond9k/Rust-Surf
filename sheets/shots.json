@@ -9,6 +9,7 @@
     "frames",
     "what",
     "weapon",
+    "lobby",
     "verified"
   ],
   "rows": [
@@ -99,9 +100,10 @@
       ],
       "yaw": 0,
       "pitch": 0,
-      "frames": 30,
+      "frames": 90,
       "what": "aim lobby spawn looking at the back wall targets",
-      "verified": "2026-10-09 rendered in Gauntlet round 1 (g1)"
+      "verified": "2026-10-09 rendered in Gauntlet round 1 (g1)",
+      "lobby": true
     },
     {
       "id": "rifle",
@@ -129,7 +131,8 @@
       "frames": 150,
       "weapon": "cs2_m4a4",
       "what": "M4A4 in hand in the aim lobby: viewmodel against targets, lobby HUD",
-      "verified": "2026-10-09 PC Gauntlet: 150 frames so the draw clip has finished"
+      "verified": "2026-10-09 PC Gauntlet: 150 frames so the draw clip has finished",
+      "lobby": true
     }
   ]
 }

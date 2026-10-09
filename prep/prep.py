@@ -219,6 +219,7 @@ def main():
             both("prep failed in %s; no done file, so Melty runs it again" % errors)
             sys.exit(1)
         open(os.path.join(a.out, "done-%s.txt" % a.version), "w").write("ok %s missing=%s\n" % (a.version, missing))
+        both("wrote done-%s.txt; steps failed: none" % a.version)
     except Exception:
         both(traceback.format_exc())
         sys.exit(1)

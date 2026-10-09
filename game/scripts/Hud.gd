@@ -1,4 +1,4 @@
-## systems.hud: CS2-style HUD: speed, timer pill, ammo, hitmarker, messages, and the CS2 crosshair of the player.
+﻿## systems.hud: CS2-style HUD: speed, timer pill, ammo, hitmarker, messages, and the CS2 crosshair of the player.
 class_name Hud
 extends CanvasLayer
 
@@ -16,6 +16,8 @@ var font: Font
 var _hit := 0.0
 var _hit_head := false
 var _ammo_box: Control
+var _pill: Control
+var hp_label: Label
 
 func setup(cv: Dictionary, cs2_dir: String = "") -> void:
 	convars = cv
@@ -36,15 +38,16 @@ func setup(cv: Dictionary, cs2_dir: String = "") -> void:
 	sb.content_margin_top = 6
 	sb.content_margin_bottom = 8
 	pill.add_theme_stylebox_override("panel", sb)
-	_anchor(pill, 1.0, 0.0, 1.0, 0.0, -190, 18, -18, 18)
-	pill.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_anchor(pill, 0.5, 0.0, 0.5, 0.0, -95, 14, 95, 14)  # CS2 keeps its round clock top-centre
+	pill.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_pill = pill
 	root.add_child(pill)
 	var col := VBoxContainer.new()
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_theme_constant_override("separation", -2)
 	pill.add_child(col)
-	timer_label = _label(col, 30, HORIZONTAL_ALIGNMENT_RIGHT)
-	pb_label = _label(col, 16, HORIZONTAL_ALIGNMENT_RIGHT)
+	timer_label = _label(col, 30, HORIZONTAL_ALIGNMENT_CENTER)
+	pb_label = _label(col, 16, HORIZONTAL_ALIGNMENT_CENTER)
 	pb_label.modulate = Color(0.78, 0.8, 0.84)
 	msg_label = _label(root, 34, HORIZONTAL_ALIGNMENT_CENTER)
 	_anchor(msg_label, 0.5, 0.5, 0.5, 0.5, -400, -190, 400, -130)
@@ -64,6 +67,10 @@ func setup(cv: Dictionary, cs2_dir: String = "") -> void:
 	_anchor(reserve_label, 1.0, 1.0, 1.0, 1.0, -84, -36, 0, 0)
 	reserve_label.modulate = Color(0.78, 0.8, 0.84)
 	_ammo_box.visible = false
+	# CS2 bottom-left health; surf has no damage, so it stays at 100
+	hp_label = _label(root, 44, HORIZONTAL_ALIGNMENT_LEFT)
+	_anchor(hp_label, 0.0, 1.0, 0.0, 1.0, 28, -86, 260, -24)
+	hp_label.text = "+ 100"
 	crosshair = Control.new()
 	crosshair.set_anchors_preset(Control.PRESET_CENTER)
 	crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -157,7 +164,7 @@ func _process(delta: float) -> void:
 			crosshair.queue_redraw()
 
 func update(speed_u: float, t: float, pb: float, running: bool) -> void:
-	speed_label.text = "%d" % int(speed_u)
+	speed_label.text = "%d u/s" % int(speed_u)
 	timer_label.text = RunTimer.fmt(t) if running or t > 0.0 else "ready"
 	pb_label.text = "PB " + RunTimer.fmt(pb)
 
@@ -188,5 +195,13 @@ func hitmarker(head: bool) -> void:
 	if crosshair:
 		crosshair.queue_redraw()
 
+var _speed_pref := true
+
 func set_speed_visible(b: bool) -> void:
-	speed_label.visible = b
+	_speed_pref = b
+	speed_label.visible = b and _pill.visible
+
+## The surf run block (clock pill and speed); the aim lobby hides it and shows its own score line.
+func set_run_visible(b: bool) -> void:
+	_pill.visible = b
+	speed_label.visible = b and _speed_pref

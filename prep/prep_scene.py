@@ -9,7 +9,10 @@ def selected_meshes(env):
     for p, o in env.container.items():
         if o.type.name == "Mesh" and p.startswith(BACKDROP_PREFIXES):
             m = o.read()
-            if m.m_Name.endswith("LOD0"):
+            low = m.m_Name.lower()
+            # LOD0 of an LOD chain, or a mesh with no LODs at all (most rocket factory parts are plain
+            # "ObjectNNN"); never collision or shadow-only meshes
+            if m.m_Name.endswith("LOD0") or ("lod" not in low and not low.endswith("_col") and "shadowproxy" not in low):
                 af = getattr(o, "assets_file", None) or getattr(o, "assetsfile", None)
                 pid = getattr(o, "path_id", None) or getattr(o, "m_PathID", None)
                 sel[(af.name, pid)] = (m.m_Name, o)

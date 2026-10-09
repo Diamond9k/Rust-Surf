@@ -23,4 +23,5 @@ for l in bad:
     print(l)
 if p.returncode != 0 or bad:
     sys.exit("export failed (exit %d, %d error lines)" % (p.returncode, len(bad)))
-print("export ok: dist/RustSurf/RustSurf.exe")
+ver = subprocess.run([godot, "--version"], capture_output=True, text=True).stdout.strip()
+print("export ok: Godot %s, --export-release \"Windows Desktop\" -> dist/RustSurf/RustSurf.exe" % ver)

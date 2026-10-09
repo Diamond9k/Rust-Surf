@@ -76,5 +76,9 @@ func _physics_process(_dt: float) -> void:
 	if ticks % 32 == 0:
 		print("t=%.1f pos=(%.1f, %.1f, %.1f) speed=%d vy=%.1f gr=%s ramp=%s timer=%.2f" % [ticks / 64.0, p.global_position.x, p.global_position.y, p.global_position.z, int(p.speed_units()), p.velocity.y, p.grounded, on_ramp, main.timer.t])
 	if ticks >= int(64 * seconds) or (zones.size() > 0 and zones[-1].begins_with("end_zone")):
-		print("TEST end; max_speed=%d u/s max_x=%.1f zones=%s pb=%.3f" % [int(max_speed), max_x, zones, main.timer.pb])
+		var all_zones := 0
+		for z in main.course.get_children():
+			if z is Area3D and not String(z.name).contains("start") and not String(z.name).contains("kill"):
+				all_zones += 1
+		print("TEST end; max_speed=%d u/s max_x=%.1f zones=%s (%d of %d checkpoint and finish zones) pb=%.3f" % [int(max_speed), max_x, zones, zones.size(), all_zones, main.timer.pb])
 		get_tree().quit()
