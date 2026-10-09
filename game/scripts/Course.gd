@@ -119,6 +119,18 @@ func _surface(m: Dictionary) -> Material:
 	sm.set_shader_parameter("crease_ao", float(m["crease_ao"]))
 	var tn: Array = m["tint"]
 	sm.set_shader_parameter("tint", Vector3(tn[0], tn[1], tn[2]))
+	var W: Dictionary = sheet["weathering"]
+	var lk := content.texture(W["texture"], "MainTex")
+	sm.set_shader_parameter("has_leak", lk != null and (float(m["leaks"]) > 0.0 or float(m["debris"]) > 0.0))
+	if lk:
+		sm.set_shader_parameter("tex_leak", lk)
+	sm.set_shader_parameter("leaks", float(m["leaks"]))
+	sm.set_shader_parameter("debris", float(m["debris"]))
+	for k in ["leak_v", "debris_v"]:
+		var a: Array = W[k]
+		sm.set_shader_parameter(k, Vector2(a[0], a[1]))
+	for k in ["leak_len", "leak_width", "debris_width"]:
+		sm.set_shader_parameter(k, float(W[k]))
 	return sm
 
 func _piece(r: Dictionary) -> Node3D:
@@ -326,8 +338,18 @@ uniform float roughness_val = 0.85;
 uniform float panel = 0.0;
 uniform float crease_ao = 0.0;
 uniform vec3 tint = vec3(1.0);
+uniform sampler2D tex_leak : source_color, filter_linear_mipmap, repeat_enable;
+uniform bool has_leak = false;
+uniform float leaks = 0.0;
+uniform float debris = 0.0;
+uniform vec2 leak_v = vec2(0.615, 0.92);
+uniform vec2 debris_v = vec2(0.32, 0.17);
+uniform float leak_len = 6.0;
+uniform float leak_width = 5.0;
+uniform float debris_width = 2.0;
 varying vec3 wpos;
 varying vec3 wn;
+varying vec2 face_off;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vnoise(vec2 p) {
@@ -342,6 +364,26 @@ float fbm(vec2 p) {
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	wn = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	// each face of each piece samples its textures from its own place: the two walls of a valley no
+	// longer show the same crack at the same spot
+	float side = sign(NORMAL.z) + 2.0 * sign(NORMAL.x) + 4.0 * sign(NORMAL.y);
+	vec2 np = NODE_POSITION_WORLD.xz * 0.013 + side * vec2(5.3, 1.1);
+	face_off = floor(vec2(hash(np), hash(np.yx + vec2(2.9, 8.3))) * 97.0);
+}
+// a band of a decal atlas (v from v0 at t = 0 to v1 at t = 1), u running along the edge in leak_width
+// metre tiles, each tile picking the left or right half of the atlas; derivatives taken before the
+// tile wrap so mipmaps do not seam. The atlas is black where clear but speckled with stray pixels
+// where half clear (they read as dots), so the colour comes from a blurrier mip divided by its alpha
+// and the alpha is tightened
+vec4 band(vec2 v, float u, float t, float seed) {
+	float tile = floor(u);
+	float hf = step(0.5, hash(vec2(tile, seed)));
+	vec2 at = vec2((fract(u) * 0.96 + 0.02) * 0.5 + hf * 0.5, mix(v.x, v.y, clamp(t, 0.0, 1.0)));
+	vec2 g = vec2(u * 0.5, mix(v.x, v.y, t)) * vec2(textureSize(tex_leak, 0));
+	float lod = log2(max(max(length(dFdx(g)), length(dFdy(g))), 1.0)) + 0.5;
+	vec4 soft = textureLod(tex_leak, at, lod + 2.5);
+	float a = smoothstep(0.45, 0.9, textureLod(tex_leak, at, lod + 1.5).a);
+	return vec4(clamp(soft.rgb / max(soft.a, 0.1), 0.0, 1.0), a);
 }
 void fragment() {
 	vec2 m = UV;
@@ -349,20 +391,27 @@ void fragment() {
 		vec3 an = abs(wn);
 		m = an.y > max(an.x, an.z) ? wpos.xz : (an.x > an.z ? wpos.zy : wpos.xy);
 	}
-	vec2 uv = m / scale_a;
+	vec2 mo = m + (world_map ? vec2(0.0) : face_off);  // texture space only; slab joints stay on m
+	vec2 uv = mo / scale_a;
 	vec3 c = texture(tex_a, uv).rgb;
 	vec3 nm = has_nrm ? texture(nrm_a, uv).rgb : vec3(0.5, 0.5, 1.0);
 	// a second, larger sampling of the same texture over half the surface by noise: no visible repeat
-	vec2 uv3 = m / (scale_a * 2.37) + vec2(0.21, 0.67);
-	float k3 = atlas ? 0.0 : 0.6 * smoothstep(0.35, 0.65, fbm(m / (scale_a * 3.1) + vec2(8.0, 2.0)));
+	vec2 uv3 = mo / (scale_a * 2.37) + vec2(0.21, 0.67);
+	float k3 = atlas ? 0.0 : 0.6 * smoothstep(0.35, 0.65, fbm(mo / (scale_a * 3.1) + vec2(8.0, 2.0)));
 	c = mix(c, texture(tex_a, uv3).rgb, k3);
 	if (has_nrm) { nm = mix(nm, texture(nrm_a, uv3).rgb, k3); }
 	float rough = roughness_val * mix(1.0, 0.72, smoothstep(0.5, 0.75, fbm(m / 9.0 + vec2(23.0, 5.0))));  // worn, smoother patches catch the sun
 	if (has_b) {
-		float w = smoothstep(1.0 - weather - 0.1, 1.0 - weather + 0.1, fbm(m / (scale_a * 2.7) + vec2(5.3, 1.7)));
-		vec2 uvb = m / (scale_a * 1.3) + vec2(0.31, 0.77);
-		c = mix(c, texture(tex_b, uvb).rgb * mix(c, vec3(dot(c, vec3(0.333))), 0.5) / max(vec3(dot(c, vec3(0.333))), vec3(0.05)), w * 0.85);
-		nm = mix(nm, texture(nrm_b, uvb).rgb, w * 0.85);
+		float w = smoothstep(1.0 - weather - 0.1, 1.0 - weather + 0.1, fbm(mo / (scale_a * 2.7) + vec2(5.3, 1.7)));
+		// the cracked texture twice, the second turned a quarter and at an unrelated scale, crossfaded by
+		// noise, so its crack network never repeats in a grid down a long ramp
+		vec2 uvb = mo / (scale_a * 1.3) + vec2(0.31, 0.77);
+		vec2 uvb2 = vec2(-mo.y, mo.x) / (scale_a * 1.87) + vec2(0.53, 0.19);
+		float kb = smoothstep(0.4, 0.6, fbm(mo / (scale_a * 1.9) + vec2(27.0, 13.0)));
+		vec3 cb = mix(texture(tex_b, uvb).rgb, texture(tex_b, uvb2).rgb, kb);
+		vec3 nb = mix(texture(nrm_b, uvb).rgb, texture(nrm_b, uvb2).rgb, kb);
+		c = mix(c, cb * mix(c, vec3(dot(c, vec3(0.333))), 0.5) / max(vec3(dot(c, vec3(0.333))), vec3(0.05)), w * 0.85);
+		nm = mix(nm, nb, w * 0.85);
 	}
 	float dist = length(wpos - CAMERA_POSITION_WORLD);
 	vec3 mean = textureLod(tex_a, vec2(0.5), 12.0).rgb;
@@ -373,7 +422,7 @@ void fragment() {
 		vec3 dn = texture(nrm_a, uv * 7.31 + vec2(0.13, 0.57)).rgb;
 		nm = vec3(nm.xy + (dn.xy - 0.5) * near * 1.2, nm.z);  // detail normal: fine grain under the player
 	}
-	c *= mix(0.8, 1.1, fbm(m / 17.0 + vec2(11.0, 3.0)));
+	c *= mix(0.8, 1.1, fbm(mo / 17.0 + vec2(11.0, 3.0)));
 	c *= tint;
 	float face = world_map ? 0.0 : step(0.0, UV2.y);  // boxes have no UV2: no edge wear
 	float top = max(UV2.x, 0.0);
@@ -405,14 +454,27 @@ void fragment() {
 		occ = clamp(occ, 0.05, 1.0);
 		c *= mix(occ, 1.0, 0.35);
 	}
-	float streak = smoothstep(0.42, 0.8, fbm(vec2(m.x * 0.9, top * 0.07) + vec2(2.0, 9.0)));
+	float streak = smoothstep(0.42, 0.8, fbm(vec2(mo.x * 0.9, top * 0.07) + vec2(2.0, 9.0)));
 	float s = streak * exp(-top / 7.0) * grime * face;
-	float pool = smoothstep(0.55, 0.8, fbm(m / 6.0 + vec2(41.0, 13.0))) * grime * face * 0.5;
+	float pool = smoothstep(0.55, 0.8, fbm(mo / 6.0 + vec2(41.0, 13.0))) * grime * face * 0.5;
 	c *= 1.0 - 0.5 * s - 0.25 * pool;
 	rough = mix(rough, 1.0, s * 0.5);
 	float lip = (1.0 - smoothstep(0.06, 0.4, top)) * face * grime * step(0.001, grime);
 	float chip = smoothstep(0.35, 0.65, vnoise(vec2(m.x * 3.0, top * 6.0)));
 	c = mix(c, c * 1.22 + vec3(0.025), lip * chip);
+	if (has_leak) {  // uniform branch only: the atlas lookups need derivatives, undefined per pixel branch
+		// Rust's own leak decals (dirt_stains_leaks) hanging from the top edge, in runs along it
+		float run = smoothstep(0.35, 0.6, fbm(vec2(mo.x / 11.0, 3.7)));
+		vec4 lk = band(leak_v, (m.x + face_off.x) / leak_width, top / leak_len, face_off.y);
+		float la = lk.a * leaks * run * face * (1.0 - smoothstep(0.75, 1.0, top / leak_len));
+		c = mix(c, mix(lk.rgb, vec3(dot(lk.rgb, vec3(0.333))), 0.35) * 0.75, clamp(la, 0.0, 1.0));
+		rough = mix(rough, 1.0, la * 0.4);
+		// gravel and litter washed into the foot of the face (the crease of a valley)
+		vec4 db = band(debris_v, (m.x + face_off.y) / (leak_width * 1.6), bot / debris_width, face_off.x + 3.0);
+		float da = db.a * debris * face * (1.0 - smoothstep(0.8, 1.0, bot / debris_width));
+		c = mix(c, db.rgb, clamp(da, 0.0, 1.0));
+		rough = mix(rough, 1.0, da);
+	}
 	ALBEDO = c;
 	NORMAL_MAP = nm;
 	ROUGHNESS = rough;

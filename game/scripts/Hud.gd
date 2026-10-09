@@ -15,10 +15,12 @@ var reserve_label: Label
 var hp_label: Label
 var armor_label: Label
 var crosshair: Control
+var hit_ctl: Control   # the hit marker draws on its own Control: Weapons hides the crosshair for snipers and scopes
 var fps_label: Label
 var hit_marker := false  # Settings 'hit_marker'; CS2 gives no hit marker, so it starts off
 var convars := {}
 var font: Font
+var menu_font: Font    # the same face at the lighter weight CS2's settings text uses
 var H := {}
 var _s := 1.0
 var _hit := 0.0
@@ -36,7 +38,8 @@ var _armor := 100.0
 func setup(cv: Dictionary, cs2_dir: String = "") -> void:
 	convars = cv
 	H = Sheets.values("hud")
-	font = _load_font(cs2_dir)
+	font = _load_font(cs2_dir, 700)
+	menu_font = _load_font(cs2_dir, int(H["menu_weight"]))
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -85,6 +88,10 @@ func setup(cv: Dictionary, cs2_dir: String = "") -> void:
 	crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	crosshair.draw.connect(_draw_crosshair)
 	root.add_child(crosshair)
+	hit_ctl = Control.new()
+	hit_ctl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hit_ctl.draw.connect(_draw_hit)
+	root.add_child(hit_ctl)
 	get_viewport().size_changed.connect(_layout)
 	_layout()
 
@@ -129,6 +136,7 @@ func _layout() -> void:
 	_pill_sb.content_margin_top = 2 * s
 	_pill_sb.content_margin_bottom = 5 * s
 	crosshair.position = (vp * 0.5).floor()
+	hit_ctl.position = crosshair.position
 	_deco.queue_redraw()
 	crosshair.queue_redraw()
 
@@ -136,8 +144,9 @@ func _place(c: Control, pos: Vector2, sz: Vector2) -> void:
 	c.position = pos
 	c.size = sz
 
-## CS2's own panorama font if the install has one (Stratum bold first), else a bold system font.
-func _load_font(cs2_dir: String) -> Font:
+## CS2's own panorama font if the install has one (Stratum first, bold or not as weight asks), else a system font
+## at that weight.
+func _load_font(cs2_dir: String, weight: int) -> Font:
 	var dir := cs2_dir + "/game/csgo/panorama/fonts"
 	if cs2_dir != "" and DirAccess.dir_exists_absolute(dir):
 		var best := ""
@@ -149,7 +158,7 @@ func _load_font(cs2_dir: String) -> Font:
 			if ext != "ttf" and ext != "otf":
 				continue
 			var low := String(f).to_lower()
-			var score := (2 if low.contains("stratum") else 0) + (1 if low.contains("bold") else 0)
+			var score := (2 if low.contains("stratum") else 0) + (1 if low.contains("bold") == (weight >= 600) else 0)
 			if score > best_score:
 				best = f
 				best_score = score
@@ -161,7 +170,7 @@ func _load_font(cs2_dir: String) -> Font:
 	# narrowed by hud.json font_narrow so it keeps Stratum's condensed proportions
 	var sf := SystemFont.new()
 	sf.font_names = PackedStringArray(["Stratum2", "Bahnschrift", "Arial Narrow", "Liberation Sans Narrow", "Arial", "Liberation Sans", "Helvetica"])
-	sf.font_weight = 700
+	sf.font_weight = weight
 	var fv := FontVariation.new()
 	fv.base_font = sf
 	if not "Bahnschrift" in OS.get_system_fonts():
@@ -321,36 +330,51 @@ static func xh_px(cv: Dictionary, h: float, hv: Dictionary) -> Dictionary:
 		"gap": roundf((float(hv["gap_base"]) + num(cv, "cl_crosshairgap", 1)) * h / float(hv["gap_ref_height"])),
 		"outline": ot}
 
-## Pixels a spread cone of rad radians covers on a window h px tall (Source: YRES(rad x 320 / tan(fov/2))).
+## Pixels a spread cone of rad radians covers on a window h px tall (Source: YRES(rad x 320 / tan(fov/2)), fov the
+## horizontal fov at 4:3). The fov is the live camera's (Godot keeps height), turned back into Source's 4:3 one.
 func spread_to_px(rad: float, h: float) -> float:
-	var half := deg_to_rad(float(Sheets.movement()["fov_default"])) * 0.5
-	return rad * float(H["spread_units"]) / tan(half) * h / float(H["yres_base"])
+	return rad * float(H["spread_units"]) / _tan43() * h / float(H["yres_base"])
 
-## True while the held weapon's weapons.json slot is one CS2 draws no crosshair for (hud.json xh_hidden_slots:
-## the snipers; scoped, Weapons hides the crosshair for the lens anyway).
+## tan(fov/2) of Source's 4:3 horizontal fov for the live camera (its vertical fov widened by 4:3 = 320:240).
+func _tan43() -> float:
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	var v := cam.fov if cam != null else Sheets.vfov_43(float(Sheets.movement()["fov_default"]))
+	return tan(deg_to_rad(v) * 0.5) * float(H["spread_units"]) / (float(H["yres_base"]) * 0.5)
+
+## cl_crosshair_recoil: where the bullets go against the screen centre, px (the aim punch the camera does not show).
+func _recoil_px(w: Node, h: float) -> Vector2:
+	if w == null or not on(convars, "cl_crosshair_recoil", "false") or not (w.get("X") is Dictionary) or not (w.get("_aim") is Vector2):
+		return Vector2.ZERO
+	var x: Dictionary = w.X
+	var aim: Vector2 = (w._aim as Vector2) * float(x["recoil_scale"])
+	var view: Vector2 = w._view if w.get("_view") is Vector2 else Vector2.ZERO
+	var d := aim - (view + aim * float(x["view_recoil_tracking"]))  # degrees: x pitch up, y yaw left
+	var f := float(H["spread_units"]) / _tan43() * h / float(H["yres_base"])
+	return Vector2(-tan(deg_to_rad(d.y)), -tan(deg_to_rad(d.x))) * f
+
+## True while CS2 draws no crosshair: one rule, Weapons.crosshair_shown() (unscoped snipers, any scope).
 func _no_xh() -> bool:
 	var w: Node = get_parent().get("weapons") if get_parent() else null
-	if w == null or not w.has_method("held"):
-		return false
-	var id: String = w.held()
-	var r: Variant = (w.get("rows") as Dictionary).get(id) if w.get("rows") is Dictionary else null
-	return r is Dictionary and String((r as Dictionary).get("slot", "")) in String(H["xh_hidden_slots"]).split(",")
+	return w != null and w.has_method("crosshair_shown") and not w.crosshair_shown()
 
 func _draw_crosshair() -> void:
-	var h := get_viewport().get_visible_rect().size.y
 	if not _no_xh():
-		draw_xh(crosshair, convars, h, H, _dyn, _fire)
-	if _hit > 0.0:
-		var k := h / float(H["ref_height"])
-		var hc := Color(1, 1, 1, _hit / float(H["hit_time"]))  # white for every hit
-		for d in [Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
-			crosshair.draw_line(d * float(H["hit_inner"]) * k, d * float(H["hit_outer"]) * k, hc, maxf(float(H["hit_width"]) * k, 1.0), true)
+		draw_xh(crosshair, convars, get_viewport().get_visible_rect().size.y, H, _dyn, _fire)
+
+func _draw_hit() -> void:
+	if _hit <= 0.0:
+		return
+	var k := get_viewport().get_visible_rect().size.y / float(H["ref_height"])
+	var hc := Color(1, 1, 1, _hit / float(H["hit_time"]))  # white for every hit
+	for d in [Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
+		hit_ctl.draw_line(d * float(H["hit_inner"]) * k, d * float(H["hit_outer"]) * k, hc, maxf(float(H["hit_width"]) * k, 1.0), true)
 
 func _process(delta: float) -> void:
 	if crosshair == null:
 		return
 	if _hit > 0.0:
 		_hit = maxf(_hit - delta, 0.0)
+		hit_ctl.queue_redraw()
 	if fps_label.visible:
 		fps_label.text = "%d fps" % int(Engine.get_frames_per_second())
 	var spread := 0.0
@@ -367,10 +391,11 @@ func _process(delta: float) -> void:
 	var k := clampf(delta * float(H["dynamic_rate"]), 0.0, 1.0)
 	_dyn = lerpf(_dyn, spread_to_px(spread, h), k)
 	_fire = lerpf(_fire, spread_to_px(fire, h), k)
+	crosshair.position = (get_viewport().get_visible_rect().size * 0.5).floor() + _recoil_px(w, h).round()
 	crosshair.queue_redraw()
 
 func update(speed_u: float, t: float, pb: float, running: bool) -> void:
-	speed_label.text = "%d" % int(speed_u)
+	speed_label.text = "%d" % int(speed_u) if speed_u >= float(H["speed_min"]) else ""  # no bare 0 at rest
 	timer_label.text = RunTimer.fmt(maxf(t, 0.0))
 	pb_label.text = "PB " + RunTimer.fmt(pb)
 
@@ -399,7 +424,7 @@ func errors(lines: PackedStringArray) -> void:
 ## Bottom-right ammo: "30 / 90", weapon name above; clip -1 hides the ammo (knife).
 func weapon(wname: String, clip: int, reserve: int, clip_max: int = -1) -> void:
 	_ammo_box.visible = true
-	weapon_label.text = wname.to_upper()
+	weapon_label.text = wname.to_upper() if clip >= 0 else ""  # the knife has no ammo panel at all
 	clip_label.visible = clip >= 0
 	reserve_label.visible = clip >= 0
 	if clip >= 0:
@@ -418,8 +443,8 @@ func hitmarker(_head: bool) -> void:
 	var snd: Node = get_parent().get("sounds") if get_parent() else null
 	if snd != null and snd.get("players") is Dictionary and (snd.players as Dictionary).has(String(H["hit_sound"])):
 		snd.play(String(H["hit_sound"]))
-	if crosshair:
-		crosshair.queue_redraw()
+	if hit_ctl:
+		hit_ctl.queue_redraw()
 
 func set_speed_visible(b: bool) -> void:
 	speed_label.visible = b

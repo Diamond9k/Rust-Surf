@@ -75,6 +75,11 @@ var _scope_layer: CanvasLayer
 var _rng := RandomNumberGenerator.new()
 var _pellet_tabs := {}   # id -> PackedVector2Array (angle, radius share) of its fixed shotgun pattern
 var _recharge := {}      # id -> when an empty Zeus has its charge back
+var _part_at := -1.0     # when the silencer mesh shows or hides mid-toggle, -1 when nothing is pending
+var _part_id := ""
+var _dry_at := 0.0       # next dry-fire click of a held empty trigger
+var problems: PackedStringArray = []  # exported guns missing a stats_required value (running on class averages)
+var thin := {}           # id -> the stats_required keys its stats lack
 
 func setup(m: Node) -> void:
 	main = m
@@ -100,6 +105,7 @@ func setup(m: Node) -> void:
 	for id in rows:
 		_resolve(id)
 	_ig = ""  # every weapon is resolved: the big text is not kept
+	_stats_check()
 	for i in int(X["shot_voices"]):
 		var p := AudioStreamPlayer.new()
 		p.volume_db = float(X["shot_volume_db"])
@@ -154,6 +160,26 @@ func _resolve(id: String) -> void:
 		if String(s[k]).is_valid_float():
 			out[k] = float(s[k])
 	_st[id] = out
+
+## prep refuses a gun without every stats_required value, but an older or partial data folder could still hold
+## one: each exported gun missing any is named in problems (Main shows them) instead of silently playing on
+## class averages.
+func _stats_check() -> void:
+	var P := Sheets.values("prep")
+	var light := String(P.get("stats_light_slots", "")).split(",", false)
+	var names: PackedStringArray = []
+	for id in ready_ids:
+		var need := String(P.get("stats_required_light" if light.has(String(rows[id]["slot"])) else "stats_required", "")).split(",", false)
+		var miss: PackedStringArray = []
+		for k in need:
+			if not _has(id, k.strip_edges()):
+				miss.append(k.strip_edges())
+		if miss.size() > 0:
+			thin[id] = miss
+			names.append("%s (%s)" % [rows[id]["name"], ", ".join(miss)])
+	if names.size() > 0:
+		problems.append("%d gun(s) lack CS2 stats and use class averages: %s. Run setup again." % [names.size(), "; ".join(names.slice(0, 3)) + (" and more" if names.size() > 3 else "")])
+		push_warning("weapons: " + problems[0])
 
 ## One stat: the player's items_game value, else the class fallback column in weapon_defaults.json.
 func stat(id: String, key: String, fallback: String = "") -> float:
@@ -252,7 +278,8 @@ func switch_to(s: String) -> bool:
 	current = s
 	_xhair()
 	_deploy_reset()
-	_next_fire = _now() + maxf(vm.clip_length("draw"), 0.3)
+	_silencer_part(id, 0.0)
+	_next_fire = _now() + maxf(vm.clip_length("draw"), float(X["draw_min"]))
 	_hud()
 	return true
 
@@ -301,6 +328,8 @@ func _process(dt: float) -> void:
 	if Input.is_action_just_pressed("surf_reload"):
 		reload()
 	_reload_tick(t)
+	_part_tick(t)
+	_auto_reload(held(), t)
 	if _burst_left > 0 and t >= _burst_at:
 		_shoot(held(), t, true)
 	if _rezoom > 0 and t >= _next_fire and _reload_until == 0.0 and _shell_next == 0.0:
@@ -347,19 +376,41 @@ func _attack2(id: String) -> void:
 			_rezoom = 0
 			_set_zoom((_zoom + 1) % (_zoom_levels(id) + 1))
 		"silencer":
-			if _reload_until > 0.0 or _now() < _toggle_until:
+			if _reload_until > 0.0 or _shell_next > 0.0 or _now() < maxf(_next_fire, _toggle_until):
 				return
 			_alt_on[id] = not _alt_on.get(id, false)
 			var vm: Viewmodel = main.viewmodel
 			var clip := "silencer_on" if _alt_on[id] else "silencer_off"
-			var dur := vm.clip_length(clip) if vm.play(clip) else float(X["silencer_time"])
+			var dur := float(X["silencer_time"])
+			if vm.play(clip):
+				dur = vm.clip_length(clip)
+			else:
+				vm.kick("silencer", dur)  # no clip exported: the gun tips and the can turns for silencer_time
 			_toggle_until = _now() + dur
 			_next_fire = maxf(_next_fire, _toggle_until)
+			_silencer_part(id, dur * 0.5)
 			main.hud.message("Silencer " + ("attached" if _alt_on[id] else "detached"), 1.5)
 		"burst":
 			_alt_on[id] = not _alt_on.get(id, false)
 			main.hud.message("Switched to Burst-Fire Mode" if _alt_on[id] else "Switched to Semi-Automatic", 1.5)
 	_hud()
+
+## The silencer mesh follows the toggle halfway through it (when the can comes off or goes on); delay 0 now.
+func _silencer_part(id: String, delay: float) -> void:
+	if alt_kind(id) != "silencer":
+		_part_at = -1.0
+		return
+	_part_at = _now() + delay
+	_part_id = id
+	if delay <= 0.0:
+		_part_tick(_part_at)
+
+func _part_tick(t: float) -> void:
+	if _part_at < 0.0 or t < _part_at:
+		return
+	_part_at = -1.0
+	if _part_id == held() and main.viewmodel:
+		main.viewmodel.set_parts(String(X["silencer_mesh_match"]).split(","), bool(_alt_on.get(_part_id, false)))
 
 func fire() -> void:
 	var id := held()
@@ -382,7 +433,8 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 		_shell_next = 0.0  # firing breaks off a shell reload
 	if int(a[0]) <= 0:
 		_burst_left = 0
-		reload()
+		if not from_burst:
+			_dry(id, t)
 		return
 	var cyc := mstat(id, "cycletime")
 	if alt_kind(id) == "burst" and _alt_on.get(id, false):
@@ -440,6 +492,32 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 		_burst_left = 0
 	_hud()
 
+## A pull on an empty gun: with auto_reload the gun clicks (one twitch per dry_fire_delay) and reloads once the
+## trigger is let go, like CS; without it the pull reloads.
+func _dry(id: String, t: float) -> void:
+	if float(X["auto_reload"]) <= 0.0:
+		reload()
+		return
+	if t >= _dry_at:
+		_dry_at = t + float(X["dry_fire_delay"])
+		main.viewmodel.kick("dry")
+
+## CS's auto-reload: an empty gun with reserve reloads on the first frame no attack button is held.
+func _auto_reload(id: String, t: float) -> void:
+	if id == "" or id == "knife" or float(X["auto_reload"]) <= 0.0 or not ammo.has(id):
+		return
+	if Input.is_action_pressed("surf_attack") or Input.is_action_pressed("surf_attack2"):
+		return
+	if int(ammo[id][0]) <= 0 and int(ammo[id][1]) > 0 and t >= maxf(_next_fire, _toggle_until):
+		reload()
+
+## Inspect is refused mid reload, shell load, silencer turn, scope or shot cycle (Main asks before inspecting).
+func can_inspect() -> bool:
+	var id := held()
+	if id == "knife":
+		return _now() >= _next_fire
+	return _reload_until == 0.0 and _shell_next == 0.0 and _zoom == 0 and _now() >= maxf(_next_fire, _toggle_until) and _burst_left == 0
+
 ## The next allowed shot. A shot later than its slot by less than one frame keeps the slot (held fire stays
 ## on the exact cycletime instead of drifting a frame per shot); any later shot starts a new cycle, so
 ## clicking can never beat the cycletime by more than a frame (and never by more than half a cycle).
@@ -472,6 +550,8 @@ func _trace(id: String, from: Vector3, dir: Vector3, reach: float, dmg: float, h
 	var ex: Array[RID] = [main.player.get_rid()]
 	var start := from
 	var travelled_from := from  # range falloff counts every unit flown, the ones inside walls too
+	var flown := 0.0            # units flown so far (falloff_cumulative: CS's flCurrentDistance)
+	var cum := float(X["falloff_cumulative"]) > 0.0
 	var power := stat(id, "penetration")
 	var rm := stat(id, "range modifier")
 	var seen := {}
@@ -484,7 +564,9 @@ func _trace(id: String, from: Vector3, dir: Vector3, reach: float, dmg: float, h
 		if r.is_empty():
 			return
 		var pos: Vector3 = r["position"]
-		dmg *= pow(rm, travelled_from.distance_to(pos) / u / 500.0)
+		var seg := travelled_from.distance_to(pos) / u
+		flown += seg
+		dmg *= pow(rm, (flown if cum else seg) / 500.0)
 		travelled_from = pos
 		var col: Object = r["collider"]
 		var body := col != null and col.has_method("hit")
@@ -509,7 +591,9 @@ func _trace(id: String, from: Vector3, dir: Vector3, reach: float, dmg: float, h
 			_decal(exit["position"], exit["normal"])
 		start = exit["position"] + dir * 0.002
 		travelled_from = exit["position"]
-		dmg *= pow(rm, thick / 500.0)  # the flight through the wall
+		flown += thick  # the flight through the wall
+		if not cum:
+			dmg *= pow(rm, thick / 500.0)
 		left -= 1
 
 ## One plain ray along the camera inside a cone of spread_mrad (tools aim with it; firing uses _trace).
@@ -656,11 +740,16 @@ func _inacc(id: String) -> float:
 	var p: SurfPlayer = main.player
 	var a := mstat(id, "inaccuracy crouch") if p.ducked else mstat(id, "inaccuracy stand")
 	var maxspd := maxf(mstat(id, "max player speed"), 1.0)
-	var k := clampf(remap(p.speed_units(), maxspd * float(X["move_inacc_start"]), maxspd * float(X["move_inacc_end"]), 0.0, 1.0), 0.0, 1.0)
-	a += k * mstat(id, "inaccuracy move")
+	a += move_share(p.speed_units(), maxspd, p.get("walking") == true) * mstat(id, "inaccuracy move")
 	if not p.grounded:
 		a += air_inacc(_jump_inacc(id), absf(p.velocity.y) / u)
 	return a + _inaccuracy
+
+## CS's movement share of the move cone: speed remapped over move_inacc_start..end of the max speed, raised to
+## move_inacc_power unless walking (a run is nearly fully inaccurate well before top speed).
+func move_share(speed: float, maxspd: float, walking: bool) -> float:
+	var k := clampf(remap(speed, maxspd * float(X["move_inacc_start"]), maxspd * float(X["move_inacc_end"]), 0.0, 1.0), 0.0, 1.0)
+	return k if walking or k <= 0.0 else pow(k, float(X["move_inacc_power"]))
 
 ## The airborne term's base: items_game's "inaccuracy jump initial" (CS's take-off penalty), else the class
 ## inacc_jump column. Its "inaccuracy jump" is not used here: in the CS:GO scripts that key is a small speed
@@ -846,9 +935,13 @@ func backstab(unit: Node3D, from: Vector3) -> bool:
 func _shotgun_shells(id: String) -> bool:
 	return rows.has(id) and String(rows[id].get("reload", "magazine")) == "shell"
 
+## R: like CS's DefaultReload, refused while the next attack is not ready (a draw, a bolt, a silencer turn).
+## A magazine gun takes its reload clip's length (else the class reload_time); a tube shotgun starts loading
+## shells: its reload_start clip (else the reload clip, once) and the first shell after it.
 func reload() -> void:
 	var id := held()
-	if id == "" or id == "knife" or _reload_until > 0.0 or _shell_next > 0.0 or _now() < _toggle_until:
+	var t := _now()
+	if id == "" or id == "knife" or _reload_until > 0.0 or _shell_next > 0.0 or t < maxf(_next_fire, _toggle_until):
 		return
 	var a: Array = ammo[id]
 	var full := int(stat(id, "primary clip size"))
@@ -858,11 +951,15 @@ func reload() -> void:
 	_rezoom = 0
 	_burst_left = 0
 	var vm: Viewmodel = main.viewmodel
-	vm.play("reload")
 	if _shotgun_shells(id):
-		_shell_next = _now() + float(X["shell_start"])
+		var start := "reload_start" if vm.has_clip("reload_start") else "reload"
+		vm.play(start)
+		_shell_next = t + (vm.clip_length(start) if start == "reload_start" else float(X["shell_start"]))
 		return
-	_reload_until = _now() + maxf(vm.clip_length("reload"), 1.0)
+	var dur := float(defaults[_cls(id)]["reload_time"])
+	if vm.play("reload"):
+		dur = vm.clip_length("reload")
+	_reload_until = t + maxf(dur, 0.01)
 
 func _reload_tick(t: float) -> void:
 	var id := held()
@@ -880,30 +977,50 @@ func _reload_tick(t: float) -> void:
 		if int(a[1]) > 0 and int(a[0]) < int(stat(id, "primary clip size")):
 			a[0] = int(a[0]) + 1
 			a[1] = int(a[1]) - 1
+		var vm: Viewmodel = main.viewmodel
+		if vm.has_clip("reload_loop"):
+			vm.play("reload_loop")  # this shell's push
+		else:
+			vm.kick("shell")
 		if int(a[1]) <= 0 or int(a[0]) >= int(stat(id, "primary clip size")):
 			_shell_next = 0.0
+			if vm.has_clip("reload_end"):
+				vm.queue_clip("reload_end")
+				_next_fire = maxf(_next_fire, t + vm.clip_length("reload_loop") + vm.clip_length("reload_end"))
 		else:
-			_shell_next += float(X["shell_each"])
-			var vm: Viewmodel = main.viewmodel
-			if vm.current() != "reload":
-				vm.play("reload")
+			_shell_next += vm.clip_length("reload_loop") if vm.has_clip("reload_loop") else float(X["shell_each"])
 		_hud()
 
-## Shots ring out on a pool of players, so a spray never cuts the previous shot off.
+## Shots ring out on a pool of players, so a spray never cuts the previous shot off. A silencer gun with its
+## silencer off plays its sound_unsilenced row, else (not exported) its own shot.
 func _sound(id: String) -> void:
-	if not _sounds.has(id):
-		var base: String = main.content.dir.path_join("cs2/" + String(rows[id]["sound_shot"]).get_basename())
+	var s := _stream(shot_sound(id))
+	if s == null:
+		s = _stream(String(rows[id]["sound_shot"]))
+	if s and _voices.size() > 0:
+		var p: AudioStreamPlayer = _voices[_voice]
+		_voice = (_voice + 1) % _voices.size()
+		p.stream = s
+		p.play()
+
+## The weapons.json sound path a shot of this weapon plays now.
+func shot_sound(id: String) -> String:
+	var un := String(rows[id].get("sound_unsilenced", "none"))
+	if alt_kind(id) == "silencer" and not _alt_on.get(id, false) and un != "none" and un != "":
+		return un
+	return String(rows[id]["sound_shot"])
+
+## One exported sound by its CS2 path (.wav or .mp3 in the data folder), loaded once; null when absent.
+func _stream(vpk_path: String) -> AudioStream:
+	if not _sounds.has(vpk_path):
+		var base: String = main.content.dir.path_join("cs2/" + vpk_path.get_basename())
 		var s: AudioStream = null
 		if FileAccess.file_exists(base + ".wav"):
 			s = AudioStreamWAV.load_from_file(base + ".wav")
 		elif FileAccess.file_exists(base + ".mp3"):
 			s = AudioStreamMP3.load_from_file(base + ".mp3")
-		_sounds[id] = s
-	if _sounds[id] and _voices.size() > 0:
-		var p: AudioStreamPlayer = _voices[_voice]
-		_voice = (_voice + 1) % _voices.size()
-		p.stream = _sounds[id]
-		p.play()
+		_sounds[vpk_path] = s
+	return _sounds[vpk_path]
 
 ## Bullet hole: a small dark disc on the surface, the oldest removed past 48.
 func _decal(at: Vector3, n: Vector3) -> void:
@@ -965,6 +1082,8 @@ func _build_buy() -> void:
 			b.disabled = not ready_ids.has(id)
 			if b.disabled:
 				b.tooltip_text = "Not exported from your CS2 install yet"
+			elif thin.has(id):
+				b.tooltip_text = "CS2 gave no " + ", ".join(thin[id]) + ": class averages stand in"
 			var wid: String = id
 			b.pressed.connect(func() -> void:
 				give(wid)
@@ -1013,8 +1132,8 @@ func _pose(arg: String) -> void:
 		_set_zoom(int(parts[1]))
 	_hud()
 
-## --wtest: the gun model's own checks. Each prints a WTEST PASS or FAIL line; any failure ends the run with
-## exit code 1 so a build can gate on it. Missing CS2 stats are fine: every check also holds on class defaults.
+## --wtest: the gun model's own checks, the aim lobby's hit count included. Each prints a WTEST PASS or FAIL
+## line; the run ends with exit code 1 on any failure, else 0, so a build can gate on it. Missing CS2 stats are fine: every check also holds on class defaults.
 var _fails := 0
 var _checks := 0
 
@@ -1224,15 +1343,19 @@ func _selftest() -> void:
 	_trace("cs2_ak47", Vector3(0, -900, 3), Vector3(0, 0, -1), 50.0, 100.0, fall_hits)
 	var rmod := stat("cs2_ak47", "range modifier")
 	var pmw := 1.0 / float(X["pen_mod_world"])
-	var exp_d := 100.0 * pow(rmod, (3.0 - 4.0 * u) / u / 500.0)
-	for wz in [0.0, -1.0]:
-		exp_d -= exp_d * float(X["pen_chunk"]) + maxf(0.0, 3.0 / stat("cs2_ak47", "penetration") * 1.25) * pmw * 3.0 + pmw * 64.0 / 24.0
-		exp_d *= pow(rmod, 8.0 / 500.0)
-		if wz == 0.0:
-			exp_d *= pow(rmod, (1.0 - 8.0 * u) / u / 500.0)
-	exp_d *= pow(rmod, (1.9 - 4.0 * u) / u / 500.0)
+	var toll := func(d: float) -> float:
+		return d - (d * float(X["pen_chunk"]) + maxf(0.0, 3.0 / stat("cs2_ak47", "penetration") * 1.25) * pmw * 3.0 + pmw * 64.0 / 24.0)
+	# surfaces met at these distances flown (units, the 8 inside each wall included): wall 1, wall 2, the part
+	var legs := [(3.0 - 4.0 * u) / u, 8.0 + (1.0 - 8.0 * u) / u, 8.0 + (1.9 - 4.0 * u) / u]
+	var exp_d := 100.0
+	var flown := 0.0
+	for i in 3:
+		flown += float(legs[i])
+		exp_d *= pow(rmod, (flown if float(X["falloff_cumulative"]) > 0.0 else float(legs[i])) / 500.0)
+		if i < 2:
+			exp_d = toll.call(exp_d)
 	var got_d: float = float(fall_hits[0][1]) if fall_hits.size() > 0 else -1.0
-	_check("falloff_through_walls", stat("cs2_ak47", "penetration") <= 0.0 or absf(got_d - exp_d) < 0.005, "100 through two 8-unit walls to 6 m: %.2f (want %.2f with the in-wall flight counted)" % [got_d, exp_d])
+	_check("falloff_through_walls", stat("cs2_ak47", "penetration") <= 0.0 or absf(got_d - exp_d) < 0.005, "100 through two 8-unit walls to 6 m: %.2f (want %.2f, falloff on the total %.0f units flown, compounding=%s)" % [got_d, exp_d, flown, float(X["falloff_cumulative"]) > 0.0])
 	for w in made:
 		(w as Node).queue_free()
 	# airborne cone: nothing at the apex, the take-off value at jump speed, capped at air_inacc_max_scale x
@@ -1317,6 +1440,92 @@ func _selftest() -> void:
 	var kv := _kv(_ig.find("{"))
 	_ig = ""
 	_check("items_game_reader", kv.get("a") == "2" and kv.get("b") == 'say "hi"' and not kv.has("c") and not kv.has("blk") and kv.get("d", {}).get("y") == "8", str(kv))
+	# movement: CS's power curve puts half the speed range at most of the move cone; walking stays linear
+	var ms := [move_share(0.0, 250.0, false), move_share(250.0 * (0.34 + 0.95) * 0.5, 250.0, false), move_share(250.0 * (0.34 + 0.95) * 0.5, 250.0, true), move_share(250.0, 250.0, false)]
+	_check("move_power_curve", ms[0] == 0.0 and is_equal_approx(ms[1], pow(0.5, float(X["move_inacc_power"]))) and is_equal_approx(ms[2], 0.5) and ms[3] == 1.0, "share at rest, mid run, mid walk, full = %s" % str(ms))
+	# silencer: the shot sound follows the can (sound_unsilenced with it off), the toggle waits for the gun
+	slots["primary"] = "cs2_m4a1_silencer"
+	current = "primary"
+	_alt_on["cs2_m4a1_silencer"] = true
+	var snd_on := shot_sound("cs2_m4a1_silencer")
+	_next_fire = 0.0
+	_toggle_until = 0.0
+	_attack2("cs2_m4a1_silencer")
+	var snd_off := shot_sound("cs2_m4a1_silencer")
+	var busy := _toggle_until > _now()
+	_attack2("cs2_m4a1_silencer")  # a second press mid-toggle is ignored
+	var still_off: bool = not _alt_on["cs2_m4a1_silencer"]
+	_toggle_until = 0.0
+	_next_fire = 0.0
+	_attack2("cs2_m4a1_silencer")
+	_check("silencer_sound", snd_on == String(rows["cs2_m4a1_silencer"]["sound_shot"]) and snd_off == String(rows["cs2_m4a1_silencer"]["sound_unsilenced"]) and snd_off != snd_on and busy and still_off and _alt_on["cs2_m4a1_silencer"] and shot_sound("cs2_ak47") == String(rows["cs2_ak47"]["sound_shot"]), "on %s, off %s, toggle %.1f s, mid-toggle press ignored=%s" % [snd_on.get_file(), snd_off.get_file(), float(X["silencer_time"]), still_off])
+	_toggle_until = 0.0
+	# empty gun: a held trigger dry-fires and does not reload; letting go reloads; R is refused mid-draw
+	slots["primary"] = "cs2_ak47"
+	current = "primary"
+	ammo["cs2_ak47"] = [0, 30]
+	_next_fire = 0.0
+	_reload_until = 0.0
+	_shoot("cs2_ak47", _now(), false)
+	var dry_reload := _reload_until
+	_auto_reload("cs2_ak47", _now())  # no attack button is down in a headless run
+	var auto_started := _reload_until > 0.0
+	var inspect_mid := can_inspect()
+	_reload_tick(_reload_until + 0.001)
+	var refilled: int = ammo["cs2_ak47"][0]
+	ammo["cs2_ak47"] = [5, 30]
+	_next_fire = _now() + 1.0  # still drawing
+	reload()
+	var drawn_reload := _reload_until
+	_next_fire = 0.0
+	_check("empty_auto_reload", dry_reload == 0.0 and auto_started and not inspect_mid and refilled == mini(int(stat("cs2_ak47", "primary clip size")), 30) and drawn_reload == 0.0, "dry pull reloads=%s, released -> reload=%s, inspect mid-reload=%s, clip after=%d, R mid-draw=%s" % [dry_reload > 0.0, auto_started, inspect_mid, refilled, drawn_reload > 0.0])
+	# stats: an exported gun without its stats_required values is named, not silently averaged
+	var keep_ready := ready_ids.duplicate()
+	var keep_st: Dictionary = _st.get("cs2_ak47", {})
+	ready_ids = {"cs2_ak47": true}
+	_st["cs2_ak47"] = {"damage": 36.0}
+	problems.clear()
+	thin.clear()
+	_stats_check()
+	var flagged := problems.size() == 1 and thin.has("cs2_ak47") and not (thin["cs2_ak47"] as PackedStringArray).has("damage")
+	_st["cs2_ak47"] = keep_st
+	ready_ids = keep_ready
+	problems.clear()
+	thin.clear()
+	_stats_check()
+	_check("stats_required_flagged", flagged, "an AK with only damage is named in the HUD problems")
+	# the aim lobby counts a real traced shot on a target the eye can see, one hit per shot
+	var lob: Node = main.lobby
+	if lob and lob.has_method("toggle") and lob.has_method("on_shot_fired"):
+		if not lob.get("active"):
+			lob.toggle()
+		for i in 12:
+			await get_tree().physics_frame
+		slots["primary"] = "cs2_ak47"
+		current = "primary"
+		var before := int(lob.get("_hits"))
+		var shots_hit := 0
+		space = main.player.get_world_3d().direct_space_state
+		for tn in get_tree().get_nodes_in_group("aim_target"):
+			if shots_hit >= 5:
+				break
+			if not is_instance_valid(tn) or not (tn as Node3D).is_inside_tree():
+				continue
+			var from := p.cam.global_position
+			var dir := ((tn as Node3D).global_position - from).normalized()
+			var q := PhysicsRayQueryParameters3D.create(from, from + dir * 200.0)
+			q.exclude = ex
+			var seen: Dictionary = space.intersect_ray(q)
+			if seen.is_empty() or seen["collider"] != tn:
+				continue
+			lob.on_shot_fired()
+			var lh: Array = []
+			_trace("cs2_ak47", from, dir, 200.0, stat("cs2_ak47", "damage"), lh)
+			_deliver(lh)
+			shots_hit += 1
+		var counted := int(lob.get("_hits")) - before
+		_check("lobby_counts_hits", shots_hit > 0 and counted == shots_hit, "%d visible targets shot, lobby counted %d hit(s)" % [shots_hit, counted])
+		lob.toggle()
 	slots["primary"] = keep_slot
 	slots["secondary"] = _first_ready(["cs2_usp_silencer", "cs2_glock", "cs2_deagle"], "pistol")
 	current = keep_cur
@@ -1330,8 +1539,7 @@ func _selftest() -> void:
 	_speed(held())
 	_hud()
 	print("WTEST weapons checks=%d failed=%d" % [_checks, _fails])
-	if _fails > 0:
-		get_tree().quit(1)
+	get_tree().quit(1 if _fails > 0 else 0)
 
 ## Just the prefab chain of one items_game entry: its "prefab" parents first, its own attributes on top.
 func _ig_chain(name: String, seen: Dictionary) -> Dictionary:

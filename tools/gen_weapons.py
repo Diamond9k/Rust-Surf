@@ -50,6 +50,9 @@ ALT = {"aug": "scope", "sg556": "scope", "awp": "scope", "ssg08": "scope", "scar
        "m4a1_silencer": "silencer", "usp_silencer": "silencer", "famas": "burst", "glock": "burst", "revolver": "revolver"}
 SHELL = {"nova", "xm1014", "sawedoff"}  # tube shotguns load shell by shell; the MAG-7 takes a magazine
 GEAR = {"taser"}  # the Zeus rides the knife slot in CS2
+# a silencer gun with its silencer off: another gun's exported shot stands in until prep exports CS2's own unsilenced
+# sound (whose file name was never checked against a listing)
+UNSIL = {"m4a1_silencer": "m4a4", "usp_silencer": "hkp2000"}
 ALT_NOTE = "; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
 
 
@@ -88,10 +91,21 @@ def main():
         missing = [k for k in ("model", "sound_shot") if not row[k]] + [a for a in ACTIONS if not clips[a]]
         row["verified"] = "paths found in the CS2 pak01_dir.vpk listing" + ("" if not missing else "; missing: " + ", ".join(missing)) + ALT_NOTE
         rows.append(row)
+    by_id = {r["id"]: r for r in rows}
+    for r in rows:  # columns in sheet order, sound_unsilenced after sound_shot
+        wid = r["id"][4:]
+        stand = by_id.get("cs2_" + UNSIL[wid]) if wid in UNSIL else None
+        su = stand["sound_shot"] if stand and stand["sound_shot"] else "none"
+        if stand:
+            r["verified"] += "; sound_unsilenced is a stand-in: the %s shot (already exported) until prep exports CS2's own unsilenced %s sound, unverified" % (stand["name"], r["name"])
+        order = ["id", "game", "slot", "name", "item", "model", "clips", "sound_shot", "sound_unsilenced", "alt", "reload", "verified"]
+        vals = dict(r, sound_unsilenced=su)
+        r.clear()
+        r.update({k: vals[k] for k in order})
         report.append("%-16s %s" % (wid, "ok" if not missing else "missing " + ",".join(missing)))
     sheet = {"_sheet": "weapons",
-             "_doc": "Every weapon the player can hold. CS2 rows: model, viewmodel clips and shot sound are exact paths in the player's CS2 pak01_dir.vpk (checked against a listing by tools/gen_weapons.py); prep exports them to the data folder. Damage, fire rate, magazine, recoil and spread come from the player's own scripts/items/items_game.txt at runtime, never typed in. alt is attack2 (scope, silencer, burst, revolver fan, none), reload is magazine or shell (tube shotguns); slot gear is the Zeus, held with the knife. Rust weapons are not in this version.",
-             "columns": ["id", "game", "slot", "name", "item", "model", "clips", "sound_shot", "alt", "reload", "verified"],
+             "_doc": "Every weapon the player can hold. CS2 rows: model, viewmodel clips and shot sound are exact paths in the player's CS2 pak01_dir.vpk (checked against a listing by tools/gen_weapons.py); prep exports them to the data folder. Damage, fire rate, magazine, recoil and spread come from the player's own scripts/items/items_game.txt at runtime, never typed in. sound_unsilenced is the shot of a silencer gun with its silencer off ('none' for other guns). alt is attack2 (scope, silencer, burst, revolver fan, none), reload is magazine or shell (tube shotguns); slot gear is the Zeus, held with the knife. Rust weapons are not in this version.",
+             "columns": ["id", "game", "slot", "name", "item", "model", "clips", "sound_shot", "sound_unsilenced", "alt", "reload", "verified"],
              "rows": rows}
     json.dump(sheet, open(out, "w"), indent=1)
     # prep reads its own copy from the prep folder (it ships without sheets/): keep the two identical

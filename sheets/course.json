@@ -294,7 +294,7 @@
       "_doc": "terrain shader uniforms. site_shade darkens the site concrete patches (pale patches read as snow); tint_a/tint_b: olive and khaki colour patches over the open ground every ~tint_period metres (a look, unverified against Rust's biome colours); scrub_*: dry scrub blobs on the open ground (one per scrub_cell metres with probability scrub_density, patchy by noise, colour is an albedo multiplier); stone_*: small pale loose stones the same way. A look standing in for ground scatter we have no meshes for (unverified against Rust's arid biome). grass_*: dry green grass patches over the open ground (cover is the fraction, period the patch size in metres, colour an albedo multiplier) with a fine blade grain near the camera; rock_*: bare grey rock on hill flanks steeper than rock_slope (1 - normal.y); hill_shade: broad light and shade over the hills outside site_rect. Grass, rock and hill shade are a look standing in for Rust's splat map and grass meshes, which prep does not extract (unverified)",
       "site_shade": 0.8,
       "scrub_cell": 4.0,
-      "scrub_density": 0.32,
+      "scrub_density": 0.14,
       "scrub_color": [
         0.42,
         0.42,
@@ -322,7 +322,7 @@
       "rock_slope": 0.25,
       "hill_shade": 0.3
     },
-    "tuned": "2026-10-09 world_r3 renders: grass, rock, hill shade, edge trims and the props past the end pad checked by eye in start/ramp1/valley2/site_overview/floor/sun; earlier rounds: props, roads, scatter, blended mounds, pit edges, far ridgeline. Hill heights, tints, grass, scatter and roads are a look, not Rust's terrain (unverified)",
+    "tuned": "2026-10-09 world_r1 (gauntlet 2): scrub_density 0.32 -> 0.14 now 3D bushes stand on the ground (r3 critics saw a repeating dot pattern); world_r3 renders: grass, rock, hill shade, edge trims and the props past the end pad checked by eye in start/ramp1/valley2/site_overview/floor/sun; earlier rounds: props, roads, scatter, blended mounds, pit edges, far ridgeline. Hill heights, tints, grass, scatter and roads are a look, not Rust's terrain (unverified)",
     "props": {
       "_doc": "Course scenery: extra copies of meshes prep already extracts for the real Launch Site (rust/mesh), set where the fixed views look so the land round the course reads as an industrial site. Our arrangement, not Rust's layout (the real placements are scene_launch_site). pos is course [x, z]; the prop stands on the ground level at x plus dy (dy copies the real placements' offsets: warehouses 0.3, awnings 0.2, floodlights and vents -0.1); awnings share their warehouse's origin, turned 180 deg as in the real placements.",
       "columns": [
@@ -856,6 +856,250 @@
       ],
       "tuned": "2026-10-09 world_r2 renders, by eye"
     },
+    "scatter": {
+      "_doc": "Trees, bushes, grass tufts and rocks Backdrop.gd builds and scatters over the ground (Rust's own vegetation and rock meshes are not extracted). shape: conifer, conifer_far, broadleaf, broadleaf_far, bush, grass or rock (the _far shapes are low-detail for trees only seen a few pixels tall) (built about 1 m tall and scaled by size, metres). Points are drawn in rect (course [x0, z0, x1, z1]) and kept when their distance outside site_rect is within ring (negative = that deep inside it), when the cluster noise (cluster_period metres) clears 1 - cover, when the ground is no steeper than max_slope (summed rise over 2 m both ways), and when they are road_margin off a road and building_margin off any placed building or prop. color is an sRGB tint, varied by color_jitter; sink buries the base by that fraction of the size; texture names a materials.json row drawn triplanar (rocks) or (none); shadows: cast sun shadows; chunk: metres per MultiMesh (culled as a unit); view_range: metres after which a chunk fades out (0 = always drawn).",
+      "road_margin": 2.0,
+      "building_margin": 4.0,
+      "columns": [
+        "id",
+        "shape",
+        "count",
+        "seed",
+        "rect",
+        "ring",
+        "cluster_period",
+        "cover",
+        "size",
+        "color",
+        "color_jitter",
+        "sink",
+        "max_slope",
+        "roughness",
+        "texture",
+        "shadows",
+        "chunk",
+        "view_range",
+        "tuned"
+      ],
+      "rows": [
+        {
+          "id": "forest_far",
+          "shape": "conifer_far",
+          "count": 16000,
+          "seed": 101,
+          "rect": [
+            -2000,
+            -2000,
+            2600,
+            2000
+          ],
+          "ring": [
+            260,
+            1900
+          ],
+          "cluster_period": 260,
+          "cover": 0.45,
+          "size": [
+            11,
+            22
+          ],
+          "color": [
+            0.24,
+            0.31,
+            0.19
+          ],
+          "color_jitter": 0.18,
+          "sink": 0.03,
+          "max_slope": 2.5,
+          "roughness": 1.0,
+          "texture": "(none)",
+          "shadows": false,
+          "chunk": 500,
+          "view_range": 0,
+          "tuned": "2026-10-09 world_r1 (gauntlet 2) renders, by eye; a look standing in for Rust's own trees, bushes, grass and rocks, which prep does not extract (unverified against Rust's biomes)"
+        },
+        {
+          "id": "forest_near",
+          "shape": "conifer",
+          "count": 1800,
+          "seed": 102,
+          "rect": [
+            -450,
+            -550,
+            1050,
+            550
+          ],
+          "ring": [
+            45,
+            460
+          ],
+          "cluster_period": 150,
+          "cover": 0.38,
+          "size": [
+            9,
+            18
+          ],
+          "color": [
+            0.24,
+            0.31,
+            0.19
+          ],
+          "color_jitter": 0.18,
+          "sink": 0.03,
+          "max_slope": 1.6,
+          "roughness": 1.0,
+          "texture": "(none)",
+          "shadows": true,
+          "chunk": 250,
+          "view_range": 0,
+          "tuned": "2026-10-09 world_r1 (gauntlet 2) renders, by eye; a look standing in for Rust's own trees, bushes, grass and rocks, which prep does not extract (unverified against Rust's biomes)"
+        },
+        {
+          "id": "broadleaf",
+          "shape": "broadleaf_far",
+          "count": 2600,
+          "seed": 103,
+          "rect": [
+            -1500,
+            -1500,
+            2200,
+            1500
+          ],
+          "ring": [
+            60,
+            1400
+          ],
+          "cluster_period": 200,
+          "cover": 0.4,
+          "size": [
+            8,
+            15
+          ],
+          "color": [
+            0.33,
+            0.39,
+            0.2
+          ],
+          "color_jitter": 0.2,
+          "sink": 0.03,
+          "max_slope": 2.0,
+          "roughness": 1.0,
+          "texture": "(none)",
+          "shadows": false,
+          "chunk": 500,
+          "view_range": 0,
+          "tuned": "2026-10-09 world_r1 (gauntlet 2) renders, by eye; a look standing in for Rust's own trees, bushes, grass and rocks, which prep does not extract (unverified against Rust's biomes)"
+        },
+        {
+          "id": "bushes",
+          "shape": "bush",
+          "count": 3200,
+          "seed": 104,
+          "rect": [
+            -300,
+            -420,
+            950,
+            420
+          ],
+          "ring": [
+            -60,
+            350
+          ],
+          "cluster_period": 90,
+          "cover": 0.32,
+          "size": [
+            0.7,
+            2.6
+          ],
+          "color": [
+            0.44,
+            0.47,
+            0.27
+          ],
+          "color_jitter": 0.2,
+          "sink": 0.12,
+          "max_slope": 1.2,
+          "roughness": 1.0,
+          "texture": "(none)",
+          "shadows": true,
+          "chunk": 150,
+          "view_range": 700,
+          "tuned": "2026-10-09 world_r1 (gauntlet 2) renders, by eye; a look standing in for Rust's own trees, bushes, grass and rocks, which prep does not extract (unverified against Rust's biomes)"
+        },
+        {
+          "id": "grass_tufts",
+          "shape": "grass",
+          "count": 25000,
+          "seed": 105,
+          "rect": [
+            250,
+            -140,
+            620,
+            140
+          ],
+          "ring": [
+            -200,
+            200
+          ],
+          "cluster_period": 30,
+          "cover": 0.65,
+          "size": [
+            0.35,
+            0.8
+          ],
+          "color": [
+            0.5,
+            0.53,
+            0.3
+          ],
+          "color_jitter": 0.15,
+          "sink": 0.0,
+          "max_slope": 0.8,
+          "roughness": 1.0,
+          "texture": "(none)",
+          "shadows": false,
+          "chunk": 40,
+          "view_range": 120,
+          "tuned": "2026-10-09 world_r1 (gauntlet 2) renders, by eye; a look standing in for Rust's own trees, bushes, grass and rocks, which prep does not extract (unverified against Rust's biomes)"
+        },
+        {
+          "id": "rocks",
+          "shape": "rock",
+          "count": 1500,
+          "seed": 106,
+          "rect": [
+            -400,
+            -500,
+            1000,
+            500
+          ],
+          "ring": [
+            -60,
+            500
+          ],
+          "cluster_period": 90,
+          "cover": 0.45,
+          "size": [
+            0.5,
+            3.0
+          ],
+          "color": [
+            0.82,
+            0.8,
+            0.77
+          ],
+          "color_jitter": 0.12,
+          "sink": 0.15,
+          "max_slope": 2.0,
+          "roughness": 0.95,
+          "texture": "dirt",
+          "shadows": true,
+          "chunk": 150,
+          "view_range": 800,
+          "tuned": "2026-10-09 world_r1 (gauntlet 2) renders, by eye; a look standing in for Rust's own trees, bushes, grass and rocks, which prep does not extract (unverified against Rust's biomes)"
+        }
+      ]
+    },
     "roads": {
       "_doc": "Roads painted into the terrain shader: segments are course [x0, z0, x1, z1] (max 8), width in metres, surfaced with the materials.json row named in material and crumbling into a darker shoulder. Our layout, linking the props; not Rust's road network (unverified).",
       "material": "pad",
@@ -918,6 +1162,22 @@
     "offset": 0.03,
     "v0": 0.1,
     "tuned": "2026-10-09 world_r3 renders, by eye"
+  },
+  "weathering": {
+    "_doc": "Decal atlas the ramp shader hangs leaks and gravel from (materials.json leaks/debris set the strength per material): leak_v is the atlas v at the top and bottom of the drip band (found by reading the png alpha: drips run v 0.595-0.925; the first rows are speckled, so the band starts at 0.607, left half dark green, right half rust), debris_v the v at the middle and edge of the gravel/litter band (alpha 1 at v 0.33, fading out by 0.175). leak_len: metres the drips hang down a face; leak_width: metres of face per half-atlas tile; debris_width: metres up from a face's foot the gravel reaches. Our use of Rust's decals, not a CS2 map's (unverified as a match for any real surf map).",
+    "texture": "tex_dirt_stains_leaks",
+    "leak_v": [
+      0.607,
+      0.925
+    ],
+    "debris_v": [
+      0.33,
+      0.175
+    ],
+    "leak_len": 6.0,
+    "leak_width": 5.0,
+    "debris_width": 2.2,
+    "tuned": "2026-10-09 world_r1 (gauntlet 2) renders, by eye"
   },
   "paint_columns": [
     "id",

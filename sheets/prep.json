@@ -54,9 +54,25 @@
       "id": "stats_required",
       "value": "damage,cycletime,primary clip size,is full auto,armor ratio,penetration,range modifier,spread,inaccuracy stand,inaccuracy crouch,inaccuracy move,inaccuracy fire,recoil angle,recoil angle variance,recoil magnitude,recoil magnitude variance,recoil seed,recovery time stand,recovery time crouch,max player speed",
       "unit": "items_game attributes",
-      "used_by": "prep_cs2.write_stats: every weapons.json gun (slot not in stats_light_slots) needs every one of these as a number, from items_game.txt or weapons.vdata, or setup stops with the weapon and the missing names on screen and in prep_status.json",
-      "note": "every stat Weapons.gd reads for damage, armor, penetration, falloff, fire mode, spread, inaccuracy, recoil pattern and recovery: a CS2 update that moves one of them fails loudly instead of running the gun on weapon_defaults.json class averages",
-      "verified": "build choice; tested in prep/tests/test_prep.py (one missing or non-numeric attribute blocks the done file). Which keys the real CS2 items_game.txt/weapons.vdata carry per gun is unverified here: CS:GO's items_game.txt gave all of them per weapon prefab chain"
+      "used_by": "prep_cs2.write_stats: every weapons.json gun (slot not in stats_light_slots) is checked for every one of these as a number, from items_game.txt or weapons.vdata; a gap is a player-visible warning naming the weapon and the keys, or a problem that stops setup when stats_required_blocks is yes. Weapons.gd reads the same list and names any gun missing one in the error panel",
+      "note": "every stat Weapons.gd reads for damage, armor, penetration, falloff, fire mode, spread, inaccuracy, recoil pattern and recovery: a CS2 update that moves one of them is named on screen instead of the gun quietly running on weapon_defaults.json class averages",
+      "verified": "build choice; tested in prep/tests/test_prep.py (a missing or non-numeric attribute is named as a warning, and blocks the done file when stats_required_blocks is yes). Which keys the real CS2 items_game.txt/weapons.vdata carry per gun is unverified here: CS:GO's items_game.txt gave all of them per weapon prefab chain"
+    },
+    {
+      "id": "stats_required_blocks",
+      "value": "no",
+      "unit": "yes/no",
+      "used_by": "prep_cs2.write_stats: yes makes a stats_required (or stats_required_light) gap a problem (no done file, setup reruns on every start); no makes it a warning in prep_status.json that the game shows",
+      "note": "no until a real CS2 install has been read: the key names are unverified, and a wrong one would otherwise fail setup on every start for every player. Setup still stops when items_game.txt does not export or parse, or names no entry for a weapon",
+      "verified": "build choice (gauntlet round 3 critics: an unverified key name must not brick every install); tested in prep/tests/test_prep.py both ways"
+    },
+    {
+      "id": "fail_dialog_s",
+      "value": 900,
+      "unit": "seconds",
+      "used_by": "prep.py finish: on Windows a failed setup also opens a message box with the reasons; prep exits when it is closed or after this long",
+      "note": "the reasons stay in data/prep.log and the game's error panel either way; the box is for the case where the launcher's console window closes before the player can read it. --no-dialog or RS_PREP_NO_DIALOG=1 turns it off",
+      "verified": "build choice; whether Melty shows setup's console output is unverified (MODLOG), and the box itself is only exercised with a stub in prep/tests (no Windows here)"
     },
     {
       "id": "stats_light_slots",

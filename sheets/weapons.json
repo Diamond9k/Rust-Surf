@@ -1,6 +1,6 @@
 {
  "_sheet": "weapons",
- "_doc": "Every weapon the player can hold. CS2 rows: model, viewmodel clips and shot sound are exact paths in the player's CS2 pak01_dir.vpk (checked against a listing by tools/gen_weapons.py); prep exports them to the data folder. Damage, fire rate, magazine, recoil and spread come from the player's own scripts/items/items_game.txt at runtime, never typed in. alt is attack2 (scope, silencer, burst, revolver fan, none), reload is magazine or shell (tube shotguns); slot gear is the Zeus, held with the knife. Rust weapons are not in this version.",
+ "_doc": "Every weapon the player can hold. CS2 rows: model, viewmodel clips and shot sound are exact paths in the player's CS2 pak01_dir.vpk (checked against a listing by tools/gen_weapons.py); prep exports them to the data folder. Damage, fire rate, magazine, recoil and spread come from the player's own scripts/items/items_game.txt at runtime, never typed in. sound_unsilenced is the shot of a silencer gun with its silencer off ('none' for other guns). alt is attack2 (scope, silencer, burst, revolver fan, none), reload is magazine or shell (tube shotguns); slot gear is the Zeus, held with the knife. Rust weapons are not in this version.",
  "columns": [
   "id",
   "game",
@@ -10,6 +10,7 @@
   "model",
   "clips",
   "sound_shot",
+  "sound_unsilenced",
   "alt",
   "reload",
   "verified"
@@ -30,6 +31,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_ak/lookat01_ak.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/ak47/ak47_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -49,6 +51,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_m4a4/lookat01_m4a4.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/m4a1/m4a1_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -68,9 +71,10 @@
     "lookat01": "animation/anims/viewmodel/rifle/_default_rifle/lookat01_rifle.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/m4a1/m4a1_silencer_01.vsnd_c",
+   "sound_unsilenced": "sounds/weapons/m4a1/m4a1_01.vsnd_c",
    "alt": "silencer",
    "reload": "magazine",
-   "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
+   "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt); sound_unsilenced is a stand-in: the M4A4 shot (already exported) until prep exports CS2's own unsilenced M4A1-S sound, unverified"
   },
   {
    "id": "cs2_aug",
@@ -87,6 +91,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_aug/lookat01_aug.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/aug/aug_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "scope",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -106,6 +111,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_sg556/lookat01_sg556.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/sg556/sg556_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "scope",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -125,6 +131,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_famas/lookat01_famas.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/famas/famas_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "burst",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -144,6 +151,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_galilar/lookat01_galilar.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/galilar/galil_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -163,6 +171,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_awp/lookat01_awp.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/awp/awp_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "scope",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -182,6 +191,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_ssg08/lookat01_ssg08.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/ssg08/ssg08_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "scope",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -201,6 +211,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_scar20/lookat01_scar20.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/scar20/scar20_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "scope",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -220,6 +231,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_g3sg1/lookat01_g3sg1.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/g3sg1/g3sg1_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "scope",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -239,6 +251,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_mp9/lookat01_mp9.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/mp9/mp9_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -258,6 +271,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_mac10/lookat01_mac10.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/mac10/mac10_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -277,6 +291,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_mp7/lookat01_mp7.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/mp7/mp7_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -296,6 +311,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_mp5sd/lookat01_mp5sd.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/mp5/mp5_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -315,6 +331,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_ump45/lookat01_ump45.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/ump45/ump45_02.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -334,6 +351,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_p90/lookat01_p90.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/p90/p90_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -353,6 +371,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_bizon/lookat01_bizon.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/bizon/bizon_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -372,6 +391,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_nova/lookat01_nova.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/nova/nova-1.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "shell",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -391,6 +411,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_xm1014/lookat01_xm1014.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/xm1014/xm1014-1.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "shell",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -410,6 +431,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_mag7/lookat01_mag7.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/mag7/mag7_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -429,6 +451,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_sawedoff/lookat01_sawedoff.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/sawedoff/sawedoff-1.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "shell",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -448,6 +471,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_m249/lookat01_m249.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/m249/m249-1.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -467,6 +491,7 @@
     "lookat01": "animation/anims/viewmodel/rifle/rifle_negev/lookat01_negev.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/negev/negev_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -486,6 +511,7 @@
     "lookat01": "animation/anims/viewmodel/pistol/pistol_glock18/lookat01_glock.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/glock18/glock_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "burst",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -505,6 +531,7 @@
     "lookat01": "animation/anims/viewmodel/pistol/pistol_hkp2000/lookat01_hkp.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/hkp2000/hkp2000_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -524,9 +551,10 @@
     "lookat01": "animation/anims/viewmodel/pistol/_default_pistol/lookat01_pistol.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/usp/usp_01.vsnd_c",
+   "sound_unsilenced": "sounds/weapons/hkp2000/hkp2000_01.vsnd_c",
    "alt": "silencer",
    "reload": "magazine",
-   "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
+   "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt); sound_unsilenced is a stand-in: the P2000 shot (already exported) until prep exports CS2's own unsilenced USP-S sound, unverified"
   },
   {
    "id": "cs2_p250",
@@ -543,6 +571,7 @@
     "lookat01": "animation/anims/viewmodel/pistol/pistol_p250/lookat01_p250.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/p250/p250_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -562,6 +591,7 @@
     "lookat01": "animation/anims/viewmodel/pistol/pistol_fiveseven/lookat01_fiveseven.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/fiveseven/fiveseven_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -581,6 +611,7 @@
     "lookat01": "animation/anims/viewmodel/pistol/pistol_tec9/lookat01_tec9.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/tec9/tec9_02.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -600,6 +631,7 @@
     "lookat01": "animation/anims/viewmodel/pistol/pistol_cz75a/lookat01_cz75a.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/cz75a/cz75_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -619,6 +651,7 @@
     "lookat01": "animation/anims/viewmodel/pistol/pistol_elite/lookat01_elite.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/elite/elites_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -638,6 +671,7 @@
     "lookat01": "animation/anims/viewmodel/pistol/pistol_deagle/lookat01_deagle.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/deagle/deagle_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -657,6 +691,7 @@
     "lookat01": "animation/anims/viewmodel/pistol/pistol_revolver/lookat01_revolver.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/revolver/revolver-1_01.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "revolver",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
@@ -676,6 +711,7 @@
     "lookat01": "animation/anims/viewmodel/pistol/pistol_taser/lookat01_taser.vnmclip_c"
    },
    "sound_shot": "sounds/weapons/taser/taser_shoot.vsnd_c",
+   "sound_unsilenced": "none",
    "alt": "none",
    "reload": "magazine",
    "verified": "paths found in the CS2 pak01_dir.vpk listing; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"

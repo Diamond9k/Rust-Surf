@@ -2,6 +2,7 @@
 the done file appears only when every row and every weapon is in place; otherwise exit 1, the reasons
 on screen and in prep_status.json (which the game shows), and a rerun redoes only what is missing."""
 import os, sys, io, json, glob, shutil, tempfile, unittest, contextlib
+from unittest import mock
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE)); sys.path.insert(0, HERE)
 import prep, prep_cs2
@@ -13,6 +14,12 @@ CFG = prep_cs2.settings()
 STAT_KEYS = sorted(set(prep_cs2.keys(CFG["stats_required"]) + prep_cs2.keys(CFG["stats_required_light"]) + prep_cs2.keys(CFG["stats_expected"])))
 VALUES = {"damage": "30", "cycletime": "0.1", "primary clip size": "30", "max player speed": "215"}
 FULL = " ".join('"%s" "%s"' % (k, VALUES.get(k, "1")) for k in STAT_KEYS)  # every stat prep asks for, as a number
+
+
+def blocking(on=True):
+    """prep_cs2.settings with stats_required_blocks forced (the sheet ships "no" until real CS2 keys are seen)."""
+    real = prep_cs2.settings
+    return mock.patch.object(prep_cs2, "settings", lambda here=prep_cs2.HERE: dict(real(here), stats_required_blocks="yes" if on else "no"))
 
 
 def items_game_for(rows, skip=()):
@@ -52,11 +59,12 @@ class Prep(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.d, ignore_errors=True)
 
-    def main(self, vrf, steps=None, rust=None):
-        argv = ["--rust", rust or os.path.join(self.d, "rust"), "--cs2", self.cs2, "--out", self.out, "--tools", self.tools, "--version", "9.9.9"]
+    def main(self, vrf, steps=None, rust=None, extra=()):
+        argv = ["--rust", rust or os.path.join(self.d, "rust"), "--cs2", self.cs2, "--out", self.out, "--tools", self.tools, "--version", "9.9.9"] + list(extra)
         buf = io.StringIO()
+        self.boxes = []  # (title, text, wait) of every message box prep asked for; never a real one in a test
         with contextlib.redirect_stdout(buf):
-            code = prep.main(argv, steps or (prep.cs2_step, fake_rust), vrf)
+            code = prep.main(argv, steps or (prep.cs2_step, fake_rust), vrf, show=lambda *b: self.boxes.append(b))
         return code, buf.getvalue()
 
     def status(self):
@@ -117,9 +125,21 @@ class Prep(unittest.TestCase):
     def thin(self):
         return items_game_for(WEAPONS).replace('"weapon_deagle_prefab" { "prefab" "rifle" "attributes" { %s } }' % FULL, '"weapon_deagle_prefab" { }')
 
-    def test_missing_damage_blocks_done(self):
-        """No damage/cycletime for a gun is a problem, not a quiet fall back to class averages."""
+    def test_missing_stats_warn_by_default(self):
+        """The shipped sheet: a gun CS2 gives no stats for still finishes setup (unverified key names must not brick
+        every install), but never quietly: the player lines name the gun, the keys and the real fix."""
+        self.assertFalse(prep_cs2.blocks(prep_cs2.settings()))
         code, out = self.main(FakeVRF(self.thin()))
+        self.assertEqual(code, 0, out)
+        self.assertTrue(self.done())
+        w = [x for x in self.status()["player"] if x.startswith("Prep warning: ")]
+        self.assertTrue(any("weapon_deagle (damage/cycletime/" in x and "class-average" in x and "needs an update" in x for x in w), w)
+        self.assertEqual(self.boxes, [])
+
+    def test_missing_damage_blocks_done(self):
+        """With stats_required_blocks yes, no damage/cycletime for a gun is a problem, not a fall back to class averages."""
+        with blocking():
+            code, out = self.main(FakeVRF(self.thin()))
         self.assertEqual(code, 1, out)
         self.assertFalse(self.done())
         p = self.status()["problems"]
@@ -135,7 +155,12 @@ class Prep(unittest.TestCase):
         """Every stat the gun model reads is required: one gone (or not a number) stops setup and names it."""
         for key in ("recoil seed", "armor ratio", "penetration", "recovery time crouch", "inaccuracy move"):
             for value in (None, "fast"):
-                code, out = self.main(FakeVRF(self.without("weapon_ak47", key, value)))
+                with blocking(False):
+                    code, out = self.main(FakeVRF(self.without("weapon_ak47", key, value)))
+                self.assertEqual(code, 0, (key, value))
+                self.assertTrue(any("weapon_ak47 (%s)" % key in x for x in self.status()["warnings"]), self.status())
+                with blocking():
+                    code, out = self.main(FakeVRF(self.without("weapon_ak47", key, value)))
                 self.assertEqual(code, 1, (key, value))
                 self.assertFalse(self.done())
                 p = self.status()["problems"]
@@ -146,7 +171,8 @@ class Prep(unittest.TestCase):
         """The Zeus (stats_light_slots) does not need a recoil pattern; a rifle does."""
         code, out = self.main(FakeVRF(self.without("weapon_taser", "recoil seed")))
         self.assertEqual(code, 0, out)
-        code, out = self.main(FakeVRF(self.without("weapon_taser", "damage")))
+        with blocking():
+            code, out = self.main(FakeVRF(self.without("weapon_taser", "damage")))
         self.assertEqual(code, 1, out)
         self.assertTrue(any("weapon_taser (damage)" in x for x in self.status()["problems"]), self.status())
 
@@ -173,7 +199,8 @@ class Prep(unittest.TestCase):
     def test_stale_items_game_is_replaced(self):
         """A CS2 update: an earlier export is never reused for the stats."""
         self.main(FakeVRF(items_game_for(WEAPONS)))
-        code, out = self.main(FakeVRF(self.thin()))
+        with blocking():
+            code, out = self.main(FakeVRF(self.thin()))
         self.assertEqual(code, 1, out)
 
     def test_cut_items_game_is_not_read(self):
@@ -238,6 +265,32 @@ class Prep(unittest.TestCase):
         code, out = self.main(FakeVRF(items_game_for(WEAPONS)), steps=(prep.cs2_step, boom))
         self.assertEqual(code, 1)
         self.assertTrue(any("boom crashed (ValueError: bad bundle)" in p for p in self.status()["problems"]))
+
+    def test_failure_opens_one_message_box_with_the_reasons(self):
+        w = WEAPONS[1]
+        code, _ = self.main(FakeVRF(items_game_for(WEAPONS), bad=[w["model"]]))
+        self.assertEqual(code, 1)
+        self.assertEqual(len(self.boxes), 1)
+        title, text, wait = self.boxes[0]
+        self.assertIn("did not finish", title)
+        self.assertIn(w["id"] + " (model)", text)
+        self.assertIn(os.path.join(self.out, "prep.log"), text)
+        self.assertEqual(wait, float(prep_cs2.settings()["fail_dialog_s"]))
+        code, _ = self.main(FakeVRF(items_game_for(WEAPONS), bad=[w["model"]]), extra=["--no-dialog"])
+        self.assertEqual((code, self.boxes), (1, []))
+        code, _ = self.main(FakeVRF(items_game_for(WEAPONS)))
+        self.assertEqual((code, self.boxes), (0, []))
+
+    def test_dialog_text_stays_readable(self):
+        a = type("A", (), {"out": self.out})()
+        text = prep.dialog_text(a, ["x" * 1000] + ["p%d" % i for i in range(12)])
+        self.assertLess(len(text), 1200)
+        self.assertIn("and 5 more", text)
+
+    def test_no_real_box_off_windows(self):
+        if sys.platform == "win32":
+            self.skipTest("would open a real message box")
+        self.assertFalse(prep.dialog("t", "x", 0))
 
     def test_stale_done_file_is_removed_on_failure(self):
         os.makedirs(self.out)

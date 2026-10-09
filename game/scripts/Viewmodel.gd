@@ -19,8 +19,11 @@ var _arms_skel: Skeleton3D
 var _knife_skel: Skeleton3D
 var _wpn := -1
 var _weapon_rest := Transform3D.IDENTITY
-var _kick := ""          # procedural move when a weapon has no clip for it: shot, slash, stab
+var _kick := ""          # procedural move when a weapon has no clip for it: shot, slash, stab, shell, silencer, dry
 var _kick_t := 1.0
+var _kick_dur := 0.1
+var _next_clip := ""     # one of our clips to play when the current one ends (then idle)
+var K := {}              # weapon_defaults.json vm_kick_<kind>: [seconds, x, y, z m, pitch, yaw, roll deg]
 var _bob_phase := 0.0    # movement bob cycle, 0..1
 var _bob_amt := 0.0      # eased 0..1 share of the bob (ground speed over the reference speed)
 var _sway := Vector2.ZERO  # eased lag of the rig behind the turning view, degrees (pitch, yaw)
@@ -67,6 +70,8 @@ func setup(c: Content, cam: Camera3D, convars: Dictionary = {}) -> void:
 	for r in Sheets.load_sheet("weapon_defaults")["mechanics"]:
 		if r["id"] == "viewmodel_shrink":
 			shrink = clampf(float(r["value"]), 0.01, 1.0)
+		elif String(r["id"]).begins_with("vm_kick_") and r["value"] is Array:
+			K[String(r["id"]).trim_prefix("vm_kick_")] = r["value"]
 		elif String(r["id"]).begins_with("vm_"):
 			B[r["id"]] = float(r["value"])
 	cam.near *= shrink
@@ -186,7 +191,12 @@ func equip(model_path: String, clip_paths: Dictionary) -> bool:
 	ok = true
 	why = ""
 	anim.animation_finished.connect(func(n: String) -> void:
-		if n != _idle_name: idle())
+		if n == _idle_name:
+			return
+		var nx := _next_clip
+		_next_clip = ""
+		if nx == "" or not play(nx):
+			idle())
 	if not play("draw"):
 		idle()
 	return true
@@ -200,12 +210,41 @@ func _idle_of(ap: AnimationPlayer, clip_paths: Dictionary) -> String:
 			return n
 	return ""
 
+func has_clip(clip: String) -> bool:
+	return _clips.has(clip)
+
+## Shows or hides the held weapon's meshes whose node name contains any of the words (the silencer part);
+## returns how many matched, 0 when the exported model names no such part.
+func set_parts(words: PackedStringArray, on: bool) -> int:
+	var wn := rig.get_node_or_null(_weapon_name) if rig else null
+	if wn == null:
+		return 0
+	var n := 0
+	for mi in _all(wn, "MeshInstance3D"):
+		var nm := String((mi as Node).name).to_lower()
+		for w in words:
+			if w.strip_edges() != "" and nm.contains(w.strip_edges().to_lower()):
+				(mi as MeshInstance3D).visible = on
+				n += 1
+				break
+	return n
+
 ## Plays one of our clip names (draw, idle, shoot1, reload, inspect); false when this weapon has none.
 func play(clip: String) -> bool:
 	if anim == null or not _clips.has(clip):
 		return false
+	_next_clip = ""
 	anim.stop()
 	anim.play(_clips[clip])
+	return true
+
+## Plays one of our clips after the one playing now ends (at once when nothing of ours plays).
+func queue_clip(clip: String) -> bool:
+	if anim == null or not _clips.has(clip):
+		return false
+	if current() == "" or current() == "idle":
+		return play(clip)
+	_next_clip = clip
 	return true
 
 ## Our clip name playing now ("" when none of ours is).
@@ -218,10 +257,15 @@ func current() -> String:
 	return ""
 
 ## A short procedural move of the whole rig for actions the extracted clips do not cover (the default
-## knife ships no attack clips here): shot kicks back and up, slash sweeps right to left, stab thrusts.
-func kick(kind: String) -> void:
+## knife ships no attack clips here): shot kicks back and up, slash sweeps right to left, stab thrusts, a
+## shell dips the gun, the silencer twists it, a dry fire twitches. seconds > 0 scales the move's length.
+func kick(kind: String, seconds: float = 0.0) -> void:
+	if not K.has(kind):
+		return
+	var k: Array = K[kind]
 	_kick = kind
 	_kick_t = 0.0
+	_kick_dur = maxf(seconds * float(k[0]) if seconds > 0.0 else float(k[0]), 0.01)
 
 ## Weapons feeds the player's ground speed (units/s, 0 in the air) and view angles (degrees) every frame.
 func move(speed_units: float, view: Vector2, dt: float) -> void:
@@ -256,25 +300,21 @@ func _process(dt: float) -> void:
 	if _kick == "":
 		rig.transform = _motion()
 		return
-	var dur := 0.12 if _kick == "shot" else (0.35 if _kick == "slash" else 0.5)
-	_kick_t += dt / dur
+	_kick_t += dt / _kick_dur
 	if _kick_t >= 1.0:
 		_kick = ""
 		rig.transform = _motion()
 		return
 	var w := sin(_kick_t * PI)  # out and back
-	var pos := Vector3.ZERO
-	var rot := Vector3.ZERO
+	var k: Array = K[_kick]
+	var pos := Vector3(float(k[1]), float(k[2]), float(k[3])) * w
+	var rot := Vector3(deg_to_rad(float(k[4])), deg_to_rad(float(k[5])), deg_to_rad(float(k[6]))) * w
 	match _kick:
-		"shot":
-			pos = Vector3(0, 0.004, 0.025) * w
-			rot = Vector3(deg_to_rad(2.5), 0, 0) * w
-		"slash":
-			pos = Vector3(lerpf(0.05, -0.08, _kick_t), 0.02, -0.04) * w
-			rot = Vector3(0, deg_to_rad(lerpf(-25.0, 35.0, _kick_t)), deg_to_rad(30.0)) * w
-		"stab":
-			pos = Vector3(-0.03, 0.03, -0.12) * w
-			rot = Vector3(deg_to_rad(-12.0), deg_to_rad(10.0), 0) * w
+		"slash":  # sweeps right to left across the view
+			pos.x = lerpf(float(k[1]), -float(k[1]) * 1.6, _kick_t) * w
+			rot.y = deg_to_rad(lerpf(float(k[5]), -float(k[5]) * 1.4, _kick_t)) * w
+		"silencer":  # the can turns a few times while the gun is tipped
+			rot.z *= cos(_kick_t * TAU * 2.0)
 	rig.transform = _motion() * Transform3D(Basis.from_euler(rot), pos)
 
 func clip_length(clip: String) -> float:

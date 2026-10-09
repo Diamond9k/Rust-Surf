@@ -1,6 +1,6 @@
 {
   "_sheet": "materials",
-  "_doc": "One row per surface material the course and terrain use. albedo/normal/weather are content.json ids; uv_scale is metres per texture tile. Course.gd draws every textured row with one weathering shader: weather is a second texture mixed in by noise over weather_cover of the surface, grime is the strength of dirt streaks running down from a ramp's top edge (and its chipped lip), detail is the close-up detail overlay that keeps the texture sharp under the player. filter: aniso = mipmapped anisotropic (every shader material samples this way since world_r1). panel: cast slab size in metres on ramp faces (dark joints, a tone per slab; 0 = none); tint: albedo multiplier; crease_ao: how much the foot of a ramp face (the valley crease) is darkened and occluded.",
+  "_doc": "One row per surface material the course and terrain use. albedo/normal/weather are content.json ids; uv_scale is metres per texture tile. Course.gd draws every textured row with one weathering shader: weather is a second texture mixed in by noise over weather_cover of the surface, grime is the strength of dirt streaks running down from a ramp's top edge (and its chipped lip), detail is the close-up detail overlay that keeps the texture sharp under the player. filter: aniso = mipmapped anisotropic (every shader material samples this way since world_r1). panel: cast slab size in metres on ramp faces (dark joints, a tone per slab; 0 = none); tint: albedo multiplier; crease_ao: how much the foot of a ramp face (the valley crease) is darkened and occluded. leaks: strength of Rust's dirt_stains_leaks drip decals hanging from a ramp face's top edge; debris: strength of the same atlas's gravel/litter band along the foot of a face (the crease of a valley); course.json weathering says which atlas bands. 0 turns either off.",
   "columns": [
     "id",
     "albedo",
@@ -14,6 +14,8 @@
     "panel",
     "tint",
     "crease_ao",
+    "leaks",
+    "debris",
     "filter",
     "verified"
   ],
@@ -35,8 +37,10 @@
         0.97
       ],
       "crease_ao": 0.6,
+      "leaks": 0.75,
+      "debris": 0.85,
       "filter": "aniso",
-      "verified": "2026-10-08 seen in game on the start pad"
+      "verified": "2026-10-08 seen in game on the start pad; world_r1 (gauntlet 2): leaks/debris from Rust dirt_stains_leaks decals, by eye in renders"
     },
     {
       "id": "metal",
@@ -55,8 +59,10 @@
         1
       ],
       "crease_ao": 0.5,
+      "leaks": 0.6,
+      "debris": 0.8,
       "filter": "aniso",
-      "verified": "2026-10-08 seen in game on the start pad"
+      "verified": "2026-10-08 seen in game on the start pad; world_r1 (gauntlet 2): leaks/debris from Rust dirt_stains_leaks decals, by eye in renders"
     },
     {
       "id": "ground",
@@ -75,6 +81,8 @@
         1
       ],
       "crease_ao": 0,
+      "leaks": 0,
+      "debris": 0,
       "filter": "aniso",
       "verified": "2026-10-08 seen in recorded frames (Launch Site ground)"
     },
@@ -95,8 +103,10 @@
         0.82
       ],
       "crease_ao": 0.6,
+      "leaks": 0.75,
+      "debris": 0,
       "filter": "aniso",
-      "verified": "2026-10-09 world_r3 renders: Launch Site panel concrete instead of the beige concrete_d_site (r2 critics: untextured beige ramp), by eye"
+      "verified": "2026-10-09 world_r3 renders: Launch Site panel concrete instead of the beige concrete_d_site (r2 critics: untextured beige ramp), by eye; world_r1 (gauntlet 2): leaks/debris from Rust dirt_stains_leaks decals, by eye in renders"
     },
     {
       "id": "ramp_panels",
@@ -115,6 +125,8 @@
         1
       ],
       "crease_ao": 0.5,
+      "leaks": 0,
+      "debris": 0,
       "filter": "aniso",
       "verified": "2026-10-09 Gauntlet captures"
     },
@@ -135,6 +147,8 @@
         0.58
       ],
       "crease_ao": 0,
+      "leaks": 0,
+      "debris": 0,
       "filter": "aniso",
       "verified": "2026-10-09 world_r3 renders: ramp edge trims (r2 critics: no edge trim), by eye"
     },
@@ -155,6 +169,8 @@
         1
       ],
       "crease_ao": 0,
+      "leaks": 0,
+      "debris": 0,
       "filter": "aniso",
       "verified": "2026-10-09 Gauntlet captures"
     },
@@ -175,6 +191,8 @@
         1
       ],
       "crease_ao": 0,
+      "leaks": 0,
+      "debris": 0,
       "filter": "aniso",
       "verified": "2026-10-09 world_r1: terrain shader mixes it with dirt and site concrete; sampled with mips (the unmipped look read as noise to the r4 critics)"
     },
@@ -195,6 +213,8 @@
         1
       ],
       "crease_ao": 0,
+      "leaks": 0,
+      "debris": 0,
       "filter": "aniso",
       "verified": "2026-10-09 world_r1 renders (terrain slopes and pit floor)"
     },
@@ -215,6 +235,8 @@
         1
       ],
       "crease_ao": 0,
+      "leaks": 0,
+      "debris": 0,
       "filter": "aniso",
       "verified": "invisible trigger volumes"
     }

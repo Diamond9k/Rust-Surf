@@ -143,6 +143,16 @@
       "verified": "2026-10-09 present in the local prep output (listed in launch_site_placements.json materials); atlas layout read by eye from the png, unverified against Rust's decal UVs"
     },
     {
+      "id": "tex_dirt_stains_leaks",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material dirt_stains_leaks (Launch Site, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/dirt_stains_leaks_{albedo,normal}.png",
+      "used_by": "course.json weathering (drip leaks and crease gravel on the ramps)",
+      "verified": "2026-10-09 present in the local prep output (listed in launch_site_placements.json materials); atlas bands read from the png alpha, unverified against Rust's decal UVs"
+    },
+    {
       "id": "amb_wind_rust",
       "game": "rust",
       "kind": "audio",

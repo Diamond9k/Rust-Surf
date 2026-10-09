@@ -2,9 +2,10 @@
 Reads every content.json row from the Rust and CS2 installs of the player into --out.
 usage: prep.py --rust <Rust dir> --cs2 <CS2 dir> --out <data dir> --tools <dir> --version <v>
 Writes done-<version>.txt only when every content.json row and every weapons.json weapon is in place, each
-file checked whole, and every weapon has its damage and fire rate from the player's CS2 files; otherwise
-exits 1 with the reasons on screen, in prep.log and in prep_status.json (the game shows them)."""
-import os, sys, json, glob, argparse, time, traceback
+file checked whole, and the player's CS2 files name every weapon's stats; otherwise exits 1 with the reasons
+on screen, in prep.log and in prep_status.json (the game shows them), and on Windows in a message box, since
+a launcher's console window can close before anyone reads it (--no-dialog turns that off)."""
+import os, sys, json, glob, argparse, time, threading, traceback
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import prep_cs2
@@ -100,6 +101,34 @@ def scene_missing(out):
     return miss
 
 
+def dialog(title, text, wait):
+    """A Windows message box (error icon, on top) with the reasons; returns when it is closed or after wait
+    seconds (it is a daemon thread, so exiting closes it). Returns False where there is no box to show."""
+    if sys.platform != "win32" or os.environ.get("RS_PREP_NO_DIALOG"):
+        return False
+    try:
+        import ctypes
+        box = ctypes.windll.user32.MessageBoxW
+    except (ImportError, AttributeError, OSError):
+        return False
+    MB_ICONERROR, MB_SETFOREGROUND, MB_TOPMOST = 0x10, 0x10000, 0x40000
+    t = threading.Thread(target=box, args=(None, text, title, MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST), daemon=True)
+    t.start()
+    t.join(wait)
+    return True
+
+
+def dialog_text(a, problems):
+    """The message box body: each reason (cut to a readable length), then where the details are."""
+    lines = ["Rust Surf setup did not finish (%d problem(s)):" % len(problems), ""]
+    lines += ["- " + (p if len(p) <= 400 else p[:400] + " ...") for p in problems[:8]]
+    if len(problems) > 8:
+        lines.append("- and %d more" % (len(problems) - 8))
+    lines += ["", "Setup runs again on the next start and redoes only what is missing.",
+              "Details: " + os.path.join(a.out, "prep.log")]
+    return "\n".join(lines)
+
+
 def finish(a, problems, warnings, log):
     """done-<version>.txt only when nothing essential is missing; prep_status.json either way, which the
     game shows on its error panel (Main._report), so a broken install never looks like a working one."""
@@ -117,6 +146,8 @@ def finish(a, problems, warnings, log):
         for p in problems:
             log("  - " + p)
         log("Details: " + os.path.join(a.out, "prep.log"))
+        if not a.no_dialog:
+            a.dialog("Rust Surf setup did not finish", dialog_text(a, problems), None if a.dialog_wait is None else float(a.dialog_wait))
         return 1
     with open(done + ".tmp", "w", encoding="utf-8") as f:
         f.write("ok %s warnings=%s\n" % (a.version, warnings))
@@ -125,13 +156,19 @@ def finish(a, problems, warnings, log):
     return 0
 
 
-def main(argv=None, steps=None, runner=None):
-    """Runs both games, then finish(); returns the exit code. steps/runner are for prep/tests."""
+def main(argv=None, steps=None, runner=None, show=None):
+    """Runs both games, then finish(); returns the exit code. steps/runner/show (the message box) are for prep/tests."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--rust", required=True); ap.add_argument("--cs2", required=True)
     ap.add_argument("--out", required=True); ap.add_argument("--tools", default=HERE)
     ap.add_argument("--version", default="dev")
+    ap.add_argument("--no-dialog", action="store_true", help="no Windows message box when setup fails")
     a = ap.parse_args(argv)
+    a.dialog = show or dialog
+    try:
+        a.dialog_wait = prep_cs2.settings()["fail_dialog_s"]
+    except Exception:  # a damaged prep.json must not hide the reasons: prep's own problems still get a box
+        a.dialog_wait = None  # no timeout: the box stays until closed
     a.vrf = os.path.join(a.tools, "vrf", "Source2Viewer-CLI.exe")
     a.vgm = os.path.join(a.tools, "vgm", "vgmstream-cli.exe")
     a.runner = runner

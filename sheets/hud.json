@@ -66,6 +66,13 @@
       "verified": "design value"
     },
     {
+      "id": "speed_min",
+      "value": 1,
+      "unit": "u/s",
+      "note": "the speed readout shows nothing below this, so standing still leaves no bare '0' under the crosshair (PC test 2026-10-09)",
+      "verified": "design value (fixes the PC finding); surf servers' own readouts unverified"
+    },
+    {
       "id": "font_msg",
       "value": 34,
       "unit": "px",
@@ -174,7 +181,7 @@
       "id": "spread_units",
       "value": 320,
       "unit": "units",
-      "note": "dynamic distance += (spread + inaccuracy in rad) x spread_units / tan(fov/2), in YRES units: the arms sit on the edge of the spread cone",
+      "note": "dynamic distance += (spread + inaccuracy in rad) x spread_units / tan(fov/2), in YRES units, fov being Source's horizontal fov at 4:3; Hud gets it from the live camera's vertical fov (tan x spread_units / (yres_base/2)), so a changed fov keeps the arms on the spread cone. cl_crosshair_recoil uses the same scale",
       "verified": "Source/CS:GO crosshair code as remembered, unverified: not checked against the CS2 client; the maths puts the arm tips on the 4:3 fov 90 spread circle (checked by hand)"
     },
     {
@@ -220,13 +227,6 @@
       "verified": "checked: sounds.json has no 'hitmarker' row on 2026-10-09"
     },
     {
-      "id": "xh_hidden_slots",
-      "value": "sniper",
-      "unit": "weapons.json slot list (comma separated)",
-      "note": "held weapons of these slots draw no crosshair (unscoped); scoped, Weapons hides the crosshair for the lens",
-      "verified": "CS:GO behaviour (snipers have no unscoped crosshair) from memory; CS2 unverified: not checked against the CS2 client"
-    },
-    {
       "id": "menu_ref_height",
       "value": 720,
       "unit": "px",
@@ -253,6 +253,13 @@
       "unit": "px",
       "note": "menu body text",
       "verified": "design value"
+    },
+    {
+      "id": "menu_weight",
+      "value": 400,
+      "unit": "font weight",
+      "note": "weight of the Esc menu's body text (rows, values); titles, tabs and the HUD stay bold (700)",
+      "verified": "design value after Gauntlet round 3 reviewers judged the bold condensed menu labels less like CS2 than a lighter face; CS2's own weights unverified: not checked against the CS2 client"
     },
     {
       "id": "menu_row",

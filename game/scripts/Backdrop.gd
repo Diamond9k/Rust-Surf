@@ -23,6 +23,8 @@ var _nx: int
 var _nz: int
 var _pit := PackedByteArray()
 var _tmat: ShaderMaterial
+var scattered := {}
+var _avoid: Array[AABB] = []
 
 func build(c: Content, offset: Vector3, yaw_deg: float) -> void:
 	content = c
@@ -52,6 +54,7 @@ func build(c: Content, offset: Vector3, yaw_deg: float) -> void:
 	_pit_mask()
 	_terrain()
 	_props()
+	_scatter()
 
 ## course.json terrain.props: extra copies of the extracted Launch Site meshes set around the course as
 ## scenery (our arrangement, not Rust's layout), standing on the ground height at their x, z.
@@ -68,6 +71,241 @@ func _props() -> void:
 		var sc := float(p["scale"])
 		mi.global_transform = Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(float(p["yaw"])), 0)).scaled(Vector3.ONE * sc), Vector3(at[0], height(at[0], at[1]) + float(p["dy"]), at[1]))
 		props += 1
+		_avoid.append(mi.global_transform * mesh.get_aabb())
+
+## course.json terrain.scatter: trees, bushes, grass tufts and rocks built here (we have no Rust
+## vegetation meshes) and scattered over the ground as MultiMeshes in chunks, so the land reads as
+## Rust's countryside instead of a painted plain. Each row samples its rect, keeps points whose distance
+## outside site_rect is within ring (negative inside), whose cluster noise clears 1 - cover, and that are
+## off roads, pits, buildings and props.
+func _scatter() -> void:
+	for mi in nodes:
+		_avoid.append((transform * mi.transform) * mi.get_aabb())
+	var S: Dictionary = T["scatter"]
+	var r: Array = T["site_rect"]
+	var rd: Dictionary = T["roads"]
+	for row in S["rows"]:
+		var chunk := float(row["chunk"])
+		var rng := RandomNumberGenerator.new()
+		rng.seed = int(row["seed"])
+		var cl := FastNoiseLite.new()
+		cl.seed = int(row["seed"])
+		cl.frequency = 1.0 / float(row["cluster_period"])
+		cl.fractal_octaves = 3
+		var mesh := _plant_mesh(String(row["shape"]), rng)
+		var mat := _plant_material(row)
+		var box: Array = row["rect"]
+		var ring: Array = row["ring"]
+		var size: Array = row["size"]
+		var col: Array = row["color"]
+		var jit := float(row["color_jitter"])
+		var cover := float(row["cover"])
+		var sink := float(row["sink"])
+		var bins := {}
+		var n := 0
+		var tries := 0
+		var want := int(row["count"])
+		while n < want and tries < want * 12:
+			tries += 1
+			var x := rng.randf_range(float(box[0]), float(box[2]))
+			var z := rng.randf_range(float(box[1]), float(box[3]))
+			var dx := maxf(float(r[0]) - x, x - float(r[2]))
+			var dz := maxf(float(r[1]) - z, z - float(r[3]))
+			var d := sqrt(maxf(dx, 0.0) ** 2 + maxf(dz, 0.0) ** 2) if maxf(dx, dz) > 0.0 else maxf(dx, dz)
+			if d < float(ring[0]) or d > float(ring[1]):
+				continue
+			if cl.get_noise_2d(x, z) * 0.5 + 0.5 < 1.0 - cover:
+				continue
+			if _pit_at(x, z) != 0 or _on_road(x, z, rd) or _blocked(x, z):
+				continue
+			var sc := rng.randf_range(float(size[0]), float(size[1]))
+			var y := height(x, z)
+			var slope := absf(height(x + 1.0, z) - height(x - 1.0, z)) + absf(height(x, z + 1.0) - height(x, z - 1.0))
+			if slope > float(row["max_slope"]):
+				continue
+			var b := Basis.from_euler(Vector3(rng.randf_range(-0.05, 0.05), rng.randf() * TAU, rng.randf_range(-0.05, 0.05)))
+			b = b.scaled(Vector3(sc * rng.randf_range(0.85, 1.15), sc, sc * rng.randf_range(0.85, 1.15)))
+			var k := Vector2i(floori(x / chunk), floori(z / chunk))
+			if not bins.has(k):
+				bins[k] = []
+			var f := rng.randf_range(1.0 - jit, 1.0 + jit)
+			bins[k].append([Transform3D(b, Vector3(x, y - sink * sc, z)), Color(col[0] * f * rng.randf_range(0.95, 1.05), col[1] * f, col[2] * f * rng.randf_range(0.95, 1.05))])
+			n += 1
+		for k in bins:
+			var mm := MultiMesh.new()
+			mm.transform_format = MultiMesh.TRANSFORM_3D
+			mm.use_colors = true
+			mm.mesh = mesh
+			var items: Array = bins[k]
+			mm.instance_count = items.size()
+			for i in items.size():
+				mm.set_instance_transform(i, items[i][0])
+				mm.set_instance_color(i, items[i][1])
+			var mmi := MultiMeshInstance3D.new()
+			mmi.multimesh = mm
+			mmi.material_override = mat
+			mmi.top_level = true
+			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if bool(row["shadows"]) else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			var vr := float(row["view_range"])
+			if vr > 0.0:
+				mmi.visibility_range_end = vr
+				mmi.visibility_range_end_margin = vr * 0.1
+				mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+			add_child(mmi)
+			mmi.global_transform = Transform3D.IDENTITY
+		scattered[row["id"]] = n
+
+func _on_road(x: float, z: float, rd: Dictionary) -> bool:
+	var p := Vector2(x, z)
+	var lim := float(rd["width"]) * 0.5 + float(T["scatter"]["road_margin"])
+	for a in rd["segments"]:
+		var s := Geometry2D.get_closest_point_to_segment(p, Vector2(a[0], a[1]), Vector2(a[2], a[3]))
+		if p.distance_to(s) < lim:
+			return true
+	return false
+
+func _blocked(x: float, z: float) -> bool:
+	var m := float(T["scatter"]["building_margin"])
+	for b in _avoid:
+		if x > b.position.x - m and x < b.end.x + m and z > b.position.z - m and z < b.end.z + m:
+			return true
+	return false
+
+## Plant and rock meshes, about 1 m tall (scaled per instance), vertex-coloured so the instance colour
+## tints them: a conifer (trunk and four jagged cones), a broadleaf (trunk and three lumpy crowns), a
+## low bush, a grass tuft (a fan of thin blades) and a rock (a lumpy, flattened ball).
+func _plant_mesh(shape: String, rng: RandomNumberGenerator) -> Mesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	match shape:
+		"conifer":
+			_cyl(st, 0.0, 0.3, 0.025, 0.018, Color(0.32, 0.24, 0.18))
+			var y := 0.16
+			for i in 4:
+				var h := 0.42 - i * 0.06
+				var rad := 0.27 - i * 0.055
+				_cone(st, y, h, rad, 9, rng, Color(0.75 + i * 0.08, 0.75 + i * 0.08, 0.75 + i * 0.08), true)
+				y += h * 0.52
+		"conifer_far":  # a few pixels tall: two cones, no trunk or undersides
+			_cone(st, 0.1, 0.55, 0.24, 6, rng, Color(0.8, 0.8, 0.8), false)
+			_cone(st, 0.42, 0.58, 0.17, 6, rng, Color(0.95, 0.95, 0.95), false)
+		"broadleaf":
+			_cyl(st, 0.0, 0.55, 0.035, 0.02, Color(0.62, 0.6, 0.55))
+			for c in [Vector3(0, 0.62, 0), Vector3(0.14, 0.5, 0.08), Vector3(-0.12, 0.52, -0.1)]:
+				_blob(st, c, Vector3(0.26, 0.22, 0.26), 0.25, rng, Color(1, 1, 1), 4, 6)
+		"broadleaf_far":
+			_cyl(st, 0.0, 0.45, 0.035, 0.02, Color(0.62, 0.6, 0.55))
+			_blob(st, Vector3(0, 0.6, 0), Vector3(0.34, 0.28, 0.34), 0.25, rng, Color(1, 1, 1), 3, 6)
+		"bush":
+			_blob(st, Vector3(0, 0.3, 0), Vector3(0.6, 0.45, 0.6), 0.3, rng, Color(1, 1, 1), 4, 7)
+		"grass":
+			for i in 14:
+				var a := rng.randf() * TAU
+				var o := Vector3(cos(a), 0, sin(a)) * rng.randf_range(0.0, 0.25)
+				var lean := Vector3(cos(a), 0, sin(a)) * rng.randf_range(0.1, 0.35)
+				var side := Vector3(-sin(a), 0, cos(a)) * 0.035
+				var h := rng.randf_range(0.6, 1.0)
+				for v in [[o - side, 0.55], [o + side, 0.55], [o + lean + Vector3(0, h, 0), 1.15]]:
+					st.set_color(Color(v[1], v[1], v[1]))
+					st.set_normal(Vector3.UP)  # lit like the ground they grow from
+					st.add_vertex(v[0])
+		_:
+			_blob(st, Vector3(0, 0.25, 0), Vector3(0.6, 0.4, 0.5), 0.35, rng, Color(1, 1, 1), 4, 7)
+	if shape == "rock":
+		st.generate_tangents()
+	return st.commit()
+
+func _cyl(st: SurfaceTool, y0: float, y1: float, r0: float, r1: float, c: Color) -> void:
+	for i in 6:
+		var a0 := TAU * i / 6.0
+		var a1 := TAU * (i + 1) / 6.0
+		var d0 := Vector3(cos(a0), 0, sin(a0))
+		var d1 := Vector3(cos(a1), 0, sin(a1))
+		for v in [[d0, r0, y0], [d1, r1, y1], [d1, r0, y0], [d0, r0, y0], [d0, r1, y1], [d1, r1, y1]]:
+			st.set_color(c)
+			st.set_normal(v[0])
+			st.set_uv(Vector2(v[0].x, v[2]))  # a broadleaf's crowns carry UVs, so every vertex must
+			st.add_vertex(v[0] * v[1] + Vector3(0, v[2], 0))
+
+## A cone with a ragged rim (each rim point at its own radius and droop); normals lean out from the
+## tree's axis like a round crown, so the foliage shades softly instead of in flat facets.
+func _cone(st: SurfaceTool, y: float, h: float, rad: float, seg: int, rng: RandomNumberGenerator, c: Color, under_side: bool) -> void:
+	var rim: Array[Vector3] = []
+	for i in seg:
+		var a := TAU * (i + rng.randf_range(-0.2, 0.2)) / seg
+		var rr := rad * rng.randf_range(0.75, 1.2)
+		rim.append(Vector3(cos(a) * rr, y - rng.randf_range(0.0, 0.06), sin(a) * rr))
+	var tip := Vector3(rng.randf_range(-0.01, 0.01), y + h, rng.randf_range(-0.01, 0.01))
+	var under := Vector3(0, y + h * 0.15, 0)
+	for i in seg:
+		var a := rim[i]
+		var b := rim[(i + 1) % seg]
+		for v in [[tip, Vector3(0, 1, 0), 1.15], [b, (b - Vector3(0, y, 0)).normalized() + Vector3(0, 0.6, 0), 0.8], [a, (a - Vector3(0, y, 0)).normalized() + Vector3(0, 0.6, 0), 0.8]]:
+			st.set_color(c * float(v[2]))
+			st.set_normal((v[1] as Vector3).normalized())
+			st.add_vertex(v[0])
+		if not under_side:
+			continue
+		for v in [[under, Vector3.DOWN, 0.5], [a, Vector3.DOWN, 0.6], [b, Vector3.DOWN, 0.6]]:
+			st.set_color(c * float(v[2]))
+			st.set_normal(v[1])
+			st.add_vertex(v[0])
+
+## A lumpy ball: a UV sphere pushed in and out by noise, flattened at the bottom, with UVs for the rock
+## texture (the plant material ignores them).
+func _blob(st: SurfaceTool, c: Vector3, r: Vector3, lump: float, rng: RandomNumberGenerator, col: Color, rings: int, segs: int) -> void:
+	var off := rng.randf() * 100.0
+	var nz := FastNoiseLite.new()
+	nz.seed = rng.randi()
+	nz.frequency = 1.6
+	var pts := []
+	for j in rings + 1:
+		var row := []
+		var th := PI * j / rings
+		for i in segs + 1:
+			var ph := TAU * i / segs
+			var d := Vector3(sin(th) * cos(ph), cos(th), sin(th) * sin(ph))
+			var k := 1.0 + lump * nz.get_noise_3d(d.x + off, d.y, d.z)
+			var p := c + d * r * k
+			p.y = maxf(p.y, c.y - r.y * 0.55)
+			row.append([p, d, Vector2(float(i) / segs, float(j) / rings)])
+		pts.append(row)
+	for j in rings:
+		for i in segs:
+			var q: Array = [pts[j][i], pts[j][i + 1], pts[j + 1][i + 1], pts[j + 1][i]]
+			for t in [[0, 1, 2], [0, 2, 3]]:
+				for idx in t:
+					var v: Array = q[idx]
+					var shade := 0.7 + 0.3 * clampf((v[1] as Vector3).y * 0.5 + 0.5, 0.0, 1.0)
+					st.set_color(col * shade)
+					st.set_normal(v[1])
+					st.set_uv(v[2] * 2.0)
+					st.add_vertex(v[0])
+
+func _plant_material(row: Dictionary) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.vertex_color_use_as_albedo = true
+	m.vertex_color_is_srgb = true  # the sheet's colours are sRGB, as picked
+	m.roughness = float(row["roughness"])
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	if String(row["texture"]) != "(none)":
+		var mats := {}
+		for r in Sheets.load_sheet("materials")["rows"]:
+			mats[r["id"]] = r
+		var mr: Dictionary = mats[row["texture"]]
+		m.albedo_texture = content.texture(mr["albedo"], "MainTex")
+		var nt := content.texture(mr["normal"], "BumpMap")
+		if nt:
+			m.normal_enabled = true
+			m.normal_texture = nt
+		m.uv1_triplanar = true
+		m.uv1_world_triplanar = true
+		m.uv1_scale = Vector3.ONE / float(mr["uv_scale"]) * 3.0
+		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+		m.cull_mode = BaseMaterial3D.CULL_BACK
+	else:
+		m.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT_WRAP  # foliage lets light through: no black shaded side
+	return m
 
 func _mesh(name: String) -> Mesh:
 	if meshes.has(name):
@@ -446,11 +684,12 @@ float fbm(vec2 p) {
 // scattered blobs (dry scrub, loose stones): at most one per grid cell, with probability dens, kept
 // inside its own cell so one lookup is enough; fades to the average cover once a cell is a few pixels
 float scatter(vec2 p, float cell, float dens, float seed) {
-	vec2 q = p / cell;
+	float ca = cos(seed * 0.37 + 0.5); float sa = sin(seed * 0.37 + 0.5);
+	vec2 q = mat2(vec2(ca, sa), vec2(-sa, ca)) * p / cell;  // each layer's grid turned its own way: no rows
 	vec2 g = floor(q);
 	float best = 0.0;
 	if (hash(g + seed) < dens) {
-		vec2 o = vec2(0.3) + 0.4 * vec2(hash(g * 1.7 + seed + 3.1), hash(g * 2.3 + seed + 7.7));
+		vec2 o = vec2(0.25) + 0.5 * vec2(hash(g * 1.7 + seed + 3.1), hash(g * 2.3 + seed + 7.7));
 		float r = mix(0.14, 0.28, hash(g + seed + 11.0));
 		float d = length(q - g - o) / r + (vnoise(q * 9.0 + g) - 0.5) * 0.5;
 		best = 1.0 - smoothstep(0.75, 1.0, d);

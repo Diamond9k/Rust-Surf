@@ -1,6 +1,7 @@
 """items_game.py against the synthetic fixture (fixtures/items_game.txt): prefab chains, nested
 attribute blocks, [$WIN32]-style conditionals, escaped quotes, repeated sections, CRLF files."""
 import os, sys, json, shutil, tempfile, unittest
+from unittest import mock
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 import items_game
@@ -119,7 +120,7 @@ class Stats(unittest.TestCase):
 
     def test_write_stats_on_the_fixture(self):
         """prep_cs2.write_stats with this file as the player's export: the AK passes, the M4A4 (whose prefab
-        lists only clip, damage and rate) stops setup naming what it lacks, the Glock is not in the sheet rows."""
+        lists only clip, damage and rate) is named with what it lacks, as a warning or (stats_required_blocks) a problem, the Glock is not in the sheet rows."""
         import prep_cs2
         d = tempfile.mkdtemp()
         try:
@@ -128,9 +129,14 @@ class Stats(unittest.TestCase):
             shutil.copy(FIX, p)
             ws = {"rows": [{"game": "cs2", "slot": "rifle", "item": "weapon_ak47"}, {"game": "cs2", "slot": "rifle", "item": "weapon_m4a1"},
                            {"game": "cs2", "slot": "gear", "item": "weapon_taser"}]}
+            real = prep_cs2.settings
             with open(os.devnull, "w") as null:
                 prep_cs2.LOG = lambda s: null.write(s)
-                problems, warnings = prep_cs2.write_stats(d, ws)
+                problems, warnings = prep_cs2.write_stats(d, ws)  # the shipped sheet: gaps are warnings
+                self.assertEqual(problems, [])
+                self.assertIn("weapon_m4a1 (armor ratio/", warnings[0])
+                with mock.patch.object(prep_cs2, "settings", lambda here=prep_cs2.HERE: dict(real(here), stats_required_blocks="yes")):
+                    problems, warnings = prep_cs2.write_stats(d, ws)
             self.assertEqual(len(problems), 1, problems)
             self.assertIn("weapon_m4a1 (armor ratio/", problems[0])
             self.assertNotIn("weapon_ak47 (", problems[0])

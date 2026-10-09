@@ -294,15 +294,35 @@
     },
     {
       "id": "glow_intensity",
-      "value": 0.4,
+      "value": 0.6,
       "note": "bloom strength (was a constant in Main.gd)",
-      "tuned": "2026-10-08 by eye"
+      "tuned": "2026-10-09 world_r1 (gauntlet 2): 0.4 left the sun a small soft blob (r3 critics), by eye"
     },
     {
       "id": "glow_threshold",
       "value": 1.2,
       "note": "HDR brightness where bloom starts (the sun disc and its halo pass it)",
       "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "glow_blend",
+      "value": "screen",
+      "note": "how bloom is laid over the image: screen (never past white) or additive",
+      "tuned": "2026-10-09 world_r1 (gauntlet 2) sun render, by eye"
+    },
+    {
+      "id": "glow_levels",
+      "value": [
+        0,
+        0,
+        1,
+        0.8,
+        1,
+        0.8,
+        0.6
+      ],
+      "note": "bloom weight per blur level 1..7 (Godot glow levels); the wide levels 5-7 spread a broad glow round the sun disc as Rust's sun has (a look, unverified against Rust's post stack)",
+      "tuned": "2026-10-09 world_r1 (gauntlet 2) sun render, by eye"
     },
     {
       "id": "shaft_density",

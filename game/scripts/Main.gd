@@ -78,8 +78,6 @@ func _ready() -> void:
 		shots_running = true
 		shots.out_dir = ua[si + 1]
 		add_child(shots)
-	if OS.get_cmdline_user_args().has("--wtest"):
-		add_child(load("res://TestWeapons.gd").new())
 	if OS.get_cmdline_user_args().has("--autosurf"):
 		add_child(load("res://TestDrive.gd").new())
 
@@ -138,6 +136,10 @@ func _lighting() -> void:
 	e.glow_enabled = bool(L["glow"])
 	e.glow_intensity = float(L["glow_intensity"])
 	e.glow_hdr_threshold = float(L["glow_threshold"])
+	e.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE if L["glow_blend"] == "additive" else Environment.GLOW_BLEND_MODE_SCREEN
+	var gl: Array = L["glow_levels"]  # wide levels: a broad bloom round the sun disc
+	for i in gl.size():
+		e.set_glow_level(i, float(gl[i]))
 	# sun shafts: a thin volumetric haze lit (and shadowed) by the sun, scattering forward
 	e.volumetric_fog_enabled = float(L["shaft_density"]) > 0.0
 	e.volumetric_fog_density = float(L["shaft_density"])
@@ -154,6 +156,7 @@ func _report() -> void:
 		lines.append("Missing extracted content: " + ", ".join(content.missing))
 	if not viewmodel.ok:
 		lines.append("Knife viewmodel off: " + viewmodel.why)
+	lines.append_array(weapons.problems)
 	# prep's own verdict (prep.py finish): what did not export and why, so a partial install says so
 	var ps := content.dir.path_join("prep_status.json")
 	if FileAccess.file_exists(ps):
@@ -226,7 +229,7 @@ func _process(_dt: float) -> void:
 		ghost.stop_run(false)
 	if Input.is_action_just_pressed("surf_checkpoint"):
 		course.to_checkpoint(player)
-	if Input.is_action_just_pressed("surf_inspect"):
+	if Input.is_action_just_pressed("surf_inspect") and weapons.can_inspect():
 		viewmodel.inspect()
 	if Input.is_action_just_pressed("surf_menu"):
 		settings.toggle()

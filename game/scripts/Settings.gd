@@ -37,6 +37,8 @@ var _keys_set := {}      # input.json ids whose keys the player set here (saved)
 var _root: Control
 var _tab := "game"
 var _pages := {}
+var _lists := {}         # tab -> the rows' VBox (its height sizes the panel, so the panel ends with its rows)
+var _area: Control
 var _tab_btns := {}
 var _ctl := {}           # id -> [slider or option, number field or null]
 var _bind_btns := {}     # "id:slot" -> Button
@@ -46,6 +48,7 @@ var _preview: Control
 var _u := 1.0
 var _loading := true
 var _no_save := false    # an unreadable settings file could not be set aside: never write over it
+var _was_frozen := false # the player's frozen state before the menu opened (Shots or a lobby pose may hold it)
 
 func setup(m: Node) -> void:
 	main = m
@@ -85,7 +88,11 @@ func toggle() -> void:
 	var buy: Variant = main.weapons.get("_buy") if main.get("weapons") != null else null
 	if is_open and buy is CanvasItem and (buy as CanvasItem).visible:
 		(buy as CanvasItem).visible = false  # one menu at a time
-	main.player.frozen = is_open  # the menu pauses movement like a paused local server
+	if is_open:  # the menu pauses movement like a paused local server, and gives back whatever held it before
+		_was_frozen = main.player.frozen
+		main.player.frozen = true
+	else:
+		main.player.frozen = _was_frozen
 	if main.timer: main.timer.set_process(not is_open)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if is_open else Input.MOUSE_MODE_CAPTURED
 
@@ -341,14 +348,19 @@ func _input(ev: InputEvent) -> void:
 		_rebind(slot, key)
 	_refresh_binds()
 
-## "id:slot" gets key; "" clears the slot.
+## "id:slot" gets key; "" clears the slot. A key already in this action's other slot swaps places with it,
+## so no key is lost.
 func _rebind(slot: String, key: String) -> void:
 	var id := slot.get_slice(":", 0)
 	var i := int(slot.get_slice(":", 1))
 	var ks: Array = (_keys[id] as Array).duplicate()
-	if key != "" and ks.has(key):
-		ks.erase(key)
-	if i < ks.size():
+	var j := ks.find(key) if key != "" else -1
+	if j >= 0 and i < ks.size():
+		ks[j] = ks[i]
+		ks[i] = key
+	elif j >= 0:
+		pass  # an empty slot asked for a key this action already has: it stays where it is
+	elif i < ks.size():
 		if key == "":
 			ks.remove_at(i)
 		else:
@@ -402,8 +414,8 @@ func _sb(c: Color, radius: float = 2.0, border: Color = Color(0, 0, 0, 0)) -> St
 
 func _theme() -> Theme:
 	var t := Theme.new()
-	if main.hud.font:
-		t.default_font = main.hud.font
+	if main.hud.menu_font:
+		t.default_font = main.hud.menu_font
 	t.default_font_size = _px(float(main.hud.H["menu_font"]))
 	for c in ["Label", "Button", "OptionButton", "LineEdit", "PopupMenu"]:
 		t.set_color("font_color", c, TEXT)
@@ -414,7 +426,7 @@ func _theme() -> Theme:
 	t.set_stylebox("hover", "OptionButton", _sb(Color(1, 1, 1, 0.1), 2, Color(1, 1, 1, 0.25)))
 	t.set_stylebox("pressed", "OptionButton", _sb(Color(1, 1, 1, 0.14), 2, Color(1, 1, 1, 0.25)))
 	t.set_stylebox("focus", "OptionButton", StyleBoxEmpty.new())
-	t.set_icon("arrow", "OptionButton", _chevron(_px(12)))
+	t.set_icon("arrow", "OptionButton", _caret(_px(10)))
 	t.set_stylebox("panel", "PopupMenu", _sb(Color(0.09, 0.1, 0.11, 0.98), 2, Color(1, 1, 1, 0.15)))
 	t.set_stylebox("hover", "PopupMenu", _sb(Color(1, 1, 1, 0.12)))
 	t.set_stylebox("normal", "LineEdit", _sb(Color(0, 0, 0, 0.35), 2, Color(1, 1, 1, 0.12)))
@@ -446,18 +458,15 @@ func _theme() -> Theme:
 	t.set_stylebox("grabber_pressed", "VScrollBar", sgrab)
 	return t
 
-## A down chevron d px wide for the dropdowns, so it scales with the menu.
-func _chevron(d: int) -> ImageTexture:
+## A small solid down caret d px wide for the dropdowns (a game menu's, not a web form's chevron).
+func _caret(d: int) -> ImageTexture:
 	var img := Image.create_empty(d, d, false, Image.FORMAT_RGBA8)
-	var w := maxf(d * 0.13, 1.0)
 	for x in d:
 		for y in d:
-			var u := (x + 0.5) / d
+			var u := (x + 0.5) / d * 2.0 - 1.0
 			var v := (y + 0.5) / d
-			var line := 0.28 + 0.44 * (1.0 - absf(u - 0.5) * 2.0)  # the V, lowest in the middle
-			var dist := absf(v - line) * d
-			var a := clampf(w - dist + 0.5, 0.0, 1.0) if u > 0.12 and u < 0.88 else 0.0
-			img.set_pixel(x, y, Color(TEXT.r, TEXT.g, TEXT.b, a))
+			var a := clampf((0.72 - v - absf(u) * 0.5) * d * 0.9, 0.0, 1.0) if v > 0.28 else 0.0  # apex at the bottom
+			img.set_pixel(x, y, Color(DIM.r, DIM.g, DIM.b, a))
 	return ImageTexture.create_from_image(img)
 
 func _circle(d: int, c: Color) -> ImageTexture:
@@ -473,6 +482,7 @@ func _build() -> void:
 	var vp := get_viewport().get_visible_rect().size
 	_u = vp.y / float(main.hud.H["menu_ref_height"])
 	_pages.clear()
+	_lists.clear()
 	_tab_btns.clear()
 	_ctl.clear()
 	_bind_btns.clear()
@@ -559,6 +569,7 @@ func _build() -> void:
 	area.offset_top = nav_h + tab_h + _px(16)
 	area.offset_bottom = -_px(18)
 	_root.add_child(area)
+	_area = area
 	var back := Panel.new()  # the darker, near-opaque column behind the rows
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	back.add_theme_stylebox_override("panel", _sb(Color(0.016, 0.019, 0.024, float(main.hud.H["menu_panel_alpha"])), 3, Color(1, 1, 1, 0.06)))
@@ -583,6 +594,7 @@ func _nav_button(parent: Control, icon: String, text: String, tip: String, h: in
 	b.custom_minimum_size = Vector2(h, h)
 	b.text = text
 	b.add_theme_font_size_override("font_size", _px(17))
+	_bold(b)
 	b.add_theme_color_override("font_color", Color.WHITE if lit else TEXT)
 	var pad := func(c: Color, under: bool) -> StyleBoxFlat:
 		var s := StyleBoxFlat.new()
@@ -636,12 +648,18 @@ func _icon(ci: CanvasItem, icon: String, c: Vector2, r: float, col: Color) -> vo
 			ci.draw_arc(c, r * 0.8, -PI * 0.3, PI * 1.3, 32, col, w, true)
 			ci.draw_line(c + Vector2(0, -r * 1.0), c + Vector2(0, -r * 0.15), col, w, true)
 
+## Titles, tabs and the nav bar keep the HUD's bold face; rows use the theme's lighter one.
+func _bold(c: Control) -> void:
+	if main.hud.font:
+		c.add_theme_font_override("font", main.hud.font)
+
 func _flat_button(parent: Control, text: String, h: int) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size.y = h
 	b.add_theme_font_size_override("font_size", _px(15))
+	_bold(b)
 	b.add_theme_color_override("font_color", DIM)
 	b.add_theme_color_override("font_pressed_color", Color.WHITE)
 	b.add_theme_color_override("font_hover_pressed_color", Color.WHITE)
@@ -668,6 +686,19 @@ func _show_tab(t: String) -> void:
 	for k in _pages:
 		_pages[k].visible = k == t
 	(_tab_btns[t] as Button).set_pressed_no_signal(true)
+	_fit_area.call_deferred()
+
+## The panel ends under the open tab's last row (scrolling only when the rows outgrow the window).
+func _fit_area() -> void:
+	if _area == null or not is_instance_valid(_area) or not _lists.has(_tab):
+		return
+	var h: float = (_lists[_tab] as Control).get_combined_minimum_size().y
+	var host := _pages[_tab] as Control
+	if host is HBoxContainer:
+		h = maxf(h, host.get_combined_minimum_size().y)
+	var room := get_viewport().get_visible_rect().size.y - _area.offset_top - _px(18)
+	_area.anchor_bottom = 0.0
+	_area.offset_bottom = _area.offset_top + minf(h, room)
 
 func _page(tab: String, w: float) -> Control:
 	var host: Control
@@ -686,6 +717,7 @@ func _page(tab: String, w: float) -> Control:
 		host = hb
 	else:
 		host = scroll
+	_lists[tab] = list
 	var section := ""
 	var n := 0
 	for id in rows:
@@ -712,6 +744,7 @@ func _header(parent: Control, text: String, cols: Array = []) -> void:
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.add_theme_font_size_override("font_size", _px(18))
 	l.add_theme_color_override("font_color", Color.WHITE)
+	_bold(l)
 	hb.add_child(l)
 	for c in cols:
 		var cl := Label.new()
@@ -787,7 +820,9 @@ func _row(parent: Control, r: Dictionary, n: int) -> void:
 			f.text = _fmt(r, float(vals[k])))
 		var commit := func(_t: String = "") -> void:
 			var t := f.text.strip_edges()
-			if t.is_valid_float() or t.is_valid_int():
+			if t == _fmt(r, float(vals[k])):
+				pass  # untouched: the shown text may be rounded, the value keeps every digit of the player's config
+			elif t.is_valid_float() or t.is_valid_int():
 				_change(k, float(t), false)  # a typed number keeps its digits, only clamped to the range
 				s.set_value_no_signal(float(vals[k]))
 			f.text = _fmt(r, float(vals[k]))
@@ -883,6 +918,7 @@ func _preview_panel(w: float) -> Control:
 	l.text = "Preview"
 	l.add_theme_font_size_override("font_size", _px(18))
 	l.add_theme_color_override("font_color", Color.WHITE)
+	_bold(l)
 	v.add_child(l)
 	_preview = Control.new()
 	_preview.custom_minimum_size = Vector2(w, w * 0.8)
@@ -905,6 +941,7 @@ func _draw_preview(pv: Control) -> void:
 		PackedColorArray([sky[0], sky[0], sky[1], sky[1]]))
 	pv.draw_rect(Rect2(0, sz.y * 0.55, sz.x, sz.y * 0.45), Color(0.27, 0.25, 0.22))
 	pv.draw_rect(Rect2(sz.x * 0.62, sz.y * 0.3, sz.x * 0.38, sz.y * 0.25), Color(0.36, 0.35, 0.33))
+	pv.draw_rect(Rect2(sz.x * 0.53, sz.y * 0.36, sz.x * 0.07, sz.y * 0.19), Color(0.08, 0.08, 0.08))  # a dark doorway: the right arm on dark
 	pv.draw_rect(Rect2(Vector2.ZERO, sz), Color(1, 1, 1, 0.15), false, 1.0)
 	var h := get_viewport().get_visible_rect().size.y
 	var t := Time.get_ticks_msec() / 1000.0
@@ -946,6 +983,10 @@ func _uitest() -> void:
 	ok.call(has.call("surf_reload", MOUSE_BUTTON_LEFT) and not has.call("surf_attack", MOUSE_BUTTON_LEFT) and not (_keys["attack"] as Array).has("MOUSE1"), "MOUSE1 moved from attack to reload")
 	_rebind("jump:1", "MWHEELDOWN")
 	ok.call(has.call("surf_jump", MOUSE_BUTTON_WHEEL_DOWN) and InputMap.action_get_events("surf_jump").size() == 2, "jump holds two keys")
+	# a key already in the action's other slot swaps places: [A, B] with slot 0 set to B is [B, A], no key lost
+	var jk: Array = (_keys["jump"] as Array).duplicate()
+	_rebind("jump:0", String(jk[1]))
+	ok.call(_keys["jump"] == [jk[1], jk[0]], "rebinding a slot to the other slot's key swaps them (%s -> %s)" % [jk, _keys["jump"]])
 	# the file is written whole (temp + rename) and reads back
 	var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(FILE))
 	ok.call(d is Dictionary and d["keys"].has("reload") and d["keys"].has("attack") and not FileAccess.file_exists(FILE + ".tmp"), "settings file saved atomically with the moved keys")
@@ -977,6 +1018,27 @@ func _uitest() -> void:
 	ok.call(is_equal_approx(float(main.weapons.X["zoom_sensitivity_ratio"]), 0.818933), "zoom_sensitivity_ratio reaches Weapons")
 	for p in [FILE, FILE + ".tmp", FILE + ".bad"]:
 		DirAccess.remove_absolute(gp.call(p))
+	# leaving a number field untouched never rewrites the player's unrounded value
+	_changed.erase("sensitivity")
+	vals["sensitivity"] = 1.818181
+	_rebuild()
+	var fld: LineEdit = _ctl["sensitivity"][1]
+	fld.focus_exited.emit()
+	ok.call(is_equal_approx(float(vals["sensitivity"]), 1.818181) and not _changed.has("sensitivity"), "an untouched sensitivity field keeps 1.818181 (shows %s)" % fld.text)
+	fld.text = "2.5"
+	fld.text_submitted.emit("2.5")
+	ok.call(is_equal_approx(float(vals["sensitivity"]), 2.5), "a typed sensitivity is taken")
+	# closing the menu gives back the frozen state it found (a capture pose keeps the player frozen)
+	main.player.frozen = true
+	toggle()
+	toggle()
+	ok.call(main.player.frozen, "closing the menu keeps a player frozen by something else frozen")
+	main.player.frozen = false
+	toggle()
+	toggle()
+	ok.call(not main.player.frozen, "closing the menu unfreezes a player it froze")
+	for p in [FILE, FILE + ".tmp", FILE + ".bad"]:
+		DirAccess.remove_absolute(gp.call(p))
 	# a repeated message is not cut short by the first one's timer
 	main.hud.message("uitest", 0.05)
 	main.hud.message("uitest", 5.0)
@@ -1005,8 +1067,22 @@ func _uitest() -> void:
 	main.hud.hit_marker = true
 	main.hud.hitmarker(false)
 	ok.call(main.hud._hit > 0.0, "hit marker shows when turned on")
+	ok.call(main.hud.hit_ctl.visible and main.hud.hit_ctl.get_parent() != main.hud.crosshair, "hit marker draws apart from the crosshair (shown on snipers too)")
 	main.hud.hit_marker = false
 	main.hud._hit = 0.0
+	# no bare 0 at rest; the dynamic gap follows the live camera fov
+	main.hud.update(0.0, 0.0, 0.0, false)
+	ok.call(main.hud.speed_label.text == "", "speed readout empty at rest")
+	main.hud.update(250.0, 0.0, 0.0, false)
+	ok.call(main.hud.speed_label.text == "250", "speed readout shows 250")
+	var cam := get_viewport().get_camera_3d()
+	var fov0 := cam.fov
+	var px0: float = main.hud.spread_to_px(0.01, 1080)
+	cam.fov = fov0 * 0.5
+	var px1: float = main.hud.spread_to_px(0.01, 1080)
+	cam.fov = fov0
+	ok.call(px1 > px0 * 1.9, "dynamic gap widens when the fov narrows (%.1f -> %.1f px)" % [px0, px1])
+	ok.call(absf(px0 - 0.01 * 540.0 / tan(deg_to_rad(fov0) * 0.5)) < 0.01, "spread px is the camera projection (%.2f px)" % px0)
 	# every tab at 960x540 and 1920x1080: nothing past the window edge, the HUD hidden under the menu
 	for res in [Vector2i(960, 540), Vector2i(1920, 1080)]:
 		get_window().size = res

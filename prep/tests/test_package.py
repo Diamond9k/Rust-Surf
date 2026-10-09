@@ -36,7 +36,7 @@ class Build(unittest.TestCase):
         self.write(os.path.join(g, "RustSurf.exe"), b"MZ")
         self.write(os.path.join(g, "RustSurf.pck"), self.pck())
         self.b = os.path.join(self.r, ".work", "prepbundle")
-        for t in package.BUNDLE_TOOLS + ["python312/encodings/__init__.pyc", "UnityPy/__pycache__/x.pyc", "old.log"]:
+        for t in package.BUNDLE_TOOLS + ["python312/encodings/__init__.pyc", "UnityPy/__init__.py", "UnityPy/__pycache__/x.pyc", "old.log"]:
             self.write(os.path.join(self.b, t), b"x")
         self.write(os.path.join(self.r, "LICENSES", "MIT.txt"), b"x")
         self.ver = package.recipe_version(self.r)[0]
@@ -59,8 +59,59 @@ class Build(unittest.TestCase):
             f.write(data)
 
     def build(self, **kw):
+        self.smoked = []
+        def smoke(cmd, cwd, timeout, log):  # the bundle's python.exe is a stub here; a real one runs only on Windows
+            self.smoked.append(cmd)
+            return 0, "BUNDLE OK 3.12.10\n"
+        kw.setdefault("smoke", smoke)
         with contextlib.redirect_stdout(io.StringIO()):
             return package.build(self.r, **kw)
+
+    def test_bundle_needs_stdlib_and_unitypy(self):
+        shutil.rmtree(os.path.join(self.b, "python312"))
+        shutil.rmtree(os.path.join(self.b, "UnityPy", "__pycache__"))
+        os.remove(os.path.join(self.b, "UnityPy", "__init__.py"))
+        self.write(os.path.join(self.b, "UnityPy", "__pycache__", "__init__.cpython-312.pyc"), b"x")  # a cache alone is not the package
+        out, errs = self.build()
+        self.assertIsNone(out)
+        self.assertEqual(len(errs), 2, errs)
+        self.assertTrue(any("standard library" in e for e in errs) and any("UnityPy" in e for e in errs), errs)
+        self.write(os.path.join(self.b, "python312.zip"), b"PK")
+        self.write(os.path.join(self.b, "Lib", "site-packages", "UnityPy", "__init__.pyc"), b"x")
+        out, errs = self.build()
+        self.assertEqual(errs, [])
+
+    def test_bundle_import_check(self):
+        out, errs = self.build()
+        self.assertEqual(errs, [])
+        cmd = self.smoked[0]
+        self.assertEqual(cmd[0], os.path.join(self.b, "python.exe"))
+        self.assertEqual(cmd[-1], self.b)
+        for mod in ("UnityPy", "lazybundle", "prep", "ctypes"):
+            self.assertIn(mod, cmd[2])
+        out, errs = self.build(smoke=lambda *a: (1, "ModuleNotFoundError: No module named 'lz4'"))
+        self.assertIsNone(out)
+        self.assertTrue(any("could not import" in e and "lz4" in e for e in errs), errs)
+        self.assertFalse(os.path.exists(os.path.join(self.r, "dist", "RustSurf-%s.zip" % self.ver)))
+        out, errs = self.build(smoke=lambda *a: (0, "no verdict"))
+        self.assertIsNone(out)
+
+    def test_smoke_line_runs_here(self):
+        """The import line itself, on this Python and the repo's prep (UnityPy stubbed when it is not installed)."""
+        stub = tempfile.mkdtemp()
+        try:
+            for f in os.listdir(os.path.join(REPO, "prep")):
+                if f.endswith((".py", ".json")):
+                    shutil.copy(os.path.join(REPO, "prep", f), stub)
+            try:
+                import UnityPy  # noqa: F401
+            except ImportError:
+                self.skipTest("UnityPy is not installed here (lazybundle patches its real modules)")
+            code, out = package._run([sys.executable, "-c", package.SMOKE, stub], stub, 120, print)
+            self.assertEqual(code, 0, out)
+            self.assertIn("BUNDLE OK", out)
+        finally:
+            shutil.rmtree(stub)
 
     def test_builds_and_zip_holds_everything(self):
         out, errs = self.build()

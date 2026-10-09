@@ -30,6 +30,7 @@ var _hit_shot := -1
 var _head_shot := false
 var _shot_frame := -1
 var _shot_ok := false
+var _shot_weapon := ""   # the weapon that fired the current shot: its hits use its armor ratio, not whatever is held later
 var _kills := 0
 var _hs_kills := 0
 var _damage := 0.0
@@ -93,6 +94,8 @@ class Bot extends Node3D:
 	var up_at := 0.0
 	var down_at := 0.0
 	var kick := 0.0
+	var phase := 0.0       # idle sway offset, so the range never moves in step
+	var fall_side := 1.0   # which way a downed bot twists as it falls
 	var tag := ""
 	var pose: Node3D
 	var bodies: Array = []
@@ -193,6 +196,8 @@ func _draw_gun() -> void:
 		if String(w.slots.get(s, "")) != "":
 			if w.current != s:
 				w.switch_to(s)
+				if main.get("shots_running") == true and main.viewmodel:
+					main.viewmodel.idle()  # a Gauntlet capture shows the gun held, not mid-draw
 			return
 	main.hud.message("no CS2 gun exported yet: run prep on your PC (B opens the buy menu)", 4.0)
 
@@ -456,7 +461,7 @@ func _arena() -> void:
 	var fnum := _f("lane_floor_number")
 	for i in n:
 		var x := _lane_x(i + 1)
-		_text3d(str(i + 1), Vector3(x, 0.012, fz - fnum * 1.2), Vector3(-90, 0, 0), fnum, pc)
+		_text3d(str(i + 1), Vector3(x, 0.012, fz - fnum * 1.2), Vector3(-90, 0, 0), fnum, Color(pc, _f("floor_paint_alpha")))
 		_box(Vector3(x, wh * 0.62, back + 0.06), Vector3(float(lp[0]), float(lp[1]), 0.08), plaque, false)
 		_text3d(str(i + 1), Vector3(x, wh * 0.62, back + 0.12), Vector3.ZERO, float(lp[2]), pc)
 	var edge := n * lw * 0.5
@@ -465,7 +470,7 @@ func _arena() -> void:
 		var z := fz - float(d)
 		_paint(Vector3(0, 0, z), n * lw, 0.1, paint)
 		for s in [-1.0, 1.0]:
-			_text3d("%d m" % int(d), Vector3(s * (edge + (hx - edge) * 0.5), 0.012, z + float(dt[0]) * 0.75), Vector3(-90, 0, 0), float(dt[0]), pc)
+			_text3d("%d m" % int(d), Vector3(s * (edge + (hx - edge) * 0.5), 0.012, z + float(dt[0]) * 0.75), Vector3(-90, 0, 0), float(dt[0]), Color(pc, _f("floor_paint_alpha")))
 			var py := _f("distance_plaque_y")
 			_box(Vector3(s * (hx - 0.09), py, z), Vector3(0.08, float(dt[1]) * 1.4, float(dt[2])), plaque, false)
 			_text3d("%d m" % int(d), Vector3(s * (hx - 0.15), py, z), Vector3(0, -90.0 * s, 0), float(dt[1]), pc)
@@ -734,7 +739,7 @@ func _avg_ms(a: Array[float]) -> float:
 func _best_ttk_ms() -> float:
 	return 1000.0 * float(_ttk.min()) if not _ttk.is_empty() else 0.0
 
-## Score per mode. Misses cost points, so spraying never beats aiming.
+## Score per mode. Misses cost points in every mode, so spraying never beats aiming.
 func _score() -> int:
 	var miss := (_shots - _hits) * int(_f("points_miss"))
 	match mode:
@@ -743,7 +748,7 @@ func _score() -> int:
 		"flick":
 			return maxi(0, _hits * int(_f("points_flick")) - miss)
 		"track":
-			return int(_on_target * _f("points_track_s"))
+			return maxi(0, int(_on_target * _f("points_track_s")) - miss)
 	return 0
 
 ## [name, value] rows for the panel, the summary and the --wtest line.
@@ -930,6 +935,8 @@ func _load_best() -> Dictionary:
 		var j := JSON.new()
 		if j.parse(FileAccess.get_file_as_string(f)) == OK and j.data is Dictionary:
 			return j.data
+		if FileAccess.file_exists(f + ".bad"):
+			DirAccess.remove_absolute(f + ".bad")  # keep the newest torn copy: a rename onto a file can fail
 		DirAccess.rename_absolute(f, f + ".bad")
 		push_warning("aim lobby: %s did not parse, kept as %s.bad" % [f, f])
 	return {}
@@ -957,8 +964,8 @@ func on_shot_fired() -> void:
 	_last_shot_at = _clock
 	_shot_frame = Engine.get_process_frames()
 	_shot_ok = _behind_line()
-	if main.weapons:
-		_used[String(main.weapons.held())] = true
+	_shot_weapon = String(main.weapons.held()) if main.weapons else ""
+	_used[_shot_weapon] = true
 
 ## Called by AimTarget.hit(). unit is the target root (a Bot, or the flick orb). A hit counts only in a round,
 ## in the same frame as a shot fired from behind the firing line, on a live target of this round.
@@ -984,31 +991,42 @@ func register_hit(unit: Node3D, dmg: float, head: bool, _at: Vector3, group: Str
 			_count(head)
 			if b.first_hit_at < 0.0:
 				b.first_hit_at = _last_shot_at
-			var d := dmg if head else dmg * _f("hitgroup_" + group)  # Weapons already applied the weapon's headshot multiplier
-			d = minf(_armour(b, d, "head" if head else group), b.hp)
+			var d := minf(_hit_damage(b, dmg, head, group, _shot_weapon), b.hp)
 			b.hp -= d
 			_damage += d
 			b.kick = _f("bot_flinch")
 			if b.hp <= 0.0:
 				_kill(b, head)
 
-## CS armour after the hitgroup scale: an armoured group (chest, stomach, arms; the head only with a helmet;
-## never the legs) takes the weapon's armor ratio x armor_ratio_scale to health, and the kevlar pays
-## armor_bonus of the rest, capped by what is left of it. Returns the health damage.
-func _armour(b: Bot, d: float, group: String) -> float:
-	if b.kevlar <= 0.0 or group == "legs" or (group == "head" and not b.helmet):
-		return d
+## One hit's health damage on a bot, in CS's order: the hitgroup scale (Weapons already applied the weapon's
+## headshot multiplier; the knife skips the scale unless knife_hitgroups), then armour with the firing weapon's
+## armor ratio, then whole points when damage_floor (CS keeps health as an integer). Pays the bot's kevlar.
+func _hit_damage(b: Bot, dmg: float, head: bool, group: String, weapon: String) -> float:
+	var id := weapon if weapon != "" else "knife"
 	var w: Node = main.weapons
 	if w == null:
-		return d
-	var bonus := float(w.X["armor_bonus"])
-	var health := d * float(w.stat(String(w.held()), "armor ratio")) * float(w.X["armor_ratio_scale"])
+		return _hit_health(b, dmg, head, group, id == "knife", 1.0, 1.0)
+	return _hit_health(b, dmg, head, group, id == "knife", float(w.stat(id, "armor ratio")) * float(w.X["armor_ratio_scale"]), float(w.X["armor_bonus"]))
+
+## _hit_damage with the armour terms given (the --lobbytest shots-to-kill table feeds CS2's own numbers).
+func _hit_health(b: Bot, dmg: float, head: bool, group: String, knife: bool, ratio: float, bonus: float) -> float:
+	var scale := 1.0 if head or (knife and not bool(V["knife_hitgroups"])) else _f("hitgroup_" + group)
+	var split := armour_split(dmg * scale, "head" if head else group, ratio, bonus, b.kevlar, b.helmet)
+	b.kevlar -= float(split[1])
+	return floorf(split[0]) if bool(V["damage_floor"]) else float(split[0])
+
+## CS armour: an armoured group (chest, stomach, arms; the head only with a helmet; never the legs) takes
+## ratio of the damage to health, and the kevlar pays bonus of the rest, capped by what is left of it.
+## Returns [health damage, kevlar paid].
+static func armour_split(d: float, group: String, ratio: float, bonus: float, kevlar: float, helmet: bool) -> Array:
+	if kevlar <= 0.0 or group == "legs" or (group == "head" and not helmet):
+		return [d, 0.0]
+	var health := d * ratio
 	var paid := (d - health) * bonus
-	if paid > b.kevlar:
-		health = d - b.kevlar / bonus
-		paid = b.kevlar
-	b.kevlar -= paid
-	return health
+	if paid > kevlar:
+		health = d - kevlar / bonus
+		paid = kevlar
+	return [health, paid]
 
 ## One hit per shot at most (a shotgun through two bots is still one shot that hit), so accuracy stays <= 100%.
 ## True when this is the shot's first hit.
@@ -1030,8 +1048,8 @@ func _count(head: bool) -> bool:
 func _track_credit_cap() -> float:
 	var cap := _f("track_credit_max_s")
 	var w: Node = main.weapons
-	if w and w.rows.has(String(w.held())):
-		var cyc := float(w.mstat(String(w.held()), "cycletime"))  # the held mode's cadence (burst, fan fire)
+	if w and w.rows.has(_shot_weapon):
+		var cyc := float(w.mstat(_shot_weapon, "cycletime"))  # the firing gun's mode cadence (burst, fan fire)
 		if cyc > 0.0:
 			cap = minf(cap, cyc)
 	return cap
@@ -1039,6 +1057,7 @@ func _track_credit_cap() -> float:
 func _kill(b: Bot, head: bool) -> void:
 	b.alive = false
 	b.down_at = _clock
+	b.fall_side = 1.0 if _rng.randf() < 0.5 else -1.0
 	_kills += 1
 	if head:
 		_hs_kills += 1
@@ -1057,9 +1076,11 @@ func _set_live(b: Bot, live: bool) -> void:
 	for o in b.bodies:
 		(o as CollisionObject3D).collision_layer = 1 if live else 0
 
-## Downed bots tip over backwards, then stand back up after bot_respawn_s on the round clock.
+## Live bots sway on their feet (bot_idle); downed bots tip over backwards with a twist, then stand back up
+## after bot_respawn_s on the round clock.
 func _tick_bots(dt: float) -> void:
 	var fall_s := maxf(_f("bot_fall_s"), 0.01)
+	var idle: Array = V["bot_idle"]
 	for t in _targets:
 		var b := t as Bot
 		if b == null or not is_instance_valid(b):
@@ -1079,7 +1100,11 @@ func _tick_bots(dt: float) -> void:
 				b.up_at = _clock
 				fall = 0.0
 				_set_live(b, true)
-		b.pose.rotation.x = -(b.kick + fall * PI * 0.5)
+		var ph := _clock * TAU * float(idle[1]) + b.phase
+		var still := 1.0 - fall
+		b.pose.rotation = Vector3(-(b.kick + fall * PI * 0.5) + deg_to_rad(float(idle[0])) * 0.5 * sin(ph * 0.7) * still,
+			deg_to_rad(float(idle[2])) * sin(ph * 0.37) * still + fall * b.fall_side * 0.5,
+			deg_to_rad(float(idle[0])) * sin(ph) * still + fall * b.fall_side * 0.25)
 
 func _feed_add(victim: String, head: bool) -> void:
 	var p := _pc(_feed, 0.6)
@@ -1093,7 +1118,7 @@ func _feed_add(victim: String, head: bool) -> void:
 	hb.add_theme_constant_override("separation", 10)
 	p.add_child(hb)
 	_lab(hb, 15, _col("ui_ct"), HORIZONTAL_ALIGNMENT_LEFT, "You")
-	_lab(hb, 15, Color(0.9, 0.9, 0.9), HORIZONTAL_ALIGNMENT_LEFT, _weapon_name(String(main.weapons.held()) if main.weapons else "").to_upper())
+	_lab(hb, 15, Color(0.9, 0.9, 0.9), HORIZONTAL_ALIGNMENT_LEFT, _weapon_name(_shot_weapon).to_upper())
 	if head:
 		_lab(hb, 15, Color(1, 0.85, 0.4), HORIZONTAL_ALIGNMENT_LEFT, "HS")
 	_lab(hb, 15, _col("ui_t"), HORIZONTAL_ALIGNMENT_LEFT, victim)
@@ -1120,7 +1145,7 @@ func _spawn_mode() -> void:
 		"track": _spawn_track()
 		"bots": _spawn_bots()
 
-func _target(unit: Node3D, shape: Shape3D, mesh: Mesh, mat: Material, xf: Transform3D, head: bool, group: String, parent: Node3D) -> AimTarget:
+func _target(unit: Node3D, shape: Shape3D, mesh: Mesh, mat: Material, xf: Transform3D, head: bool, group: String, parent: Node3D, shape_xf := Transform3D.IDENTITY) -> AimTarget:
 	var tb := AimTarget.new()
 	tb.lobby = self
 	tb.unit = unit if unit != null else tb
@@ -1135,15 +1160,21 @@ func _target(unit: Node3D, shape: Shape3D, mesh: Mesh, mat: Material, xf: Transf
 	tb.add_child(mi)
 	var cs := CollisionShape3D.new()
 	cs.shape = shape
+	cs.transform = shape_xf
 	tb.add_child(cs)
 	parent.add_child(tb)
 	return tb
 
 func _sphere(r: float) -> SphereMesh:
-	var m := SphereMesh.new()
-	m.radius = r
-	m.height = r * 2.0
-	return m
+	var key := "s%.4f" % r
+	if not _meshes.has(key):
+		var m := SphereMesh.new()
+		m.radius = r
+		m.height = r * 2.0
+		m.radial_segments = 32
+		m.rings = 16
+		_meshes[key] = m
+	return _meshes[key]
 
 func _spawn_flick() -> void:
 	var dr: Array = V["flick_dist"]
@@ -1177,52 +1208,103 @@ func _spawn_bots() -> void:
 
 # --- humanoid bots ---
 
-## A sheet part or prop in the bot frame (metres): [transform, mesh, collision shape or null, mesh scale].
-## sphere: b, when b.y is not zero, scales the mesh per axis (a zero axis stays 1; the hitbox stays the sphere).
-## rbox: a box hitbox drawn as a rounded pill of the same size (torso, pelvis, boots).
+## A sheet part or prop in the bot frame (metres): [transform, mesh, hitbox shape or null, mesh scale, hitbox
+## transform in the part]. sphere: centre a, radius r. capsule / taper: a to b, radius r at a and r2 at b (lathed,
+## so a limb narrows toward its joint). beam: a box from a to b, r half wide and r2 half tall (gun parts, feet).
+## box / rbox: centre a, size b. cylinder: centre a, height b.y. k scales the drawn mesh in the part's own axes
+## (x across, y along a to b, z depth). The hitbox is the undrawn shape, or the box 'hit' gives ([centre, size]).
 func _shape_of(r: Dictionary) -> Array:
 	var a := _a3(r["a"]) * H
 	var b := _a3(r["b"]) * H
 	var rad := float(r["r"]) * H
+	var rad2 := float(r.get("r2", r["r"])) * H
+	var k := _a3(r["k"]) if r.has("k") else Vector3.ONE
+	var out: Array
 	match String(r["shape"]):
 		"sphere":
 			var ss := SphereShape3D.new()
 			ss.radius = rad
-			var k := _a3(r["b"])
-			var sc := Vector3.ONE
-			if k.y > 0.0:
-				sc = Vector3(k.x if k.x > 0.0 else 1.0, k.y, k.z if k.z > 0.0 else 1.0)
-			return [Transform3D(Basis(), a), _sphere(rad), ss, sc]
+			out = [Transform3D(Basis(), a), _sphere(rad), ss, k]
 		"box", "rbox":
 			var bs := BoxShape3D.new()
 			bs.size = b
-			if String(r["shape"]) == "rbox":
-				var pill := CapsuleMesh.new()
-				pill.radius = 0.5
-				pill.height = 1.35
-				pill.radial_segments = 24
-				pill.rings = 6
-				return [Transform3D(Basis(), a), pill, bs, Vector3(b.x * 1.04, b.y / 1.35, b.z * 1.04)]
 			var bm := BoxMesh.new()
 			bm.size = b
-			return [Transform3D(Basis(), a), bm, bs, Vector3.ONE]
+			out = [Transform3D(Basis(), a), bm, bs, k]
 		"cylinder":
 			var cm := CylinderMesh.new()
 			cm.top_radius = rad
 			cm.bottom_radius = rad
 			cm.height = b.y
-			return [Transform3D(Basis(), a), cm, null, Vector3.ONE]
-	# capsule from a to b
-	var d := b - a
-	var y := d.normalized() if d.length() > 0.0001 else Vector3.UP
-	var x := y.cross(Vector3.BACK if absf(y.dot(Vector3.BACK)) < 0.99 else Vector3.RIGHT).normalized()
-	var mesh := CapsuleMesh.new()
-	mesh.radius = rad
-	mesh.height = d.length() + rad * 2.0
-	var cs := CapsuleShape3D.new()
-	cs.radius = rad
-	cs.height = mesh.height
-	return [Transform3D(Basis(x, y, x.cross(y)), (a + b) * 0.5), mesh, cs, Vector3.ONE]
+			out = [Transform3D(Basis(), a), cm, null, k]
+		_:
+			# capsule, taper, beam: laid from a to b, x kept level so a beam's height stands up
+			var d := b - a
+			var y := d.normalized() if d.length() > 0.0001 else Vector3.UP
+			var ref := Vector3.RIGHT if absf(y.dot(Vector3.UP)) > 0.99 else Vector3.UP.cross(y)
+			var x := (ref - y * ref.dot(y)).normalized()
+			var xf := Transform3D(Basis(x, y, x.cross(y)), (a + b) * 0.5)
+			if String(r["shape"]) == "beam":
+				var beam := BoxShape3D.new()
+				beam.size = Vector3(rad * 2.0, d.length(), rad2 * 2.0)
+				out = [xf, _cached_box(beam.size), beam, k]
+			else:
+				var cs := CapsuleShape3D.new()
+				cs.radius = maxf(rad, rad2)
+				cs.height = d.length() + cs.radius * 2.0
+				out = [xf, _taper_mesh(rad, rad2, d.length()), cs, k]
+	out.append(Transform3D.IDENTITY)
+	var hb: Variant = r.get("hit", "auto")
+	if hb is Array:
+		var box := BoxShape3D.new()
+		box.size = Vector3(float(hb[3]), float(hb[4]), float(hb[5])) * H
+		out[2] = box
+		out[4] = (out[0] as Transform3D).affine_inverse() * Transform3D(Basis(), Vector3(float(hb[0]), float(hb[1]), float(hb[2])) * H)
+	return out
+
+var _meshes := {}
+
+func _cached_box(size: Vector3) -> BoxMesh:
+	var key := "b%s" % size
+	if not _meshes.has(key):
+		var m := BoxMesh.new()
+		m.size = size
+		_meshes[key] = m
+	return _meshes[key]
+
+## A capsule whose two end radii differ: a lathe along y from r1 at -len/2 to r2 at +len/2, round caps.
+func _taper_mesh(r1: float, r2: float, len: float) -> ArrayMesh:
+	var key := "t%.4f/%.4f/%.4f" % [r1, r2, len]
+	if _meshes.has(key):
+		return _meshes[key]
+	var seg := 18
+	var cap := 5
+	var prof: Array = []  # [radius, y, normal xz, normal y]
+	var slope := asin(clampf((r1 - r2) / maxf(len, 0.0001), -0.99, 0.99))  # the side's tilt, tangent to both caps
+	for i in cap + 1:
+		var t := lerpf(-PI * 0.5, slope, float(i) / cap)
+		prof.append([r1 * cos(t), -len * 0.5 + r1 * sin(t), cos(t), sin(t)])
+	for i in cap + 1:
+		var t := lerpf(slope, PI * 0.5, float(i) / cap)
+		prof.append([r2 * cos(t), len * 0.5 + r2 * sin(t), cos(t), sin(t)])
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for j in prof.size():
+		var p: Array = prof[j]
+		for i in seg + 1:
+			var t := TAU * i / seg
+			st.set_normal(Vector3(cos(t) * float(p[2]), float(p[3]), sin(t) * float(p[2])))
+			st.set_uv(Vector2(float(i) / seg, float(j) / (prof.size() - 1)))
+			st.add_vertex(Vector3(cos(t) * float(p[0]), float(p[1]), sin(t) * float(p[0])))
+	for j in prof.size() - 1:
+		for i in seg:
+			var a := j * (seg + 1) + i
+			var b := a + seg + 1
+			for v in [a, a + 1, b, a + 1, b + 1, b]:
+				st.add_index(v)
+	var m := st.commit()
+	_meshes[key] = m
+	return m
 
 func _cloth_tex(normal: bool) -> NoiseTexture2D:
 	var n := FastNoiseLite.new()
@@ -1290,20 +1372,21 @@ func _bot(at: Vector3, yaw_deg: float, outfit: int, tag: String) -> Bot:
 	b.helmet = bool(V["bot_helmet"])
 	b.position = center + at
 	b.rotation_degrees.y = yaw_deg
+	b.phase = _rng.randf() * TAU
 	b.pose = Node3D.new()
 	b.add_child(b.pose)
 	add_child(b)
 	var by_id := {}
 	for r in S["parts"]:
 		var s := _shape_of(r)
-		var tb := _target(b, s[2], s[1], _slot_mat(outfit, String(r["slot"])), s[0], String(r["group"]) == "head", String(r["group"]), b.pose)
+		var tb := _target(b, s[2], s[1], _slot_mat(outfit, String(r["slot"])), s[0], String(r["group"]) == "head", String(r["group"]), b.pose, s[4])
 		(tb.get_child(0) as MeshInstance3D).scale = s[3]
 		b.bodies.append(tb)
 		by_id[String(r["id"])] = tb
-	var head_gear := String(o["head"])
+	var gear: Array = o["gear"]
 	for r in S["props"]:
 		var when := String(r["when"])
-		if not (when == "always" or (when == "face" and bool(o["face"])) or when == head_gear or when == String(o["chest"])):
+		if not (when == "always" or gear.has(when)):
 			continue
 		var on: Node3D = by_id.get(String(r["on"]))
 		if on == null:
@@ -1347,6 +1430,12 @@ func _part(b: Bot, id: String) -> AimTarget:
 		i += 1
 	return null
 
+## --lobbytest: a shot fired with weapon id (the test player holds the knife when no CS2 gun is exported).
+func _fire(id := "cs2_ak47") -> void:
+	on_shot_fired()
+	if _state == "round":
+		_shot_weapon = id
+
 func _selftest() -> void:
 	for i in 5:
 		await get_tree().process_frame
@@ -1361,28 +1450,28 @@ func _selftest() -> void:
 	var b2 := _targets[2] as Bot
 	_part(b0, "head").hit(400.0, true, Vector3.ZERO)
 	ok = _check("hit with no shot ignored", _hits == 0 and b0.hp == 100.0, _stats_line()) and ok
-	on_shot_fired()
+	_fire()
 	_part(b0, "head").hit(400.0, true, Vector3.ZERO)
 	ok = _check("headshot kill", _kills == 1 and _hs_kills == 1 and _hits == 1 and not b0.alive, _stats_line()) and ok
-	on_shot_fired()
+	_fire()
 	_part(b1, "thigh_l").hit(100.0, false, Vector3.ZERO)
 	ok = _check("legs x0.75", is_equal_approx(b1.hp, 25.0), b1.hp) and ok
 	_part(b2, "chest").hit(30.0, false, Vector3.ZERO)
 	ok = _check("two bots in one shot = one hit", _hits == 2 and _shots == 2, _stats_line()) and ok
 	await get_tree().process_frame
 	await get_tree().process_frame
-	on_shot_fired()
+	_fire()
 	_part(b1, "stomach").hit(400.0, false, Vector3.ZERO)
 	ok = _check("second-shot kill: ttk from its first hit > 0, one-tap ttk 0", _kills == 2 and _hs_kills == 1 and _ttk.size() == 2 and _ttk[0] == 0.0 and _ttk[1] > 0.0, _ttk) and ok
-	on_shot_fired()
+	_fire()
 	_part(b0, "head").hit(400.0, true, Vector3.ZERO)
 	ok = _check("dead bot ignored", _kills == 2 and _hits == 3, _stats_line()) and ok
-	on_shot_fired()
-	on_shot_fired()
+	_fire()
+	_fire()
 	ok = _check("misses cost points", _score() == 2 * 100 + 50 - 3 * 10, _score()) and ok
 	var p: SurfPlayer = main.player
 	p.global_position = to_global(Vector3(0, 0.05, _f("firing_line_z") - 2.0))
-	on_shot_fired()
+	_fire()
 	_part(b2, "head").hit(400.0, true, Vector3.ZERO)
 	ok = _check("shot from past the line ignored", _kills == 2 and b2.alive, _stats_line()) and ok
 	p.global_position = spawn_pos()
@@ -1394,11 +1483,11 @@ func _selftest() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	ok = _check("summary", _state == "summary" and _summary.visible and _targets.is_empty(), _sum_body.text.replace("\n", " | ")) and ok
-	on_shot_fired()
+	_fire()
 	ok = _check("no shots after the round", _shots == 7, _shots) and ok
 	_quick = false
 	_start_round()
-	on_shot_fired()
+	_fire()
 	ok = _check("countdown first, shots not counted", _state == "countdown" and _shots == 0 and _left > 0.0, "%.1f s left" % _left) and ok
 	t0 = Time.get_ticks_msec()
 	while _state == "countdown" and Time.get_ticks_msec() - t0 < 8000:
@@ -1416,28 +1505,30 @@ func _selftest() -> void:
 	ok = _check("track: no shots, no time", _on_target == 0.0, _on_target) and ok
 	_part(tb, "chest").hit(30.0, false, Vector3.ZERO)
 	ok = _check("track: hit without a shot earns nothing", _on_target == 0.0 and _hits == 0, _on_target) and ok
-	on_shot_fired()
+	_fire()
 	_part(tb, "chest").hit(30.0, false, Vector3.ZERO)
 	_part(tb, "head").hit(30.0, true, Vector3.ZERO)
 	var one := _on_target
 	ok = _check("track: one shot credits one capped gap", one > 0.0 and one <= _track_credit_cap() + 0.0001 and _hits == 1, "%.3f s" % one) and ok
-	on_shot_fired()
+	_fire()
 	ok = _check("track: a miss earns nothing", _on_target == one and _hits == 1, _on_target) and ok
-	on_shot_fired()
+	_fire()
 	_part(tb, "chest").hit(30.0, false, Vector3.ZERO)
 	ok = _check("track: same-frame shot after a shot earns ~0", _on_target - one < 0.0001, _on_target - one) and ok
+	_on_target += 1.0  # a full second on target, so the miss cost shows above the floor of 0
+	ok = _check("track: misses cost points", _score() == maxi(0, int(_on_target * _f("points_track_s")) - (_shots - _hits) * int(_f("points_miss"))) and _shots > _hits, _score()) and ok
 	# bots: one shot that kills two bots adds one time-to-kill, not a zero
 	mode = "bots"
 	_start_round()
 	await get_tree().process_frame
 	await get_tree().process_frame
-	on_shot_fired()
+	_fire()
 	_part(_targets[0] as Bot, "head").hit(400.0, true, Vector3.ZERO)
 	_part(_targets[1] as Bot, "head").hit(400.0, true, Vector3.ZERO)
 	ok = _check("double kill by one shot: one hit, two kills, one kill interval > 0", _kills == 2 and _hits == 1 and _ttk.size() == 2 and _gaps.size() == 1 and _gaps[0] > 0.0, _gaps) and ok
 	# armour, CS order: hitgroup scale first, then the split; legs never armoured, the head only with a helmet
 	var w: Node = main.weapons
-	var ratio := float(w.stat(String(w.held()), "armor ratio")) * float(w.X["armor_ratio_scale"])
+	var ratio := float(w.stat("cs2_ak47", "armor ratio")) * float(w.X["armor_ratio_scale"])
 	var bonus := float(w.X["armor_bonus"])
 	var ba := _targets[2] as Bot
 	var bl := _targets[3] as Bot
@@ -1446,18 +1537,44 @@ func _selftest() -> void:
 	bl.kevlar = 100.0
 	bh.kevlar = 100.0
 	bh.helmet = false
-	on_shot_fired()
+	_fire()
 	_part(ba, "stomach").hit(40.0, false, Vector3.ZERO)
 	_part(bl, "thigh_r").hit(40.0, false, Vector3.ZERO)
 	_part(bh, "head").hit(40.0, true, Vector3.ZERO)
-	var hp_a := 50.0 * ratio
-	ok = _check("armour: stomach x1.25 then split", is_equal_approx(ba.hp, 100.0 - hp_a) and is_equal_approx(ba.kevlar, 100.0 - (50.0 - hp_a) * bonus), "hp %.2f kevlar %.2f" % [ba.hp, ba.kevlar]) and ok
+	var hp_a := floorf(50.0 * ratio)
+	ok = _check("armour: stomach x1.25 then split, whole points", is_equal_approx(ba.hp, 100.0 - hp_a) and is_equal_approx(ba.kevlar, 100.0 - (50.0 - 50.0 * ratio) * bonus), "hp %.2f kevlar %.2f" % [ba.hp, ba.kevlar]) and ok
 	ok = _check("armour: legs unarmoured", is_equal_approx(bl.hp, 70.0) and bl.kevlar == 100.0, "hp %.2f kevlar %.2f" % [bl.hp, bl.kevlar]) and ok
 	ok = _check("armour: no helmet, full head damage", is_equal_approx(bh.hp, 60.0) and bh.kevlar == 100.0, "hp %.2f" % bh.hp) and ok
 	bl.kevlar = 1.0
-	on_shot_fired()
+	_fire()
 	_part(bl, "chest").hit(40.0, false, Vector3.ZERO)
-	ok = _check("armour: worn-out kevlar caps what it absorbs", is_equal_approx(bl.hp, 70.0 - (40.0 - 1.0 / bonus)) and bl.kevlar == 0.0, "hp %.2f" % bl.hp) and ok
+	ok = _check("armour: worn-out kevlar caps what it absorbs", is_equal_approx(bl.hp, 70.0 - floorf(40.0 - 1.0 / bonus)) and bl.kevlar == 0.0, "hp %.2f" % bl.hp) and ok
+	# the knife: no hitgroup scale (knife_hitgroups false), still armoured on the body
+	var bk := _targets[6] as Bot
+	bk.kevlar = 0.0
+	_fire("knife")
+	_part(bk, "thigh_l").hit(65.0, false, Vector3.ZERO)
+	ok = _check("knife: legs take the full stab", is_equal_approx(bk.hp, 100.0 - (65.0 if not bool(V["knife_hitgroups"]) else floorf(65.0 * _f("hitgroup_legs")))), bk.hp) and ok
+	# the shot's own weapon decides the armour, not the one held when the hit lands (here the knife is held)
+	var bw := _targets[7] as Bot
+	bw.kevlar = 100.0
+	_fire("cs2_ak47")
+	_part(bw, "chest").hit(36.0, false, Vector3.ZERO)
+	ok = _check("armour ratio from the firing weapon", is_equal_approx(bw.hp, 100.0 - floorf(36.0 * ratio)), "hp %.0f, held %s, knife ratio %.3f, ak ratio %.3f" % [bw.hp, main.weapons.held(), float(w.stat("knife", "armor ratio")) * float(w.X["armor_ratio_scale"]), ratio]) and ok
+	# shots to kill, CS2's numbers: damage, armor ratio and headshot multiplier from the stk_checks table
+	var scale := float(w.X["armor_ratio_scale"])
+	for r in S["stk_checks"]:
+		var sb := Bot.new()
+		sb.kevlar = float(r["kevlar"])
+		sb.helmet = bool(r["helmet"])
+		var hd := String(r["group"]) == "head"
+		var n := 0
+		while sb.hp > 0.0 and n < 30:
+			var dm := float(r["damage"]) * (float(r["hs_mult"]) if hd else 1.0)
+			sb.hp -= minf(_hit_health(sb, dm, hd, String(r["group"]), false, float(r["armor_ratio"]) * scale, bonus), sb.hp)
+			n += 1
+		sb.free()
+		ok = _check("shots to kill: %s" % r["id"], n == int(r["shots"]), "%d (want %d)" % [n, int(r["shots"])]) and ok
 	ok = _check("sheet: bots wear kevlar and helmet", ba.helmet == bool(V["bot_helmet"]) and (_targets[5] as Bot).kevlar == _f("bot_armor"), _f("bot_armor")) and ok
 	# best file: whole-file save through a temp file; an unparsable file is set aside, not silently lost
 	var keep := String(V["best_file"])
@@ -1472,6 +1589,11 @@ func _selftest() -> void:
 	bf.close()
 	back = _load_best()
 	ok = _check("torn best file set aside as .bad", back.is_empty() and FileAccess.file_exists(String(V["best_file"]) + ".bad"), back) and ok
+	bf = FileAccess.open(String(V["best_file"]), FileAccess.WRITE)
+	bf.store_string("{\"bots|ak47\": 99")
+	bf.close()
+	back = _load_best()
+	ok = _check("second torn file replaces the old .bad", back.is_empty() and not FileAccess.file_exists(String(V["best_file"])) and FileAccess.get_file_as_string(String(V["best_file"]) + ".bad").ends_with("99"), back) and ok
 	for f in ["", ".tmp", ".bad"]:
 		if FileAccess.file_exists(String(V["best_file"]) + f):
 			DirAccess.remove_absolute(String(V["best_file"]) + f)

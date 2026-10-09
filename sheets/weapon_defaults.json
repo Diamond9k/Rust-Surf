@@ -1,6 +1,6 @@
 {
  "_sheet": "weapon_defaults",
- "_doc": "rows: fallback stats per weapon class, used only for a value the player's items_game.txt (prep -> cs2/weapon_stats.json, plus the raw cs2/scripts/items/items_game.txt for keys prep does not list) does not give. Every value is unverified and loses to the real file. mechanics: the constants of the gun model around those stats (recoil punch, spread, penetration, armor, knife, scope). Most are CS:GO SDK defaults that CS2 may have changed, so each says so.",
+ "_doc": "rows: fallback stats per weapon class, used only for a value the player's items_game.txt (prep -> cs2/weapon_stats.json, plus the raw cs2/scripts/items/items_game.txt for keys prep does not list) does not give. Every value is unverified and loses to the real file. mechanics: the constants of the gun model around those stats (recoil punch, spread, penetration, armor, knife, scope, reload, viewmodel kicks). Most are CS:GO SDK defaults that CS2 may have changed, so each says so.",
  "columns": [
   "id",
   "damage",
@@ -31,6 +31,7 @@
   "recoil_mag_var",
   "recovery_stand",
   "recovery_crouch",
+  "reload_time",
   "zoom_levels",
   "zoom_fov_1",
   "zoom_fov_2",
@@ -68,6 +69,7 @@
    "recoil_mag_var": 1,
    "recovery_stand": 0.35,
    "recovery_crouch": 0.3,
+   "reload_time": 2.45,
    "zoom_levels": 1,
    "zoom_fov_1": 45,
    "zoom_fov_2": 45,
@@ -104,6 +106,7 @@
    "recoil_mag_var": 5,
    "recovery_stand": 0.25,
    "recovery_crouch": 0.18,
+   "reload_time": 3.0,
    "zoom_levels": 2,
    "zoom_fov_1": 40,
    "zoom_fov_2": 15,
@@ -140,6 +143,7 @@
    "recoil_mag_var": 1,
    "recovery_stand": 0.3,
    "recovery_crouch": 0.25,
+   "reload_time": 2.25,
    "zoom_levels": 0,
    "zoom_fov_1": 90,
    "zoom_fov_2": 90,
@@ -176,6 +180,7 @@
    "recoil_mag_var": 10,
    "recovery_stand": 0.4,
    "recovery_crouch": 0.35,
+   "reload_time": 3.0,
    "zoom_levels": 0,
    "zoom_fov_1": 90,
    "zoom_fov_2": 90,
@@ -212,6 +217,7 @@
    "recoil_mag_var": 1,
    "recovery_stand": 0.3,
    "recovery_crouch": 0.25,
+   "reload_time": 2.2,
    "zoom_levels": 0,
    "zoom_fov_1": 90,
    "zoom_fov_2": 90,
@@ -248,6 +254,7 @@
    "recoil_mag_var": 0,
    "recovery_stand": 0.3,
    "recovery_crouch": 0.3,
+   "reload_time": 0.0,
    "zoom_levels": 0,
    "zoom_fov_1": 90,
    "zoom_fov_2": 90,
@@ -284,6 +291,7 @@
    "recoil_mag_var": 0,
    "recovery_stand": 0.3,
    "recovery_crouch": 0.3,
+   "reload_time": 0.0,
    "zoom_levels": 0,
    "zoom_fov_1": 90,
    "zoom_fov_2": 90,
@@ -386,7 +394,7 @@
   {
    "id": "move_inacc_start",
    "value": 0.34,
-   "used_in": "movement inaccuracy starts at this share of the weapon's max speed",
+   "used_in": "movement inaccuracy starts at this share of the weapon's max speed (CS_PLAYER_SPEED_DUCK_MODIFIER)",
    "source": "CS:GO GetInaccuracy remap",
    "verified": "unverified for CS2"
   },
@@ -445,6 +453,13 @@
    "used_in": "seconds to screw a silencer on or off when the weapon has no clip for it",
    "source": "mashup estimate",
    "verified": "unverified: CS2 timing not checked"
+  },
+  {
+   "id": "draw_min",
+   "value": 0.3,
+   "used_in": "seconds a drawn gun cannot fire, reload or toggle when its draw clip is shorter (or missing)",
+   "source": "mashup floor, matches earlier builds",
+   "verified": "unverified: mashup choice, not a CS2 value (CS2 uses each gun's deploy time)"
   },
   {
    "id": "bolt_cycletime",
@@ -772,6 +787,131 @@
    "id": "vm_sway_ease",
    "value": 10.0,
    "used_in": "Viewmodel.gd: how fast the rig catches up with the view, per second",
+   "source": "mashup tuning",
+   "verified": "unverified: mashup tuning, not a CS2 value"
+  },
+  {
+   "id": "move_inacc_power",
+   "value": 0.25,
+   "used_in": "movement inaccuracy share = remap(speed)^this when not walking (a run gets most of the move cone early)",
+   "source": "CS:GO GetInaccuracy powf(scale, 0.25) on the movement remap (from memory of the SDK)",
+   "verified": "unverified for CS2 (CS:GO SDK from memory)"
+  },
+  {
+   "id": "falloff_cumulative",
+   "value": 1,
+   "used_in": "1: range falloff multiplies by range modifier^(total distance flown/500) at every surface (CS:GO FireBullet compounds on wallbangs); 0: per segment",
+   "source": "CS:GO FireBullet flCurrentDistance loop (from memory of the SDK)",
+   "verified": "unverified for CS2 (CS:GO SDK from memory)"
+  },
+  {
+   "id": "auto_reload",
+   "value": 1,
+   "used_in": "1: an empty gun reloads by itself once the trigger is let go (a held empty trigger dry-fires); 0: only R reloads",
+   "source": "CS:GO ItemPostFrame auto-reload on an empty clip with attack released (from memory)",
+   "verified": "unverified for CS2 (CS:GO behaviour from memory)"
+  },
+  {
+   "id": "dry_fire_delay",
+   "value": 0.2,
+   "used_in": "seconds between dry-fire clicks while an empty trigger is held",
+   "source": "CS:GO PlayEmptySound next attack + 0.2 (from memory)",
+   "verified": "unverified for CS2 (CS:GO SDK from memory)"
+  },
+  {
+   "id": "silencer_mesh_match",
+   "value": "silenc,suppress",
+   "used_in": "comma list: weapon meshes whose node name contains one of these are hidden while the silencer is off (a graceful no-op when the exported model names none)",
+   "source": "mashup guess at how the exported CS2 model names its silencer part",
+   "verified": "unverified: the exported M4A1-S / USP-S mesh names were not read (no CS2 guns extracted here)"
+  },
+  {
+   "id": "vm_kick_shot",
+   "value": [
+    0.12,
+    0.0,
+    0.004,
+    0.025,
+    2.5,
+    0.0,
+    0.0
+   ],
+   "used_in": "Viewmodel.gd procedural move when a gun has no shoot clip: [seconds, x, y, z m, pitch, yaw, roll deg], out and back",
+   "source": "mashup tuning",
+   "verified": "unverified: mashup tuning, not a CS2 value"
+  },
+  {
+   "id": "vm_kick_slash",
+   "value": [
+    0.35,
+    0.05,
+    0.02,
+    -0.04,
+    0.0,
+    -25.0,
+    30.0
+   ],
+   "used_in": "Viewmodel.gd knife slash: [seconds, x start, y, z m, pitch, yaw start deg, roll deg]; x sweeps to -x*1.6 and yaw to -yaw*1.4",
+   "source": "mashup tuning (the knife's attack clips are not extracted)",
+   "verified": "unverified: mashup tuning, not a CS2 value"
+  },
+  {
+   "id": "vm_kick_stab",
+   "value": [
+    0.5,
+    -0.03,
+    0.03,
+    -0.12,
+    -12.0,
+    10.0,
+    0.0
+   ],
+   "used_in": "Viewmodel.gd knife stab: [seconds, x, y, z m, pitch, yaw, roll deg], out and back",
+   "source": "mashup tuning (the knife's attack clips are not extracted)",
+   "verified": "unverified: mashup tuning, not a CS2 value"
+  },
+  {
+   "id": "vm_kick_shell",
+   "value": [
+    0.32,
+    0.01,
+    -0.02,
+    0.01,
+    -6.0,
+    0.0,
+    -8.0
+   ],
+   "used_in": "Viewmodel.gd one shotgun shell pushed in when the gun has no reload_insert clip: [seconds, x, y, z m, pitch, yaw, roll deg]",
+   "source": "mashup tuning",
+   "verified": "unverified: mashup tuning, not a CS2 value"
+  },
+  {
+   "id": "vm_kick_silencer",
+   "value": [
+    1.0,
+    -0.02,
+    -0.03,
+    0.02,
+    -10.0,
+    15.0,
+    -20.0
+   ],
+   "used_in": "Viewmodel.gd silencer screwed on or off when the gun has no silencer clip: [share of silencer_time, x, y, z m, pitch, yaw, roll deg], with a twist wobble",
+   "source": "mashup tuning",
+   "verified": "unverified: mashup tuning, not a CS2 value"
+  },
+  {
+   "id": "vm_kick_dry",
+   "value": [
+    0.1,
+    0.0,
+    0.0,
+    0.008,
+    1.0,
+    0.0,
+    0.0
+   ],
+   "used_in": "Viewmodel.gd dry-fire twitch of an empty gun: [seconds, x, y, z m, pitch, yaw, roll deg]",
    "source": "mashup tuning",
    "verified": "unverified: mashup tuning, not a CS2 value"
   }

@@ -264,8 +264,10 @@ def write_json(path, data):
 
 def write_stats(outdir, ws, here=HERE):
     """items_game.txt (and weapons.vdata for what it lacks) -> weapon_stats.json. Returns (problems, warnings).
-    A weapon without every stats_required attribute as a number is a problem: guns never silently run on class
-    averages (stats_light_slots guns need stats_required_light). stats_expected gaps are warnings."""
+    A weapon without every stats_required attribute as a number is never silent: a player-visible warning naming
+    the weapon and keys, or a problem when stats_required_blocks is yes (stats_light_slots guns need only
+    stats_required_light). No readable stats file, or no entry for a weapon, is always a problem.
+    stats_expected gaps are warnings."""
     cfg = settings(here)
     vd = sheet("prep", here)["vdata_keys"]
     light = set(keys(cfg["stats_light_slots"]))
@@ -307,14 +309,22 @@ def write_stats(outdir, ws, here=HERE):
     thin = ["%s (%s)" % (n, "/".join(m)) for n, m in thin.items() if m]
     for x in thin:
         LOG("  stats missing: " + x)
-    if thin:
+    if thin and blocks(cfg):
         problems.append("CS2 gave no usable value for some stats of %d weapon(s): %s. Setup stops rather than run those guns on "
                         "guessed numbers; a CS2 update probably moved the stats, so Rust Surf needs an update" % (len(thin), short(thin, 3)))
+    elif thin:
+        warnings.append("%d gun(s) play on class-average stats because this CS2 version's files did not give them: %s. "
+                        "Rust Surf needs an update for this CS2 version; setup again will not fix it" % (len(thin), short(thin, 3)))
     want = keys(cfg["stats_expected"])
     part = ["%s (%s)" % (n, "/".join(k for k in want if not number(st[n].get(k)))) for n in names if n in st and not all(number(st[n].get(k)) for k in want)]
     if part:
         warnings.append("%d weapon(s) use class averages for some stats: %s" % (len(part), short(part, 3)))
     return problems, warnings
+
+
+def blocks(cfg):
+    """stats_required_blocks: yes stops setup on a stats_required gap, anything else makes it a warning."""
+    return str(cfg.get("stats_required_blocks", "no")).strip().lower() in ("yes", "true", "1")
 
 
 def keys(cell):

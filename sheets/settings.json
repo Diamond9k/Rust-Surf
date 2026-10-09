@@ -408,6 +408,21 @@
       "verified": "convar name from CS:GO; default unverified: not checked against the CS2 client"
     },
     {
+      "id": "cl_crosshair_recoil",
+      "tab": "crosshair",
+      "section": "Shape",
+      "label": "Follow recoil",
+      "kind": "toggle",
+      "convar": "cl_crosshair_recoil",
+      "min": 0,
+      "max": 1,
+      "step": 1,
+      "default": 0,
+      "choices": "No|Yes",
+      "applies_to": "Hud._recoil_px: the crosshair moves to where the bullets go (aim punch x recoil_scale less what the camera shows)",
+      "verified": "convar name and its 'Follow Recoil' menu option from memory of a 2024 CS2 update, unverified: not checked against the CS2 client"
+    },
+    {
       "id": "cl_crosshair_drawoutline",
       "tab": "crosshair",
       "section": "Outline",

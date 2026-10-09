@@ -1,6 +1,6 @@
 {
   "_sheet": "aim_lobby",
-  "_doc": "The aim-train range far above the surf course. Lengths in metres, positions in the range frame: origin at 'center', turned range_yaw about y (x right, y up, z toward the spawn; lanes run toward -z). Distances are measured from the firing line. Bot size is movement.json hull_height (72 u), so 'parts' and 'props' positions are fractions of that height in the bot's own frame (x to its left as you face it, z toward the player). A part is a hittable body in a hitgroup; a prop is a mesh riding on a part (when: always, face = outfits whose 'face' is true, otherwise the outfit's head or chest gear: wrap / can / hood / mask, plate / rig). A sphere's 'b', when b.y is not zero, scales its mesh per axis (0 = 1; the hitbox stays the sphere of radius r). An 'rbox' is a box hitbox drawn as a rounded pill of the same size. Time to kill runs from the shot that first hit that bot to its death (a one-tap is 0 ms); the kill interval runs from the later of the bot standing up (or the round starting) and your previous kill, and a second kill by the same shot adds no interval.",
+  "_doc": "The aim-train range far above the surf course. Lengths in metres, positions in the range frame: origin at 'center', turned range_yaw about y (x right, y up, z toward the spawn; lanes run toward -z). Distances are measured from the firing line. Bot size is movement.json hull_height (72 u), so 'parts' and 'props' positions are fractions of that height in the bot's own frame (x to its left as you face it, z toward the player). A part is a hittable body in a hitgroup; a prop is a mesh riding on a part, drawn when its 'when' is 'always' or one of the outfit's 'gear' tags. Shapes: sphere (centre a, radius r; b unused), taper or capsule (from a to b, radius r at a and r2 at b), beam (a box from a to b, r half wide, r2 half tall), box (centre a, size b), cylinder (centre a, height b.y). k scales the drawn mesh in the shape's own axes (x across, y along a to b, z depth); the hitbox is the undrawn shape, or the box 'hit' gives as [centre x, y, z, size x, y, z]. Time to kill runs from the shot that first hit that bot to its death (a one-tap is 0 ms); the kill interval runs from the later of the bot standing up (or the round starting) and your previous kill, and a second kill by the same shot adds no interval.",
   "columns": [
     "id",
     "value",
@@ -166,7 +166,7 @@
     {
       "id": "points_miss",
       "value": 10,
-      "what": "every mode except track: score lost per shot that hit nothing. A shot fired from in front of the firing line counts as a shot and can never hit (its hits are refused), so it always costs this; the score never goes below 0",
+      "what": "every mode: score lost per shot that hit nothing (track takes it off the time-on-target points). A shot fired from in front of the firing line counts as a shot and can never hit (its hits are refused), so it always costs this; the score never goes below 0",
       "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
@@ -296,9 +296,15 @@
     },
     {
       "id": "lane_floor_number",
-      "value": 1.6,
+      "value": 1.2,
       "what": "height of the lane number painted on the floor in front of the firing line (m)",
-      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
+      "verified": "2026-10-09 design value (Gauntlet round 4): cut from 1.6 m so the number at the player's feet no longer reads as a HUD countdown digit; rendered in lobby_r1 renders"
+    },
+    {
+      "id": "floor_paint_alpha",
+      "value": 0.6,
+      "what": "opacity of the numbers painted on the range floor (lane numbers, distance marks): worn road paint, so the concrete shows through",
+      "verified": "2026-10-09 design value (Gauntlet round 4): by eye in lobby_r1 renders; not taken from aim_botz"
     },
     {
       "id": "distance_text",
@@ -709,6 +715,16 @@
       "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
+      "id": "bot_idle",
+      "value": [
+        0.8,
+        0.22,
+        2.5
+      ],
+      "what": "live bots' idle motion about their feet: side sway amplitude (degrees, half of it forward and back), sway cycles per second, slow look-around yaw amplitude (degrees). Hitboxes move with the body",
+      "verified": "2026-10-09 design value (Gauntlet round 4): small enough that a held headshot stays on the head at 10 m (0.8 degrees sways the head about 2.4 cm); rendered in lobby_r1 renders; not taken from CS2"
+    },
+    {
       "id": "hitgroup_head",
       "value": 4.0,
       "what": "CS2 head multiplier; Weapons.gd already applies the weapon's own 'headshot multiplier', so the lobby does not apply it again",
@@ -737,6 +753,18 @@
       "value": 0.75,
       "what": "leg and foot damage multiplier",
       "verified": "unverified: commonly documented CS:GO hitgroup value, not read from CS2 game files here; also design value for the lobby"
+    },
+    {
+      "id": "knife_hitgroups",
+      "value": false,
+      "what": "false: a knife hit does its listed damage wherever it lands (no hitgroup scale; Weapons gives the knife no headshot multiplier either). true scales knife hits like bullets",
+      "verified": "unverified: CS:GO knife damage reads as fixed per swing in community damage tables (from memory); not checked in CS2 here"
+    },
+    {
+      "id": "damage_floor",
+      "value": true,
+      "what": "true: each hit's health damage, after hitgroup and armour, is cut to whole points (CS keeps health as an integer), so fractional damage never piles up into an early kill",
+      "verified": "unverified: CS:GO truncates damage to an int when it reaches health (SDK, from memory); not checked in CS2 here; the --lobbytest shots-to-kill table agrees with it"
     },
     {
       "id": "flick_radius",
@@ -957,6 +985,9 @@
     "a",
     "b",
     "r",
+    "r2",
+    "k",
+    "hit",
     "slot",
     "verified"
   ],
@@ -966,1045 +997,2007 @@
       "group": "head",
       "shape": "sphere",
       "a": [
-        0,
-        0.925,
-        0.01
+        0.0,
+        0.9203,
+        0.0137
       ],
       "b": [
-        0.86,
-        1.12,
-        0.95
+        0,
+        0,
+        0
       ],
       "r": 0.064,
+      "r2": 0.064,
+      "k": [
+        0.8,
+        1.0,
+        0.9
+      ],
+      "hit": "auto",
       "slot": "skin",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model; the round hitbox is about 2 cm wider than the drawn head on each side"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model; the round hitbox is about 2.5 cm wider than the drawn head on each side"
     },
     {
       "id": "neck",
       "group": "chest",
-      "shape": "capsule",
+      "shape": "taper",
       "a": [
-        0,
-        0.83,
-        0
+        0.0,
+        0.8202,
+        0.0
       ],
       "b": [
-        0,
-        0.875,
-        0.005
+        0.0,
+        0.8749,
+        0.0082
       ],
-      "r": 0.034,
+      "r": 0.0317,
+      "r2": 0.0273,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "hit": "auto",
       "slot": "skin",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "chest",
       "group": "chest",
-      "shape": "rbox",
+      "shape": "taper",
       "a": [
-        0,
-        0.725,
-        0
+        0.0,
+        0.6753,
+        0.0
       ],
       "b": [
-        0.235,
-        0.2,
-        0.125
+        0.0,
+        0.7573,
+        0.0027
       ],
-      "r": 0,
+      "r": 0.0853,
+      "r2": 0.0962,
+      "k": [
+        1,
+        1,
+        0.64
+      ],
+      "hit": [
+        0.0,
+        0.7273,
+        0.0027,
+        0.2297,
+        0.175,
+        0.1312
+      ],
       "slot": "shirt",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model; hitbox box sized to meet its neighbours without overlap"
     },
     {
       "id": "stomach",
       "group": "stomach",
-      "shape": "rbox",
+      "shape": "taper",
       "a": [
-        0,
-        0.565,
-        0
+        0.0,
+        0.5714,
+        0.0
       ],
       "b": [
-        0.205,
-        0.13,
-        0.112
+        0.0,
+        0.6097,
+        0.0
       ],
-      "r": 0,
+      "r": 0.0798,
+      "r2": 0.0831,
+      "k": [
+        1,
+        1,
+        0.7
+      ],
+      "hit": [
+        0.0,
+        0.5906,
+        0.0,
+        0.1859,
+        0.0984,
+        0.1203
+      ],
       "slot": "shirt",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model; hitbox box sized to meet its neighbours without overlap"
     },
     {
       "id": "pelvis",
       "group": "stomach",
-      "shape": "rbox",
+      "shape": "taper",
       "a": [
-        0,
-        0.48,
-        0
+        0.0,
+        0.4921,
+        0.0
       ],
       "b": [
-        0.215,
-        0.075,
-        0.118
+        0.0,
+        0.5249,
+        0.0
       ],
-      "r": 0,
+      "r": 0.0831,
+      "r2": 0.0798,
+      "k": [
+        1,
+        1,
+        0.72
+      ],
+      "hit": [
+        0.0,
+        0.4976,
+        0.0,
+        0.1914,
+        0.0875,
+        0.1203
+      ],
       "slot": "pants",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model; hitbox box sized to meet its neighbours without overlap"
     },
     {
       "id": "arm_upper_r",
       "group": "arms",
-      "shape": "capsule",
+      "shape": "taper",
       "a": [
-        0.14,
-        0.8,
-        0
+        0.0962,
+        0.7792,
+        -0.0082
       ],
       "b": [
-        0.16,
-        0.645,
-        0.04
+        0.1385,
+        0.6257,
+        0.0415
       ],
-      "r": 0.04,
+      "r": 0.0323,
+      "r2": 0.0257,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "hit": "auto",
       "slot": "shirt",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "arm_lower_r",
       "group": "arms",
-      "shape": "capsule",
+      "shape": "taper",
       "a": [
-        0.16,
-        0.645,
-        0.04
+        0.1385,
+        0.6257,
+        0.0415
       ],
       "b": [
-        0.07,
-        0.665,
-        0.2
+        0.0632,
+        0.6644,
+        0.1523
       ],
-      "r": 0.033,
+      "r": 0.0257,
+      "r2": 0.0197,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "hit": "auto",
       "slot": "shirt",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "hand_r",
       "group": "arms",
       "shape": "sphere",
       "a": [
-        0.06,
-        0.67,
-        0.215
+        0.0499,
+        0.6713,
+        0.1718
       ],
       "b": [
         0,
         0,
         0
       ],
-      "r": 0.03,
+      "r": 0.023,
+      "r2": 0.023,
+      "k": [
+        0.85,
+        1.15,
+        1.1
+      ],
+      "hit": "auto",
       "slot": "gloves",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "arm_upper_l",
       "group": "arms",
-      "shape": "capsule",
+      "shape": "taper",
       "a": [
-        -0.14,
-        0.8,
-        0
+        -0.0919,
+        0.7792,
+        0.0273
       ],
       "b": [
-        -0.125,
-        0.665,
-        0.1
+        -0.0546,
+        0.6791,
+        0.1554
       ],
-      "r": 0.04,
+      "r": 0.0323,
+      "r2": 0.0257,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "hit": "auto",
       "slot": "shirt",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "arm_lower_l",
       "group": "arms",
-      "shape": "capsule",
+      "shape": "taper",
       "a": [
-        -0.125,
-        0.665,
-        0.1
+        -0.0546,
+        0.6791,
+        0.1554
       ],
       "b": [
-        -0.03,
-        0.69,
-        0.3
+        0.0198,
+        0.668,
+        0.2728
       ],
-      "r": 0.033,
+      "r": 0.0257,
+      "r2": 0.0197,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "hit": "auto",
       "slot": "shirt",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "hand_l",
       "group": "arms",
       "shape": "sphere",
       "a": [
-        -0.025,
-        0.695,
-        0.315
+        0.033,
+        0.6661,
+        0.2935
       ],
       "b": [
         0,
         0,
         0
       ],
-      "r": 0.03,
+      "r": 0.023,
+      "r2": 0.023,
+      "k": [
+        0.85,
+        1.15,
+        1.1
+      ],
+      "hit": "auto",
       "slot": "gloves",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "thigh_r",
       "group": "legs",
-      "shape": "capsule",
+      "shape": "taper",
       "a": [
-        0.062,
-        0.47,
-        0
+        0.0503,
+        0.5085,
+        -0.0109
       ],
       "b": [
-        0.068,
-        0.265,
-        0.012
+        0.0711,
+        0.2843,
+        -0.0191
       ],
       "r": 0.053,
+      "r2": 0.0383,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "hit": "auto",
       "slot": "pants",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "shin_r",
       "group": "legs",
-      "shape": "capsule",
+      "shape": "taper",
       "a": [
-        0.068,
-        0.265,
-        0.012
+        0.0711,
+        0.2843,
+        -0.0191
       ],
       "b": [
-        0.068,
-        0.06,
-        -0.005
+        0.082,
+        0.0547,
+        -0.0519
       ],
-      "r": 0.041,
+      "r": 0.0372,
+      "r2": 0.0273,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "hit": "auto",
       "slot": "pants",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "foot_r",
       "group": "legs",
-      "shape": "rbox",
+      "shape": "beam",
       "a": [
-        0.068,
-        0.026,
-        0.03
+        0.0831,
+        0.0301,
+        -0.0793
       ],
       "b": [
-        0.068,
-        0.052,
-        0.15
+        0.0973,
+        0.0273,
+        0.0738
       ],
-      "r": 0,
+      "r": 0.0273,
+      "r2": 0.0273,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "hit": "auto",
       "slot": "boots",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "thigh_l",
       "group": "legs",
-      "shape": "capsule",
+      "shape": "taper",
       "a": [
-        -0.062,
-        0.47,
-        0
+        -0.0503,
+        0.5085,
+        0.0109
       ],
       "b": [
-        -0.068,
-        0.265,
-        0.012
+        -0.0711,
+        0.2843,
+        0.0465
       ],
       "r": 0.053,
+      "r2": 0.0383,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "hit": "auto",
       "slot": "pants",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "shin_l",
       "group": "legs",
-      "shape": "capsule",
+      "shape": "taper",
       "a": [
-        -0.068,
-        0.265,
-        0.012
+        -0.0711,
+        0.2843,
+        0.0465
       ],
       "b": [
-        -0.068,
-        0.06,
-        -0.005
+        -0.082,
+        0.0547,
+        0.0383
       ],
-      "r": 0.041,
+      "r": 0.0372,
+      "r2": 0.0273,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "hit": "auto",
       "slot": "pants",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "foot_l",
       "group": "legs",
-      "shape": "rbox",
+      "shape": "beam",
       "a": [
-        -0.068,
-        0.026,
-        0.03
+        -0.0831,
+        0.0301,
+        0.0109
       ],
       "b": [
-        0.068,
-        0.052,
-        0.15
+        -0.1094,
+        0.0273,
+        0.1613
       ],
-      "r": 0,
+      "r": 0.0273,
+      "r2": 0.0273,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "hit": "auto",
       "slot": "boots",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     }
   ],
   "props": [
     {
-      "id": "boot_r",
-      "on": "shin_r",
-      "shape": "capsule",
-      "a": [
-        0.068,
-        0.15,
-        -0.002
-      ],
-      "b": [
-        0.068,
-        0.055,
-        -0.005
-      ],
-      "r": 0.045,
-      "slot": "boots",
-      "when": "always",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "boot_l",
-      "on": "shin_l",
-      "shape": "capsule",
-      "a": [
-        -0.068,
-        0.15,
-        -0.002
-      ],
-      "b": [
-        -0.068,
-        0.055,
-        -0.005
-      ],
-      "r": 0.045,
-      "slot": "boots",
-      "when": "always",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "belt",
-      "on": "pelvis",
-      "shape": "box",
-      "a": [
-        0,
-        0.515,
-        0
-      ],
-      "b": [
-        0.222,
-        0.022,
-        0.124
-      ],
-      "r": 0,
-      "slot": "boots",
-      "when": "always",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "eye_r",
-      "on": "head",
+      "id": "shoulder_r",
+      "on": "chest",
       "shape": "sphere",
       "a": [
-        0.024,
-        0.935,
-        0.072
+        0.0935,
+        0.7792,
+        -0.0082
       ],
       "b": [
         0,
         0,
         0
       ],
-      "r": 0.008,
-      "slot": "eyes",
-      "when": "face",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "eye_l",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        -0.024,
-        0.935,
-        0.072
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.008,
-      "slot": "eyes",
-      "when": "face",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "hair",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        0,
-        0.945,
-        -0.012
-      ],
-      "b": [
-        0.9,
+      "r": 0.0394,
+      "r2": 0.0394,
+      "k": [
+        1,
         0.95,
-        0.97
-      ],
-      "r": 0.064,
-      "slot": "hair",
-      "when": "face",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "sack",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        0,
-        0.928,
-        0.008
-      ],
-      "b": [
-        0.92,
-        1.12,
         1
       ],
-      "r": 0.07,
-      "slot": "shirt",
-      "when": "wrap",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "sack_tie",
-      "on": "neck",
-      "shape": "capsule",
-      "a": [
-        0,
-        0.865,
-        0
-      ],
-      "b": [
-        0,
-        0.875,
-        0.004
-      ],
-      "r": 0.042,
-      "slot": "boots",
-      "when": "wrap",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "can",
-      "on": "head",
-      "shape": "cylinder",
-      "a": [
-        0,
-        0.975,
-        0.008
-      ],
-      "b": [
-        0,
-        0.06,
-        0
-      ],
-      "r": 0.074,
-      "slot": "metal",
-      "when": "can",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "plate",
-      "on": "chest",
-      "shape": "box",
-      "a": [
-        0,
-        0.73,
-        0.068
-      ],
-      "b": [
-        0.2,
-        0.17,
-        0.014
-      ],
-      "r": 0,
-      "slot": "metal",
-      "when": "plate",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "gun_body",
-      "on": "hand_r",
-      "shape": "box",
-      "a": [
-        0.035,
-        0.69,
-        0.22
-      ],
-      "b": [
-        0.035,
-        0.055,
-        0.3
-      ],
-      "r": 0,
-      "slot": "gun_metal",
-      "when": "always",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "gun_barrel",
-      "on": "hand_r",
-      "shape": "capsule",
-      "a": [
-        0.035,
-        0.705,
-        0.37
-      ],
-      "b": [
-        0.035,
-        0.705,
-        0.5
-      ],
-      "r": 0.008,
-      "slot": "gun_metal",
-      "when": "always",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "gun_mag",
-      "on": "hand_r",
-      "shape": "box",
-      "a": [
-        0.035,
-        0.635,
-        0.27
-      ],
-      "b": [
-        0.022,
-        0.08,
-        0.035
-      ],
-      "r": 0,
-      "slot": "gun_metal",
-      "when": "always",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "gun_stock",
-      "on": "hand_r",
-      "shape": "box",
-      "a": [
-        0.04,
-        0.68,
-        0.035
-      ],
-      "b": [
-        0.03,
-        0.06,
-        0.14
-      ],
-      "r": 0,
-      "slot": "gun_wood",
-      "when": "always",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "gun_guard",
-      "on": "hand_l",
-      "shape": "box",
-      "a": [
-        0.035,
-        0.69,
-        0.33
-      ],
-      "b": [
-        0.04,
-        0.045,
-        0.1
-      ],
-      "r": 0,
-      "slot": "gun_wood",
-      "when": "always",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "shoulders",
-      "on": "chest",
-      "shape": "capsule",
-      "a": [
-        -0.112,
-        0.8,
-        0
-      ],
-      "b": [
-        0.112,
-        0.8,
-        0
-      ],
-      "r": 0.045,
       "slot": "shirt",
       "when": "always",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
-      "id": "ear_r",
-      "on": "head",
+      "id": "shoulder_l",
+      "on": "chest",
       "shape": "sphere",
       "a": [
-        0.058,
-        0.925,
-        0.0
+        -0.0891,
+        0.7792,
+        0.0273
       ],
       "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0394,
+      "r2": 0.0394,
+      "k": [
         1,
-        1.3,
-        0.7
-      ],
-      "r": 0.014,
-      "slot": "skin",
-      "when": "face",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "ear_l",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        -0.058,
-        0.925,
-        0.0
-      ],
-      "b": [
-        1,
-        1.3,
-        0.7
-      ],
-      "r": 0.014,
-      "slot": "skin",
-      "when": "face",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "nose",
-      "on": "head",
-      "shape": "capsule",
-      "a": [
-        0,
-        0.93,
-        0.074
-      ],
-      "b": [
-        0,
-        0.91,
-        0.084
-      ],
-      "r": 0.009,
-      "slot": "skin",
-      "when": "face",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "brow",
-      "on": "head",
-      "shape": "box",
-      "a": [
-        0,
-        0.948,
-        0.068
-      ],
-      "b": [
-        0.07,
-        0.012,
-        0.02
-      ],
-      "r": 0,
-      "slot": "hair",
-      "when": "face",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "hood",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        0,
-        0.935,
-        -0.016
-      ],
-      "b": [
-        0.92,
-        1.15,
+        0.95,
         1
       ],
-      "r": 0.08,
       "slot": "shirt",
-      "when": "hood",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
-      "id": "hood_hang",
-      "on": "chest",
-      "shape": "box",
-      "a": [
-        0,
-        0.83,
-        -0.07
-      ],
-      "b": [
-        0.14,
-        0.06,
-        0.03
-      ],
-      "r": 0,
-      "slot": "shirt",
-      "when": "hood",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "eyehole_r",
-      "on": "head",
+      "id": "elbow_r",
+      "on": "arm_upper_r",
       "shape": "sphere",
       "a": [
-        0.025,
-        0.935,
-        0.073
+        0.1385,
+        0.6257,
+        0.0415
       ],
       "b": [
         0,
         0,
         0
       ],
-      "r": 0.012,
-      "slot": "eyes",
-      "when": "wrap",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+      "r": 0.0268,
+      "r2": 0.0268,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "shirt",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
-      "id": "eyehole_l",
-      "on": "head",
+      "id": "elbow_l",
+      "on": "arm_upper_l",
       "shape": "sphere",
       "a": [
-        -0.025,
-        0.935,
-        0.073
+        -0.0546,
+        0.6791,
+        0.1554
       ],
       "b": [
         0,
         0,
         0
       ],
-      "r": 0.012,
-      "slot": "eyes",
-      "when": "wrap",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+      "r": 0.0268,
+      "r2": 0.0268,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "shirt",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
-      "id": "vest",
-      "on": "chest",
-      "shape": "rbox",
+      "id": "cuff_r",
+      "on": "arm_lower_r",
+      "shape": "taper",
       "a": [
-        0,
-        0.715,
-        0
+        0.0632,
+        0.6644,
+        0.1523
       ],
       "b": [
-        0.258,
-        0.24,
-        0.152
+        0.0543,
+        0.669,
+        0.1653
       ],
-      "r": 0,
-      "slot": "rig",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "r": 0.0219,
+      "r2": 0.0219,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "gloves",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
-      "id": "vest_collar",
-      "on": "chest",
-      "shape": "box",
+      "id": "cuff_l",
+      "on": "arm_lower_l",
+      "shape": "taper",
       "a": [
-        0,
-        0.825,
-        -0.004
+        0.0198,
+        0.668,
+        0.2728
       ],
       "b": [
-        0.13,
-        0.025,
-        0.14
+        0.0286,
+        0.6667,
+        0.2866
       ],
-      "r": 0,
-      "slot": "rig",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "pouch_l",
-      "on": "stomach",
-      "shape": "box",
-      "a": [
-        -0.062,
-        0.6,
-        0.075
+      "r": 0.0219,
+      "r2": 0.0219,
+      "k": [
+        1,
+        1,
+        1
       ],
-      "b": [
-        0.05,
-        0.075,
-        0.034
-      ],
-      "r": 0,
-      "slot": "rig",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "pouch_c",
-      "on": "stomach",
-      "shape": "box",
-      "a": [
-        0,
-        0.6,
-        0.075
-      ],
-      "b": [
-        0.05,
-        0.075,
-        0.034
-      ],
-      "r": 0,
-      "slot": "rig",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "pouch_r",
-      "on": "stomach",
-      "shape": "box",
-      "a": [
-        0.062,
-        0.6,
-        0.075
-      ],
-      "b": [
-        0.05,
-        0.075,
-        0.034
-      ],
-      "r": 0,
-      "slot": "rig",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
-    },
-    {
-      "id": "radio",
-      "on": "chest",
-      "shape": "box",
-      "a": [
-        -0.085,
-        0.79,
-        0.075
-      ],
-      "b": [
-        0.035,
-        0.055,
-        0.024
-      ],
-      "r": 0,
-      "slot": "boots",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "slot": "gloves",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "knee_r",
       "on": "shin_r",
       "shape": "sphere",
       "a": [
-        0.068,
-        0.268,
-        0.042
+        0.0711,
+        0.2843,
+        -0.0191
       ],
       "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0388,
+      "r2": 0.0388,
+      "k": [
         1,
-        1.25,
+        1,
         1
       ],
-      "r": 0.034,
-      "slot": "rig",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "slot": "pants",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "knee_l",
       "on": "shin_l",
       "shape": "sphere",
       "a": [
-        -0.068,
-        0.268,
-        0.042
+        -0.0711,
+        0.2843,
+        0.0465
       ],
       "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0388,
+      "r2": 0.0388,
+      "k": [
         1,
-        1.25,
+        1,
         1
       ],
-      "r": 0.034,
-      "slot": "rig",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "slot": "pants",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "boot_r",
+      "on": "shin_r",
+      "shape": "taper",
+      "a": [
+        0.082,
+        0.1476,
+        -0.0476
+      ],
+      "b": [
+        0.082,
+        0.0437,
+        -0.0519
+      ],
+      "r": 0.0317,
+      "r2": 0.0339,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "boots",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "boot_l",
+      "on": "shin_l",
+      "shape": "taper",
+      "a": [
+        -0.082,
+        0.1476,
+        0.0427
+      ],
+      "b": [
+        -0.082,
+        0.0437,
+        0.0383
+      ],
+      "r": 0.0317,
+      "r2": 0.0339,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "boots",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "hip_r",
+      "on": "pelvis",
+      "shape": "sphere",
+      "a": [
+        0.0569,
+        0.5085,
+        -0.0109
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0547,
+      "r2": 0.0547,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "pants",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "hip_l",
+      "on": "pelvis",
+      "shape": "sphere",
+      "a": [
+        -0.0569,
+        0.5085,
+        0.0109
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0547,
+      "r2": 0.0547,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "pants",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "belt",
+      "on": "pelvis",
+      "shape": "taper",
+      "a": [
+        0.0,
+        0.5386,
+        0.0
+      ],
+      "b": [
+        0.0,
+        0.5441,
+        0.0
+      ],
+      "r": 0.0831,
+      "r2": 0.0831,
+      "k": [
+        1,
+        0.25,
+        0.73
+      ],
+      "slot": "boots",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "buckle",
+      "on": "pelvis",
+      "shape": "beam",
+      "a": [
+        0.0,
+        0.5413,
+        0.0591
+      ],
+      "b": [
+        0.0,
+        0.5413,
+        0.0656
+      ],
+      "r": 0.0164,
+      "r2": 0.012,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "metal",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "collar",
+      "on": "neck",
+      "shape": "taper",
+      "a": [
+        0.0,
+        0.8147,
+        0.0
+      ],
+      "b": [
+        0.0,
+        0.8311,
+        0.0022
+      ],
+      "r": 0.0394,
+      "r2": 0.0361,
+      "k": [
+        1,
+        1,
+        0.9
+      ],
+      "slot": "shirt",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "eye_r",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0.0175,
+        0.9268,
+        0.0591
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0046,
+      "r2": 0.0046,
+      "k": [
+        1.2,
+        0.8,
+        0.6
+      ],
+      "slot": "eyes",
+      "when": "face",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "eye_l",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        -0.0175,
+        0.9268,
+        0.0591
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0046,
+      "r2": 0.0046,
+      "k": [
+        1.2,
+        0.8,
+        0.6
+      ],
+      "slot": "eyes",
+      "when": "face",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "brow",
+      "on": "head",
+      "shape": "beam",
+      "a": [
+        -0.0284,
+        0.9367,
+        0.0596
+      ],
+      "b": [
+        0.0284,
+        0.9367,
+        0.0596
+      ],
+      "r": 0.0066,
+      "r2": 0.0038,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "hair",
+      "when": "face",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "nose",
+      "on": "head",
+      "shape": "taper",
+      "a": [
+        0.0,
+        0.9268,
+        0.0618
+      ],
+      "b": [
+        0.0,
+        0.9082,
+        0.0684
+      ],
+      "r": 0.0049,
+      "r2": 0.0071,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "skin",
+      "when": "face",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "ear_r",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0.0492,
+        0.9203,
+        0.0137
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.012,
+      "r2": 0.012,
+      "k": [
+        0.45,
+        1.25,
+        0.8
+      ],
+      "slot": "skin",
+      "when": "face",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "ear_l",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        -0.0492,
+        0.9203,
+        0.0137
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.012,
+      "r2": 0.012,
+      "k": [
+        0.45,
+        1.25,
+        0.8
+      ],
+      "slot": "skin",
+      "when": "face",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "hair",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0.0,
+        0.9345,
+        0.0049
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.064,
+      "r2": 0.064,
+      "k": [
+        0.84,
+        0.86,
+        0.9
+      ],
+      "slot": "hair",
+      "when": "hair",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "bandana",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0.0,
+        0.8984,
+        0.017
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.064,
+      "r2": 0.064,
+      "k": [
+        0.84,
+        0.6,
+        0.92
+      ],
+      "slot": "accent",
+      "when": "bandana",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "bandana_knot",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0.0,
+        0.9093,
+        -0.041
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0137,
+      "r2": 0.0137,
+      "k": [
+        1.3,
+        1,
+        0.8
+      ],
+      "slot": "accent",
+      "when": "bandana",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "sack",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0.0,
+        0.9225,
+        0.0115
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0673,
+      "r2": 0.0673,
+      "k": [
+        0.84,
+        1.06,
+        0.93
+      ],
+      "slot": "shirt",
+      "when": "wrap",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "sack_tie",
+      "on": "neck",
+      "shape": "taper",
+      "a": [
+        0.0,
+        0.853,
+        0.0044
+      ],
+      "b": [
+        0.0,
+        0.8667,
+        0.0055
+      ],
+      "r": 0.0328,
+      "r2": 0.0317,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "boots",
+      "when": "wrap",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "eyehole_r",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0.0186,
+        0.9268,
+        0.0651
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0087,
+      "r2": 0.0087,
+      "k": [
+        1.1,
+        0.75,
+        0.5
+      ],
+      "slot": "eyes",
+      "when": "wrap",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "eyehole_l",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        -0.0186,
+        0.9268,
+        0.0651
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0087,
+      "r2": 0.0087,
+      "k": [
+        1.1,
+        0.75,
+        0.5
+      ],
+      "slot": "eyes",
+      "when": "wrap",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "can",
+      "on": "head",
+      "shape": "cylinder",
+      "a": [
+        0.0,
+        0.9531,
+        0.0115
+      ],
+      "b": [
+        0.0,
+        0.082,
+        0.0
+      ],
+      "r": 0.0612,
+      "r2": 0.0612,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "metal",
+      "when": "can",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "can_rim",
+      "on": "head",
+      "shape": "cylinder",
+      "a": [
+        0.0,
+        0.9203,
+        0.0115
+      ],
+      "b": [
+        0.0,
+        0.0109,
+        0.0
+      ],
+      "r": 0.0645,
+      "r2": 0.0645,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "boots",
+      "when": "can",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "hood",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0.0,
+        0.9268,
+        0.0016
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0738,
+      "r2": 0.0738,
+      "k": [
+        0.86,
+        1.06,
+        0.96
+      ],
+      "slot": "shirt",
+      "when": "hood",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "hood_hang",
+      "on": "chest",
+      "shape": "taper",
+      "a": [
+        0.0,
+        0.8038,
+        -0.0437
+      ],
+      "b": [
+        0.0,
+        0.771,
+        -0.0656
+      ],
+      "r": 0.0437,
+      "r2": 0.0301,
+      "k": [
+        1.3,
+        1,
+        0.5
+      ],
+      "slot": "shirt",
+      "when": "hood",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "mask_hood",
       "on": "head",
       "shape": "sphere",
       "a": [
-        0,
-        0.932,
-        -0.008
+        0.0,
+        0.9236,
+        0.0071
       ],
       "b": [
-        0.92,
-        1.14,
-        1
+        0,
+        0,
+        0
       ],
-      "r": 0.079,
+      "r": 0.0689,
+      "r2": 0.0689,
+      "k": [
+        0.84,
+        1.06,
+        0.94
+      ],
       "slot": "shirt",
       "when": "mask",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "visor",
       "on": "head",
-      "shape": "box",
+      "shape": "sphere",
       "a": [
-        0,
-        0.94,
-        0.07
+        0.0,
+        0.929,
+        0.0519
       ],
       "b": [
-        0.105,
-        0.042,
-        0.03
+        0,
+        0,
+        0
       ],
-      "r": 0,
+      "r": 0.0383,
+      "r2": 0.0383,
+      "k": [
+        1.05,
+        0.55,
+        0.4
+      ],
       "slot": "eyes",
       "when": "mask",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
       "id": "filter",
       "on": "head",
       "shape": "cylinder",
       "a": [
-        0,
-        0.885,
-        0.078
+        0.0,
+        0.8875,
+        0.0684
       ],
       "b": [
-        0,
-        0.04,
-        0
+        0.0,
+        0.0328,
+        0.0
       ],
-      "r": 0.024,
+      "r": 0.0164,
+      "r2": 0.0164,
+      "k": [
+        1,
+        1,
+        1
+      ],
       "slot": "boots",
       "when": "mask",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
-      "id": "cuff_r",
-      "on": "arm_lower_r",
-      "shape": "capsule",
+      "id": "face_plate",
+      "on": "head",
+      "shape": "sphere",
       "a": [
-        0.075,
-        0.664,
-        0.18
+        0.0,
+        0.9203,
+        0.041
       ],
       "b": [
-        0.07,
-        0.666,
-        0.198
+        0,
+        0,
+        0
       ],
-      "r": 0.036,
-      "slot": "gloves",
-      "when": "always",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "r": 0.0547,
+      "r2": 0.0547,
+      "k": [
+        0.9,
+        1.12,
+        0.62
+      ],
+      "slot": "metal",
+      "when": "facemask",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
-      "id": "cuff_l",
-      "on": "arm_lower_l",
-      "shape": "capsule",
+      "id": "slit_r",
+      "on": "head",
+      "shape": "beam",
       "a": [
-        -0.035,
-        0.687,
-        0.28
+        0.0066,
+        0.9301,
+        0.0749
       ],
       "b": [
-        -0.03,
-        0.69,
-        0.297
+        0.0317,
+        0.9312,
+        0.0684
       ],
-      "r": 0.036,
-      "slot": "gloves",
+      "r": 0.0044,
+      "r2": 0.0033,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "eyes",
+      "when": "facemask",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "slit_l",
+      "on": "head",
+      "shape": "beam",
+      "a": [
+        -0.0066,
+        0.9301,
+        0.0749
+      ],
+      "b": [
+        -0.0317,
+        0.9312,
+        0.0684
+      ],
+      "r": 0.0044,
+      "r2": 0.0033,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "eyes",
+      "when": "facemask",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "plate_ridge",
+      "on": "head",
+      "shape": "beam",
+      "a": [
+        0.0,
+        0.9695,
+        0.0629
+      ],
+      "b": [
+        0.0,
+        0.8711,
+        0.0673
+      ],
+      "r": 0.0044,
+      "r2": 0.0033,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "boots",
+      "when": "facemask",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "plate",
+      "on": "chest",
+      "shape": "beam",
+      "a": [
+        0.0,
+        0.6616,
+        0.0667
+      ],
+      "b": [
+        0.0,
+        0.7819,
+        0.0591
+      ],
+      "r": 0.082,
+      "r2": 0.0066,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "metal",
+      "when": "plate",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "plate_strap_r",
+      "on": "chest",
+      "shape": "beam",
+      "a": [
+        0.0547,
+        0.7819,
+        0.0547
+      ],
+      "b": [
+        0.0656,
+        0.8038,
+        -0.0437
+      ],
+      "r": 0.0098,
+      "r2": 0.0027,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "boots",
+      "when": "plate",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "plate_strap_l",
+      "on": "chest",
+      "shape": "beam",
+      "a": [
+        -0.0547,
+        0.7819,
+        0.0547
+      ],
+      "b": [
+        -0.0656,
+        0.8038,
+        -0.0437
+      ],
+      "r": 0.0098,
+      "r2": 0.0027,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "boots",
+      "when": "plate",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "vest",
+      "on": "chest",
+      "shape": "taper",
+      "a": [
+        0.0,
+        0.6398,
+        0.0
+      ],
+      "b": [
+        0.0,
+        0.7437,
+        0.0022
+      ],
+      "r": 0.0919,
+      "r2": 0.0995,
+      "k": [
+        1.0,
+        1,
+        0.7
+      ],
+      "slot": "rig",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "pouch_l",
+      "on": "stomach",
+      "shape": "beam",
+      "a": [
+        -0.0383,
+        0.6234,
+        0.0667
+      ],
+      "b": [
+        -0.0383,
+        0.5796,
+        0.0684
+      ],
+      "r": 0.0153,
+      "r2": 0.0109,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "rig",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "pouch_c",
+      "on": "stomach",
+      "shape": "beam",
+      "a": [
+        0.0,
+        0.6234,
+        0.07
+      ],
+      "b": [
+        0.0,
+        0.5796,
+        0.0711
+      ],
+      "r": 0.0153,
+      "r2": 0.0109,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "rig",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "pouch_r",
+      "on": "stomach",
+      "shape": "beam",
+      "a": [
+        0.0383,
+        0.6234,
+        0.0667
+      ],
+      "b": [
+        0.0383,
+        0.5796,
+        0.0684
+      ],
+      "r": 0.0153,
+      "r2": 0.0109,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "rig",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "radio",
+      "on": "chest",
+      "shape": "beam",
+      "a": [
+        -0.0547,
+        0.7546,
+        0.0612
+      ],
+      "b": [
+        -0.0547,
+        0.7054,
+        0.0645
+      ],
+      "r": 0.0109,
+      "r2": 0.0087,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "boots",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "knee_pad_r",
+      "on": "shin_r",
+      "shape": "sphere",
+      "a": [
+        0.0711,
+        0.2843,
+        0.0038
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0246,
+      "r2": 0.0246,
+      "k": [
+        1,
+        1.3,
+        0.7
+      ],
+      "slot": "rig",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "knee_pad_l",
+      "on": "shin_l",
+      "shape": "sphere",
+      "a": [
+        -0.0711,
+        0.2843,
+        0.0694
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0246,
+      "r2": 0.0246,
+      "k": [
+        1,
+        1.3,
+        0.7
+      ],
+      "slot": "rig",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+    },
+    {
+      "id": "gun_butt",
+      "on": "hand_r",
+      "shape": "beam",
+      "a": [
+        0.0633,
+        0.7361,
+        0.0139
+      ],
+      "b": [
+        0.0583,
+        0.7269,
+        0.0733
+      ],
+      "r": 0.0104,
+      "r2": 0.0273,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "gun_wood",
       "when": "always",
-      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): AK-style rifle silhouette (about 0.95 m) laid along the bore from the shoulder pocket; proportions by eye, not a CS2 or Rust model; draw only, never hittable"
+    },
+    {
+      "id": "gun_stock",
+      "on": "hand_r",
+      "shape": "beam",
+      "a": [
+        0.0587,
+        0.7282,
+        0.0681
+      ],
+      "b": [
+        0.0509,
+        0.7153,
+        0.1603
+      ],
+      "r": 0.0087,
+      "r2": 0.0164,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "gun_wood",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): AK-style rifle silhouette (about 0.95 m) laid along the bore from the shoulder pocket; proportions by eye, not a CS2 or Rust model; draw only, never hittable"
+    },
+    {
+      "id": "gun_receiver",
+      "on": "hand_r",
+      "shape": "beam",
+      "a": [
+        0.0512,
+        0.723,
+        0.1566
+      ],
+      "b": [
+        0.0382,
+        0.6846,
+        0.3099
+      ],
+      "r": 0.012,
+      "r2": 0.0197,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "gun_metal",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): AK-style rifle silhouette (about 0.95 m) laid along the bore from the shoulder pocket; proportions by eye, not a CS2 or Rust model; draw only, never hittable"
+    },
+    {
+      "id": "gun_cover",
+      "on": "hand_r",
+      "shape": "beam",
+      "a": [
+        0.0499,
+        0.7373,
+        0.1714
+      ],
+      "b": [
+        0.0387,
+        0.7032,
+        0.3033
+      ],
+      "r": 0.0104,
+      "r2": 0.0066,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "gun_metal",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): AK-style rifle silhouette (about 0.95 m) laid along the bore from the shoulder pocket; proportions by eye, not a CS2 or Rust model; draw only, never hittable"
+    },
+    {
+      "id": "gun_guard",
+      "on": "hand_r",
+      "shape": "beam",
+      "a": [
+        0.0382,
+        0.6825,
+        0.3094
+      ],
+      "b": [
+        0.0301,
+        0.6587,
+        0.4046
+      ],
+      "r": 0.0131,
+      "r2": 0.0164,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "gun_wood",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): AK-style rifle silhouette (about 0.95 m) laid along the bore from the shoulder pocket; proportions by eye, not a CS2 or Rust model; draw only, never hittable"
+    },
+    {
+      "id": "gun_gas",
+      "on": "hand_r",
+      "shape": "beam",
+      "a": [
+        0.0378,
+        0.7027,
+        0.3144
+      ],
+      "b": [
+        0.0301,
+        0.6802,
+        0.4043
+      ],
+      "r": 0.006,
+      "r2": 0.006,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "gun_wood",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): AK-style rifle silhouette (about 0.95 m) laid along the bore from the shoulder pocket; proportions by eye, not a CS2 or Rust model; draw only, never hittable"
+    },
+    {
+      "id": "gun_barrel",
+      "on": "hand_r",
+      "shape": "beam",
+      "a": [
+        0.0305,
+        0.6643,
+        0.4003
+      ],
+      "b": [
+        0.0215,
+        0.6379,
+        0.5061
+      ],
+      "r": 0.0049,
+      "r2": 0.0049,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "gun_metal",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): AK-style rifle silhouette (about 0.95 m) laid along the bore from the shoulder pocket; proportions by eye, not a CS2 or Rust model; draw only, never hittable"
+    },
+    {
+      "id": "gun_sight",
+      "on": "hand_r",
+      "shape": "beam",
+      "a": [
+        0.024,
+        0.6564,
+        0.477
+      ],
+      "b": [
+        0.0233,
+        0.6544,
+        0.4849
+      ],
+      "r": 0.0027,
+      "r2": 0.012,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "gun_metal",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): AK-style rifle silhouette (about 0.95 m) laid along the bore from the shoulder pocket; proportions by eye, not a CS2 or Rust model; draw only, never hittable"
+    },
+    {
+      "id": "gun_muzzle",
+      "on": "hand_r",
+      "shape": "beam",
+      "a": [
+        0.0215,
+        0.6379,
+        0.5061
+      ],
+      "b": [
+        0.0195,
+        0.6319,
+        0.5298
+      ],
+      "r": 0.0071,
+      "r2": 0.0071,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "gun_metal",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): AK-style rifle silhouette (about 0.95 m) laid along the bore from the shoulder pocket; proportions by eye, not a CS2 or Rust model; draw only, never hittable"
+    },
+    {
+      "id": "gun_grip",
+      "on": "hand_r",
+      "shape": "beam",
+      "a": [
+        0.0484,
+        0.6978,
+        0.1897
+      ],
+      "b": [
+        0.0506,
+        0.6507,
+        0.1639
+      ],
+      "r": 0.0082,
+      "r2": 0.0115,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "gun_wood",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): AK-style rifle silhouette (about 0.95 m) laid along the bore from the shoulder pocket; proportions by eye, not a CS2 or Rust model; draw only, never hittable"
+    },
+    {
+      "id": "gun_mag",
+      "on": "hand_r",
+      "shape": "beam",
+      "a": [
+        0.043,
+        0.6819,
+        0.2531
+      ],
+      "b": [
+        0.043,
+        0.6256,
+        0.2531
+      ],
+      "r": 0.0071,
+      "r2": 0.018,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "gun_metal",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): AK-style rifle silhouette (about 0.95 m) laid along the bore from the shoulder pocket; proportions by eye, not a CS2 or Rust model; draw only, never hittable"
+    },
+    {
+      "id": "gun_mag2",
+      "on": "hand_r",
+      "shape": "beam",
+      "a": [
+        0.0429,
+        0.6282,
+        0.2538
+      ],
+      "b": [
+        0.0412,
+        0.5725,
+        0.2737
+      ],
+      "r": 0.0071,
+      "r2": 0.0175,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "gun_metal",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): AK-style rifle silhouette (about 0.95 m) laid along the bore from the shoulder pocket; proportions by eye, not a CS2 or Rust model; draw only, never hittable"
     }
   ],
   "outfits": [
     {
       "id": "burlap",
       "shirt": [
-        0.58,
-        0.47,
-        0.31
+        0.5,
+        0.41,
+        0.28
       ],
       "pants": [
-        0.47,
-        0.38,
-        0.25
+        0.42,
+        0.35,
+        0.24
       ],
       "boots": [
-        0.2,
-        0.14,
-        0.09
+        0.17,
+        0.12,
+        0.08
       ],
       "gloves": [
-        0.36,
-        0.28,
-        0.18
+        0.32,
+        0.25,
+        0.16
       ],
       "rig": [
-        0.3,
-        0.26,
-        0.18
+        0.28,
+        0.24,
+        0.17
       ],
       "skin": [
-        0.8,
-        0.6,
-        0.47
+        0.74,
+        0.55,
+        0.43
       ],
       "hair": [
         0.2,
@@ -2012,50 +3005,55 @@
         0.08
       ],
       "eyes": [
-        0.05,
-        0.04,
-        0.04
+        0.03,
+        0.025,
+        0.02
       ],
       "metal": [
-        1,
-        1,
-        1
+        0.8,
+        0.8,
+        0.8
       ],
-      "head": "wrap",
-      "chest": "none",
-      "face": false,
-      "verified": "2026-10-09 design value (Gauntlet round 2): colours chosen by eye to read like Rust clothing (burlap, hide, road sign, hoodie, scientist suit); not taken from Rust files"
+      "accent": [
+        0.36,
+        0.3,
+        0.2
+      ],
+      "gear": [
+        "wrap"
+      ],
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): colours and gear chosen by eye to read like Rust kits (burlap, hide, road sign, hoodie, scientist, metal facemask); not taken from Rust files"
     },
     {
       "id": "hide",
       "shirt": [
-        0.4,
-        0.27,
-        0.17
+        0.36,
+        0.25,
+        0.16
       ],
       "pants": [
-        0.31,
-        0.22,
-        0.15
+        0.28,
+        0.2,
+        0.14
       ],
       "boots": [
-        0.16,
-        0.11,
-        0.07
+        0.14,
+        0.1,
+        0.065
       ],
       "gloves": [
-        0.24,
-        0.16,
+        0.22,
+        0.15,
         0.1
       ],
       "rig": [
-        0.28,
-        0.2,
+        0.3,
+        0.21,
         0.13
       ],
       "skin": [
-        0.62,
-        0.43,
+        0.6,
+        0.42,
         0.31
       ],
       "hair": [
@@ -2064,51 +3062,59 @@
         0.05
       ],
       "eyes": [
-        0.05,
         0.04,
-        0.04
+        0.03,
+        0.03
       ],
       "metal": [
-        1,
-        1,
-        1
+        0.8,
+        0.8,
+        0.8
       ],
-      "head": "none",
-      "chest": "rig",
-      "face": true,
-      "verified": "2026-10-09 design value (Gauntlet round 2): colours chosen by eye to read like Rust clothing (burlap, hide, road sign, hoodie, scientist suit); not taken from Rust files"
+      "accent": [
+        0.45,
+        0.12,
+        0.09
+      ],
+      "gear": [
+        "face",
+        "hair",
+        "bandana",
+        "rig"
+      ],
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): colours and gear chosen by eye to read like Rust kits (burlap, hide, road sign, hoodie, scientist, metal facemask); not taken from Rust files"
     },
     {
       "id": "roadsign",
       "shirt": [
-        0.3,
-        0.32,
-        0.26
+        0.27,
+        0.29,
+        0.23
       ],
       "pants": [
-        0.26,
-        0.25,
-        0.21
+        0.24,
+        0.23,
+        0.2
       ],
       "boots": [
-        0.14,
-        0.12,
-        0.1
+        0.13,
+        0.11,
+        0.09
       ],
       "gloves": [
-        0.14,
         0.13,
-        0.12
+        0.12,
+        0.11
       ],
       "rig": [
-        0.25,
-        0.25,
-        0.22
+        0.23,
+        0.23,
+        0.2
       ],
       "skin": [
-        0.78,
-        0.57,
-        0.44
+        0.72,
+        0.53,
+        0.41
       ],
       "hair": [
         0.3,
@@ -2116,46 +3122,54 @@
         0.1
       ],
       "eyes": [
-        0.05,
         0.04,
-        0.04
+        0.03,
+        0.03
       ],
       "metal": [
-        0.95,
-        0.9,
-        0.85
+        0.85,
+        0.82,
+        0.76
       ],
-      "head": "can",
-      "chest": "plate",
-      "face": true,
-      "verified": "2026-10-09 design value (Gauntlet round 2): colours chosen by eye to read like Rust clothing (burlap, hide, road sign, hoodie, scientist suit); not taken from Rust files"
+      "accent": [
+        0.16,
+        0.18,
+        0.15
+      ],
+      "gear": [
+        "face",
+        "can",
+        "plate",
+        "bandana"
+      ],
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): colours and gear chosen by eye to read like Rust kits (burlap, hide, road sign, hoodie, scientist, metal facemask); not taken from Rust files"
     },
     {
       "id": "hoodie",
       "shirt": [
-        0.16,
-        0.2,
-        0.28
+        0.15,
+        0.18,
+        0.25
       ],
       "pants": [
-        0.22,
-        0.22,
-        0.24
+        0.2,
+        0.2,
+        0.22
       ],
       "boots": [
-        0.12,
-        0.1,
-        0.08
+        0.11,
+        0.09,
+        0.07
       ],
       "gloves": [
-        0.1,
-        0.1,
-        0.1
+        0.09,
+        0.09,
+        0.09
       ],
       "rig": [
+        0.2,
         0.22,
-        0.24,
-        0.2
+        0.18
       ],
       "skin": [
         0.45,
@@ -2173,41 +3187,49 @@
         0.03
       ],
       "metal": [
-        1,
-        1,
-        1
+        0.8,
+        0.8,
+        0.8
       ],
-      "head": "hood",
-      "chest": "rig",
-      "face": true,
-      "verified": "2026-10-09 design value (Gauntlet round 2): colours chosen by eye to read like Rust clothing (burlap, hide, road sign, hoodie, scientist suit); not taken from Rust files"
+      "accent": [
+        0.1,
+        0.1,
+        0.11
+      ],
+      "gear": [
+        "face",
+        "hood",
+        "bandana",
+        "rig"
+      ],
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): colours and gear chosen by eye to read like Rust kits (burlap, hide, road sign, hoodie, scientist, metal facemask); not taken from Rust files"
     },
     {
       "id": "scientist",
       "shirt": [
-        0.24,
-        0.4,
-        0.5
+        0.22,
+        0.37,
+        0.47
       ],
       "pants": [
-        0.22,
-        0.36,
-        0.45
+        0.2,
+        0.33,
+        0.42
       ],
       "boots": [
-        0.1,
-        0.1,
-        0.1
-      ],
-      "gloves": [
-        0.08,
-        0.08,
+        0.09,
+        0.09,
         0.09
       ],
+      "gloves": [
+        0.07,
+        0.07,
+        0.08
+      ],
       "rig": [
-        0.16,
-        0.18,
-        0.2
+        0.15,
+        0.17,
+        0.19
       ],
       "skin": [
         0.72,
@@ -2220,19 +3242,242 @@
         0.06
       ],
       "eyes": [
-        0.04,
-        0.05,
-        0.06
+        0.06,
+        0.08,
+        0.1
       ],
       "metal": [
-        1,
-        1,
-        1
+        0.8,
+        0.8,
+        0.8
       ],
-      "head": "mask",
-      "chest": "rig",
-      "face": false,
-      "verified": "2026-10-09 design value (Gauntlet round 2): colours chosen by eye to read like Rust clothing (burlap, hide, road sign, hoodie, scientist suit); not taken from Rust files"
+      "accent": [
+        0.12,
+        0.12,
+        0.13
+      ],
+      "gear": [
+        "mask",
+        "rig"
+      ],
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): colours and gear chosen by eye to read like Rust kits (burlap, hide, road sign, hoodie, scientist, metal facemask); not taken from Rust files"
+    },
+    {
+      "id": "metal",
+      "shirt": [
+        0.2,
+        0.19,
+        0.17
+      ],
+      "pants": [
+        0.22,
+        0.2,
+        0.17
+      ],
+      "boots": [
+        0.12,
+        0.1,
+        0.08
+      ],
+      "gloves": [
+        0.2,
+        0.15,
+        0.1
+      ],
+      "rig": [
+        0.23,
+        0.2,
+        0.15
+      ],
+      "skin": [
+        0.66,
+        0.48,
+        0.36
+      ],
+      "hair": [
+        0.08,
+        0.06,
+        0.05
+      ],
+      "eyes": [
+        0.02,
+        0.02,
+        0.02
+      ],
+      "metal": [
+        0.72,
+        0.68,
+        0.62
+      ],
+      "accent": [
+        0.26,
+        0.22,
+        0.17
+      ],
+      "gear": [
+        "hood",
+        "facemask",
+        "plate"
+      ],
+      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): colours and gear chosen by eye to read like Rust kits (burlap, hide, road sign, hoodie, scientist, metal facemask); not taken from Rust files"
+    }
+  ],
+  "stk_checks_columns": [
+    "id",
+    "weapon",
+    "damage",
+    "armor_ratio",
+    "hs_mult",
+    "group",
+    "kevlar",
+    "helmet",
+    "shots",
+    "verified"
+  ],
+  "stk_checks": [
+    {
+      "id": "ak47_head_helmet",
+      "weapon": "cs2_ak47",
+      "damage": 36,
+      "armor_ratio": 1.55,
+      "hs_mult": 4,
+      "group": "head",
+      "kevlar": 100,
+      "helmet": true,
+      "shots": 1,
+      "verified": "unverified: CS2 stats as commonly listed (damage, armor penetration = armor ratio x 0.5, headshot x4) and shots-to-kill from community damage tables, from memory at range 0; not read from items_game here (the player's prep reads the real ones)"
+    },
+    {
+      "id": "ak47_chest_kevlar",
+      "weapon": "cs2_ak47",
+      "damage": 36,
+      "armor_ratio": 1.55,
+      "hs_mult": 4,
+      "group": "chest",
+      "kevlar": 100,
+      "helmet": true,
+      "shots": 4,
+      "verified": "unverified: CS2 stats as commonly listed (damage, armor penetration = armor ratio x 0.5, headshot x4) and shots-to-kill from community damage tables, from memory at range 0; not read from items_game here (the player's prep reads the real ones)"
+    },
+    {
+      "id": "ak47_chest_bare",
+      "weapon": "cs2_ak47",
+      "damage": 36,
+      "armor_ratio": 1.55,
+      "hs_mult": 4,
+      "group": "chest",
+      "kevlar": 0,
+      "helmet": false,
+      "shots": 3,
+      "verified": "unverified: CS2 stats as commonly listed (damage, armor penetration = armor ratio x 0.5, headshot x4) and shots-to-kill from community damage tables, from memory at range 0; not read from items_game here (the player's prep reads the real ones)"
+    },
+    {
+      "id": "ak47_stomach_kevlar",
+      "weapon": "cs2_ak47",
+      "damage": 36,
+      "armor_ratio": 1.55,
+      "hs_mult": 4,
+      "group": "stomach",
+      "kevlar": 100,
+      "helmet": true,
+      "shots": 3,
+      "verified": "unverified: CS2 stats as commonly listed (damage, armor penetration = armor ratio x 0.5, headshot x4) and shots-to-kill from community damage tables, from memory at range 0; not read from items_game here (the player's prep reads the real ones)"
+    },
+    {
+      "id": "ak47_legs",
+      "weapon": "cs2_ak47",
+      "damage": 36,
+      "armor_ratio": 1.55,
+      "hs_mult": 4,
+      "group": "legs",
+      "kevlar": 100,
+      "helmet": true,
+      "shots": 4,
+      "verified": "unverified: CS2 stats as commonly listed (damage, armor penetration = armor ratio x 0.5, headshot x4) and shots-to-kill from community damage tables, from memory at range 0; not read from items_game here (the player's prep reads the real ones)"
+    },
+    {
+      "id": "m4a1s_head_helmet",
+      "weapon": "cs2_m4a1_silencer",
+      "damage": 38,
+      "armor_ratio": 1.4,
+      "hs_mult": 4,
+      "group": "head",
+      "kevlar": 100,
+      "helmet": true,
+      "shots": 1,
+      "verified": "unverified: CS2 stats as commonly listed (damage, armor penetration = armor ratio x 0.5, headshot x4) and shots-to-kill from community damage tables, from memory at range 0; not read from items_game here (the player's prep reads the real ones)"
+    },
+    {
+      "id": "m4a1s_chest_kevlar",
+      "weapon": "cs2_m4a1_silencer",
+      "damage": 38,
+      "armor_ratio": 1.4,
+      "hs_mult": 4,
+      "group": "chest",
+      "kevlar": 100,
+      "helmet": true,
+      "shots": 4,
+      "verified": "unverified: CS2 stats as commonly listed (damage, armor penetration = armor ratio x 0.5, headshot x4) and shots-to-kill from community damage tables, from memory at range 0; not read from items_game here (the player's prep reads the real ones)"
+    },
+    {
+      "id": "usps_head_helmet",
+      "weapon": "cs2_usp_silencer",
+      "damage": 35,
+      "armor_ratio": 1.01,
+      "hs_mult": 4,
+      "group": "head",
+      "kevlar": 100,
+      "helmet": true,
+      "shots": 2,
+      "verified": "unverified: CS2 stats as commonly listed (damage, armor penetration = armor ratio x 0.5, headshot x4) and shots-to-kill from community damage tables, from memory at range 0; not read from items_game here (the player's prep reads the real ones)"
+    },
+    {
+      "id": "usps_head_bare",
+      "weapon": "cs2_usp_silencer",
+      "damage": 35,
+      "armor_ratio": 1.01,
+      "hs_mult": 4,
+      "group": "head",
+      "kevlar": 100,
+      "helmet": false,
+      "shots": 1,
+      "verified": "unverified: CS2 stats as commonly listed (damage, armor penetration = armor ratio x 0.5, headshot x4) and shots-to-kill from community damage tables, from memory at range 0; not read from items_game here (the player's prep reads the real ones)"
+    },
+    {
+      "id": "usps_chest_kevlar",
+      "weapon": "cs2_usp_silencer",
+      "damage": 35,
+      "armor_ratio": 1.01,
+      "hs_mult": 4,
+      "group": "chest",
+      "kevlar": 100,
+      "helmet": true,
+      "shots": 6,
+      "verified": "unverified: CS2 stats as commonly listed (damage, armor penetration = armor ratio x 0.5, headshot x4) and shots-to-kill from community damage tables, from memory at range 0; not read from items_game here (the player's prep reads the real ones)"
+    },
+    {
+      "id": "deagle_head_helmet",
+      "weapon": "cs2_deagle",
+      "damage": 53,
+      "armor_ratio": 1.864,
+      "hs_mult": 4,
+      "group": "head",
+      "kevlar": 100,
+      "helmet": true,
+      "shots": 1,
+      "verified": "unverified: CS2 stats as commonly listed (damage, armor penetration = armor ratio x 0.5, headshot x4) and shots-to-kill from community damage tables, from memory at range 0; not read from items_game here (the player's prep reads the real ones)"
+    },
+    {
+      "id": "deagle_chest_kevlar",
+      "weapon": "cs2_deagle",
+      "damage": 53,
+      "armor_ratio": 1.864,
+      "hs_mult": 4,
+      "group": "chest",
+      "kevlar": 100,
+      "helmet": true,
+      "shots": 3,
+      "verified": "unverified: CS2 stats as commonly listed (damage, armor penetration = armor ratio x 0.5, headshot x4) and shots-to-kill from community damage tables, from memory at range 0; not read from items_game here (the player's prep reads the real ones)"
     }
   ]
 }

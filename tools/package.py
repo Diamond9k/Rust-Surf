@@ -18,8 +18,9 @@ Checks before zipping (each failure is listed, nothing is written):
 - every sheets/*.json equals game/data/<name>.json and every prep/*.json equals its sheet (no stray copies)
 - dist/RustSurf has RustSurf.exe and RustSurf.pck, and the pck holds every sheet byte for byte (Godot 4.7.2
   stores data/*.json uncompressed: checked with --export-pack); --skip-pck-scan if that ever changes
-- the prep bundle has python.exe, vrf/Source2Viewer-CLI.exe, vgm/vgmstream-cli.exe and, after the repo's
-  prep sources are copied in, every prep/*.py and *.json byte for byte
+- the prep bundle has python.exe, its standard library, UnityPy, vrf/Source2Viewer-CLI.exe,
+  vgm/vgmstream-cli.exe and, after the repo's prep sources are copied in, every prep/*.py and *.json byte for
+  byte; on Windows its python.exe must import everything setup imports (UnityPy, prep, ctypes)
 Then the zip is read back: it must open, pass its CRCs and hold every required entry."""
 import os, re, sys, json, glob, shutil, hashlib, zipfile, filecmp, subprocess, tempfile
 
@@ -101,13 +102,43 @@ def check_game(root, game_dir, scan_pck=True):
     return errs
 
 
+def _found(bundle, pattern):
+    return any("__pycache__" not in p for p in glob.glob(os.path.join(bundle, pattern), recursive=True))
+
+
 def check_bundle(root, bundle):
+    """The tools, the embedded Python's stdlib and UnityPy (a zip without them installs, then fails setup on
+    every start), and every prep source byte for byte."""
     errs = ["prep bundle has no %s" % t for t in BUNDLE_TOOLS if not os.path.isfile(os.path.join(bundle, t))]
+    if not any(_found(bundle, p) for p in ("python3*.zip", os.path.join("python3*", "encodings", "__init__.py*"), os.path.join("Lib", "encodings", "__init__.py*"))):
+        errs.append("prep bundle has no Python standard library (python3*.zip or python3*/encodings): the embedded Python cannot start")
+    if not _found(bundle, os.path.join("**", "UnityPy", "__init__.py*")):
+        errs.append("prep bundle has no UnityPy package: the Rust half of setup cannot run")
     for n in prep_sources(root):
         b = os.path.join(bundle, n)
         if not os.path.isfile(b) or not filecmp.cmp(os.path.join(root, "prep", n), b, shallow=False):
             errs.append("prep bundle %s is not the repo's prep/%s" % (n, n))
     return errs
+
+
+SMOKE = ("import sys; sys.path.insert(0, sys.argv[1]); import ctypes, json, zlib, threading, UnityPy, lazybundle, prep, prep_cs2; "
+         "lazybundle.install(); print('BUNDLE OK ' + sys.version.split()[0])")
+
+
+def bundle_smoke(bundle, run=None, log=print):
+    """On Windows, the bundle's own python.exe imports what setup imports (UnityPy, lazybundle's patch, prep,
+    ctypes for the failure box), as prep.py does, so a bundle missing a dependency is refused here rather than on
+    the player's first start. Elsewhere it cannot run, and says so. Returns errors."""
+    if run is None:
+        if sys.platform != "win32":
+            log("gate: prep bundle import check skipped (python.exe runs only on Windows)")
+            return []
+        run = _run
+    code, out = run([os.path.join(bundle, "python.exe"), "-c", SMOKE, bundle], bundle, 300, log)
+    if code != 0 or "BUNDLE OK" not in out:
+        return ["prep bundle python.exe could not import setup's modules: exit %d: %s" % (code, _why(out))]
+    log("gate: prep bundle " + out.strip().splitlines()[-1])
+    return []
 
 
 def verify_zip(root, out):
@@ -233,9 +264,10 @@ def gates(root, godot, data, log=print):
     return errs, len(unsure)
 
 
-def build(root=R, ver=None, scan_pck=True, gate=None):
+def build(root=R, ver=None, scan_pck=True, gate=None, smoke=None):
     """Returns (zip path, errors). No zip is left behind when there are errors.
-    gate: a callable returning (errors, unverified count), run first (main passes the real gates)."""
+    gate: a callable returning (errors, unverified count), run first (main passes the real gates).
+    smoke: the runner bundle_smoke uses (prep/tests); None runs the bundle's python.exe on Windows."""
     unverified = None
     rver, verrs = recipe_version(root)
     ver = ver or rver
@@ -262,6 +294,8 @@ def build(root=R, ver=None, scan_pck=True, gate=None):
     for n in prep_sources(root):
         shutil.copy2(os.path.join(root, "prep", n), os.path.join(bundle, n))
     errs += check_bundle(root, bundle)
+    if not errs:
+        errs += bundle_smoke(bundle, smoke)
     if errs:
         return None, errs
     out = os.path.join(root, "dist", "RustSurf-%s.zip" % ver)
