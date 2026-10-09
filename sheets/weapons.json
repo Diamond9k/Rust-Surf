@@ -1,6 +1,6 @@
 {
  "_sheet": "weapons",
- "_doc": "Every weapon the player can hold. CS2 rows: model, viewmodel clips and shot sound are exact paths in the player's CS2 pak01_dir.vpk (checked against a listing by tools/gen_weapons.py); prep exports them to the data folder. Damage, fire rate, magazine, recoil and spread come from the player's own scripts/items/items_game.txt at runtime, never typed in. Rust rows are added by prep_weapons_rust.py.",
+ "_doc": "Every weapon the player can hold. CS2 rows: model, viewmodel clips and shot sound are exact paths in the player's CS2 pak01_dir.vpk (checked against a listing by tools/gen_weapons.py); prep exports them to the data folder. Damage, fire rate, magazine, recoil and spread come from the player's own scripts/items/items_game.txt at runtime, never typed in. Rust weapons are not in this version.",
  "columns": [
   "id",
   "game",

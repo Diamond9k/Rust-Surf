@@ -40,6 +40,8 @@ func _material(m: Dictionary) -> StandardMaterial3D:
 		var t := content.texture(m["albedo"], "MainTex")
 		if t:
 			mat.albedo_texture = t
+			# anisotropic: ground and ramps seen at grazing angles keep their detail instead of blurring
+			mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 		var n := content.texture(m["normal"], "BumpMap")
 		if n:
 			mat.normal_enabled = true

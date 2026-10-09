@@ -45,6 +45,8 @@ func toggle() -> void:
 	is_open = not is_open
 	_root.visible = is_open
 	main.hud.msg_label.visible = not is_open
+	if is_open and main.weapons._buy.visible:
+		main.weapons._buy.visible = false  # one menu at a time
 	main.player.frozen = is_open  # the menu pauses movement like a paused local server
 	if main.timer: main.timer.set_process(not is_open)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if is_open else Input.MOUSE_MODE_CAPTURED
@@ -154,7 +156,11 @@ func _build() -> void:
 		main.lobby.toggle())
 	_button(btns, "Restart run", func() -> void:
 		toggle()
-		main.course.restart(main.player))
+		if main.lobby.active:
+			main.lobby.toggle()  # leaving the lobby already puts you back on the start pad
+		else:
+			main.course.restart(main.player)
+			main.timer.reset())
 	_button(btns, "Quit", func() -> void: get_tree().quit())
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -82,7 +82,6 @@ func give(id: String) -> void:
 	if not ready_ids.has(id):
 		return
 	var s: String = SLOT_OF[rows[id]["slot"]]
-	slots[s] = id
 	var prev: String = slots[s]
 	slots[s] = id
 	if current == s:
@@ -201,8 +200,8 @@ func fire() -> void:
 		(e[3] as Object).hit(float(e[0]), bool(e[1]), e[2])
 		hit_any = true
 		head_any = head_any or bool(e[1])
-	if id != "knife" and main.lobby and main.lobby.has_method("on_shot_fired"):
-		main.lobby.on_shot_fired()  # one trigger pull = one shot; knife swings are not shots
+	if main.lobby and main.lobby.has_method("on_shot_fired"):
+		main.lobby.on_shot_fired()  # one trigger pull or knife swing = one shot
 	if hit_any and main.hud.has_method("hitmarker"):
 		main.hud.hitmarker(head_any)
 	if id != "knife":
@@ -309,14 +308,16 @@ func _build_buy() -> void:
 	_buy.layer = 5
 	_buy.visible = false
 	add_child(_buy)
+	var center := CenterContainer.new()  # keeps the panel centred at any window size
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_buy.add_child(center)
 	var bg := PanelContainer.new()
-	bg.set_anchors_preset(Control.PRESET_CENTER)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.106, 0.114, 0.125, 0.92)
 	sb.set_content_margin_all(18)
 	sb.set_corner_radius_all(4)
 	bg.add_theme_stylebox_override("panel", sb)
-	_buy.add_child(bg)
+	center.add_child(bg)
 	var cols := HBoxContainer.new()
 	cols.add_theme_constant_override("separation", 14)
 	bg.add_child(cols)
@@ -342,4 +343,3 @@ func _build_buy() -> void:
 				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED)
 			v.add_child(b)
 		cols.add_child(v)
-	bg.position = -bg.get_combined_minimum_size() * 0.5

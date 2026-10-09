@@ -17,6 +17,8 @@ var _left := 0.0
 var _gen := 0
 var _hits := 0
 var _heads := 0
+var _hit_shot := -1
+var _head_shot := false
 var _shots := 0
 var _react_sum := 0.0
 var _react_n := 0
@@ -217,6 +219,9 @@ func _mode_label() -> String:
 func _process(dt: float) -> void:
 	if not active:
 		return
+	if main.settings and main.settings.is_open:
+		_spawned_at += dt  # the Esc menu pauses the round and the reaction clock
+		return
 	if Input.is_action_just_pressed("surf_lobby_mode"):
 		var i := 0
 		for k in modes.size():
@@ -224,9 +229,6 @@ func _process(dt: float) -> void:
 				i = k
 		mode = String(modes[(i + 1) % modes.size()]["id"])
 		_start_round()
-	if main.settings and main.settings.is_open:
-		_spawned_at += dt  # the Esc menu pauses the round and the reaction clock
-		return
 	if _state == "round":
 		_left -= dt
 		if _left <= 0.0:
@@ -301,7 +303,15 @@ func register_hit(unit: Node3D, dmg: float, head: bool, _at: Vector3) -> void:
 			if hp <= 0.0:
 				_down(unit)
 
+## One hit per shot at most (a shotgun through two bots is still one shot that hit), so accuracy stays <= 100%.
 func _count(head: bool) -> void:
+	if _hit_shot == _shots:
+		if head and not _head_shot:
+			_heads += 1
+			_head_shot = true
+		return
+	_hit_shot = _shots
+	_head_shot = head
 	_hits += 1
 	if head:
 		_heads += 1
@@ -412,7 +422,7 @@ func _spawn_bots() -> void:
 		_targets.append(body)
 
 func _physics_process(dt: float) -> void:
-	if not (active and _state == "round" and mode == "track" and _targets.size() > 0):
+	if not (active and _state == "round" and mode == "track" and _targets.size() > 0) or (main.settings and main.settings.is_open):
 		return
 	var t := _targets[0]
 	if not is_instance_valid(t):

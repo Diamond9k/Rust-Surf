@@ -6,6 +6,9 @@ R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 recipe = json.load(open(os.path.join(R, "melty.recipe.json"), encoding="utf-8"))
 rver = recipe["components"][0]["fileName"][len("RustSurf-"):-len(".zip")]
 ver = sys.argv[1] if len(sys.argv) > 1 else rver
+import re
+if set(re.findall(r"\d+\.\d+\.\d+", json.dumps(recipe))) != {rver}:
+    sys.exit("melty.recipe.json names more than one version: " + str(set(re.findall(r"\d+\.\d+\.\d+", json.dumps(recipe)))))
 if ver != rver:
     sys.exit("version %s does not match melty.recipe.json (%s)" % (ver, rver))
 out = os.path.join(R, "dist", "RustSurf-%s.zip" % ver)

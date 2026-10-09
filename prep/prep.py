@@ -165,12 +165,20 @@ def main():
     t = time.time()
     try:
         both("prep %s start; rust=%s cs2=%s" % (a.version, a.rust, a.cs2))
-        cs2_step(a)
-        rust_step(a)
+        errors = []
+        for step in (cs2_step, rust_step):  # one game failing must not skip the other
+            try:
+                step(a)
+            except Exception:
+                both(traceback.format_exc())
+                errors.append(step.__name__)
         missing = [r["id"] for r in rows() if r["kind"] != "config" and "{" not in r["out"] and "*" not in r["out"] and not os.path.exists(os.path.join(a.out, r["out"].split(" ")[0]))]
         wmiss = weapons_missing(a)
         both("done in %.0fs; missing rows: %s; weapons missing: %s" % (time.time() - t, missing or "none", wmiss or "none"))
         missing += ["weapon:" + w for w in wmiss]
+        if errors:
+            both("prep failed in %s; no done file, so Melty runs it again" % errors)
+            sys.exit(1)
         open(os.path.join(a.out, "done-%s.txt" % a.version), "w").write("ok %s missing=%s\n" % (a.version, missing))
     except Exception:
         both(traceback.format_exc())
