@@ -63,6 +63,36 @@
       "verified": "convar name from CS:GO; CS2 readout look unverified: not checked against the CS2 client"
     },
     {
+      "id": "show_timer",
+      "tab": "game",
+      "section": "HUD",
+      "label": "Show run timer",
+      "kind": "toggle",
+      "convar": "(none: mashup's surf timer)",
+      "min": "0",
+      "max": "1",
+      "step": "1",
+      "default": "1",
+      "choices": "No|Yes",
+      "applies_to": "Hud.set_timer_visible: the surf timer box top centre (the aim lobby hides it on its own while open)",
+      "verified": "mashup setting, nothing to check in CS2"
+    },
+    {
+      "id": "hud_scale",
+      "tab": "game",
+      "section": "HUD",
+      "label": "HUD scale",
+      "kind": "slider",
+      "convar": "(none: mashup HUD scale; CS:GO's hud_scaling convar is not read because its CS2 meaning is unverified)",
+      "min": "0.5",
+      "max": "1.5",
+      "step": "0.05",
+      "default": "1",
+      "choices": "(none)",
+      "applies_to": "Hud.hud_scale: multiplies every hud.json HUD size (numbers, bars, timer, ammo); the crosshair keeps its own cl_crosshair* size",
+      "verified": "mashup setting; range and default are design values, CS2's HUD scale option unverified: not checked against the CS2 client"
+    },
+    {
       "id": "viewmodel_fov",
       "tab": "game",
       "section": "Viewmodel",

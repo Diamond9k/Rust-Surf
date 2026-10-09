@@ -953,6 +953,62 @@
    "used_in": "1: a ducked player in the air keeps the crouch base cone (CS reads FL_DUCKING, set in a crouch-jump); 0: the air always uses the stand base",
    "source": "CS:GO GetInaccuracy duck flag test (from memory of the SDK)",
    "verified": "unverified: whether CS2 uses the crouch base in the air was not checked"
+  },
+  {
+   "id": "shoot_clips",
+   "value": "shoot1,shoot2,shoot3",
+   "used_in": "viewmodel shot clips played in turn, each only when the weapon exported it (shoot1 alone today; the rig's shot kick when none)",
+   "source": "CS2 viewmodel clip folders name shoot1_<gun>; shoot2/shoot3 are the CS:GO viewmodel sequence names",
+   "verified": "unverified: only shoot1 paths were checked against the pak01 listing; shoot2/shoot3 are not exported or checked"
+  },
+  {
+   "id": "outer_ring_alt_items",
+   "value": "weapon_revolver",
+   "used_in": "items whose alt (fan) fire takes each ring's radius share as 1 - r^2, pushing rounds out to the cone's edge",
+   "source": "CS:GO SDK FX_FireBullets revolver secondary-mode case, from memory",
+   "verified": "unverified: CS:GO SDK recalled, not read; CS2 not checked"
+  },
+  {
+   "id": "outer_ring_first_items",
+   "value": "weapon_negev",
+   "used_in": "items whose first shots square the ring radius share once per shot short of outer_ring_first_shots, then take 1 - r (a wide first burst that tightens as the spray goes on)",
+   "source": "CS:GO SDK FX_FireBullets Negev case (the 2020 Negev change), from memory",
+   "verified": "unverified: CS:GO SDK recalled, not read; CS2 not checked"
+  },
+  {
+   "id": "outer_ring_first_shots",
+   "value": 3,
+   "used_in": "recoil index below which outer_ring_first_items push rounds outward",
+   "source": "CS:GO SDK FX_FireBullets Negev case, from memory",
+   "verified": "unverified: CS:GO SDK recalled, not read; CS2 not checked"
+  },
+  {
+   "id": "punch_tick",
+   "value": 0.015625,
+   "used_in": "seconds per aim / view punch tick: DecayAimPunchAngle runs on this grid and a shot's kick lands on the next tick; between ticks the punch is carried on to the moment read, so a spray is the same at any frame rate",
+   "source": "CS2 matchmaking servers run 64 ticks a second; CS:GO decayed the punch once per tick",
+   "verified": "unverified: 64 tick is public CS2 knowledge, but that CS2's sub-tick shots still kick on the tick grid was not checked"
+  },
+  {
+   "id": "vm_metal_channel",
+   "value": 1,
+   "used_in": "viewmodel weapon mask: the image channel holding metalness (0 red, 1 green, 2 blue) when the exported metallicRoughness image has an empty blue channel",
+   "source": "read off the exported default CT knife mask (knife_ct_rough): green is 255 on the blade and guard, 0 on the cloth grip; blue is 0 everywhere",
+   "verified": "checked on the extracted CS2 default CT knife; guns not extracted here, unverified for them"
+  },
+  {
+   "id": "vm_rough_channel",
+   "value": 0,
+   "used_in": "viewmodel weapon mask: the image channel holding roughness (0 red, 1 green, 2 blue) under the same rule",
+   "source": "read off the exported default CT knife mask: red is about 0.75 on the cloth grip, 0.4 on the blade, darker on the honed edge",
+   "verified": "checked on the extracted CS2 default CT knife; guns not extracted here, unverified for them"
+  },
+  {
+   "id": "vm_metal_scale",
+   "value": 0.6,
+   "used_in": "viewmodel weapon mask: metallic factor on top of the metal channel",
+   "source": "mashup tuning: at 1.0 the knife blade mirrored the blue sky (no map cubemap like CS2's) and read dark navy in the floor/start renders",
+   "verified": "mashup choice, not a CS2 value; judged from renders, not compared side by side with CS2"
   }
  ],
  "reference_columns": [

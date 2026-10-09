@@ -1,6 +1,7 @@
 """tools/package.py's release gates that read setup's output: the release data check (a whole prep run of this
 version with every gun's stats read from CS2's files) and the items_game reader parity between the game and prep."""
 import os, sys, io, json, shutil, tempfile, unittest, contextlib
+from unittest import mock
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.dirname(HERE)); sys.path.insert(0, HERE); sys.path.insert(0, os.path.join(REPO, "tools"))
@@ -53,6 +54,25 @@ class ReleaseData(unittest.TestCase):
         self.assertEqual(len(errs), 1, errs)
         self.assertIn("1 gun(s) would play on class averages, CS2's files gave no weapon_ak47 (recoil seed)", errs[0])
         self.assertEqual(rep["guns_with_stats"], len(WEAPONS) - 1)
+
+    def test_disagreeing_stats_files_are_refused_until_settled(self):
+        """weapon_stats.json records a stat CS2's two files disagree on: refused while stats_conflict_winner is
+        unverified; once the packager writes what they checked there, it ships and the entries file names it."""
+        self.stats(lambda st: st["weapon_ak47"].update(_conflicts={"damage": {"items_game.txt": "30", "weapons.vdata": "36"}}))
+        errs, rep = self.check()
+        self.assertEqual(len(errs), 1, errs)
+        self.assertIn("disagree on 1 value(s): weapon_ak47 damage (items_game.txt 30, weapons.vdata 36). The game plays the items_game.txt value", errs[0])
+        real = prep_cs2.sheet
+        def settled(name, here=prep_cs2.HERE):
+            s = real(name, here)
+            for r in s.get("rows", []):
+                if r["id"] == "stats_conflict_winner":
+                    r["verified"] = "checked in CS2 on the packaging PC: the AK deals 36"
+            return s
+        with mock.patch.object(prep_cs2, "sheet", settled):
+            errs, rep = self.check()
+        self.assertEqual(errs, [])
+        self.assertEqual(rep["stats_conflicts"], ["weapon_ak47 damage (items_game.txt 30, weapons.vdata 36)"])
 
     def test_a_gun_without_stats_entry_is_refused(self):
         self.stats(lambda st: st.pop("weapon_awp"))

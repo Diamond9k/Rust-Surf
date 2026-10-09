@@ -1,5 +1,5 @@
 """tools/package.py: the repo's own copies agree, and a fake release tree packages only when whole."""
-import os, sys, json, shutil, zipfile, tempfile, unittest, contextlib, io
+import os, sys, json, shutil, zipfile, tempfile, unittest, unittest.mock, contextlib, io
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "tools"))
@@ -301,7 +301,8 @@ if "--export-release" in a:
         with open(p, "wb") as f:
             f.write(body)
     sys.exit(0)
-if "--main-pack" not in a or not os.path.isfile(a[a.index("--main-pack") + 1]):
+src = mode.startswith("src") and "--path" in a  # package.py --ci runs the tests on the source project
+if not src and ("--main-pack" not in a or not os.path.isfile(a[a.index("--main-pack") + 1])):
     print("not run on an exported pck")
     sys.exit(3)
 if "--lobbytest" in a:
@@ -313,8 +314,12 @@ if "--wtest" in a:
         sys.exit(0)  # ended before the self-test printed its verdict
     if mode == "werr":
         print("SCRIPT ERROR: Invalid call. Nonexistent function 'x'")
-    print("WTEST weapons checks=21 failed=0")
-    sys.exit(0)
+    fails = {"srccontent": ["viewmodel_inside_hull rig reaches 0.000 m"], "srcreal": ["viewmodel_inside_hull rig", "spray_fps_independent gap 0.2 deg"],
+             "srcmiscount": ["reequip_idle idle clip on three equips: []"]}.get(mode, [])
+    for f in fails:
+        print("WTEST FAIL " + f)
+    print("WTEST weapons checks=21 failed=%d" % (len(fails) + (mode == "srcmiscount")))
+    sys.exit(1 if fails else 0)
 if "--uitest" in a:
     if mode == "sleep":
         time.sleep(30)
@@ -419,6 +424,64 @@ class Gate(unittest.TestCase):
     def test_missing_godot_or_data(self):
         self.assertTrue(package.godot_gate(self.r, "", self.data)[0].startswith("no Godot binary"))
         self.assertTrue(package.godot_gate(self.r, self.godot, os.path.join(self.r, "nope"))[0].startswith("no extracted data folder"))
+
+
+@unittest.skipIf(os.name == "nt", "the fake Godot is a POSIX script")
+class Ci(unittest.TestCase):
+    """package.ci: what every push runs, with no game files and no export templates."""
+    setUp, tearDown, gate = Gate.setUp, Gate.tearDown, Gate.gate
+
+    def ci(self, mode):
+        os.environ["FAKE_GODOT"] = mode
+        lines = []
+        return package.game_tests(self.godot, ["--path", os.path.join(self.r, "game")], self.data, "on the source project", 60, lines.append,
+                                  package.CONTENT_CHECKS), lines
+
+    def test_source_project_passes(self):
+        errs, lines = self.ci("src")
+        self.assertEqual(errs, [])
+        self.assertIn("gate: --wtest WTEST weapons checks=21 failed=0", lines)
+        self.assertFalse(os.path.exists(os.path.join(self.r, "dist")))  # nothing exported
+
+    def test_only_content_checks_are_excused(self):
+        errs, lines = self.ci("srccontent")
+        self.assertEqual(errs, [])
+        self.assertTrue(any("1 check(s) that need extracted content not passing: viewmodel_inside_hull" in l for l in lines), lines)
+        errs, _ = self.ci("srcreal")  # a real regression next to an excused one still fails
+        self.assertEqual(len(errs), 1, errs)
+        self.assertIn("spray_fps_independent", errs[0])
+
+    def test_excuse_needs_the_test_own_count_to_agree(self):
+        errs, _ = self.ci("srcmiscount")
+        self.assertEqual(len(errs), 1, errs)
+        self.assertTrue(errs[0].startswith("Godot --wtest on the source project: exit 1"), errs)
+
+    def test_release_gate_excuses_nothing(self):
+        errs, _ = self.gate("srccontent")  # the same output on the exported pck is a refusal
+        self.assertTrue(any(e.startswith("Godot --wtest on the exported pck: exit 1") for e in errs), errs)
+
+    def test_ci_end_to_end_on_this_repo(self):
+        """The repo's own --ci with the fake Godot: game/data synced, preflight and copies clean, every step logged.
+        The prep unit tests are not run again from inside themselves."""
+        os.environ["FAKE_GODOT"] = "src"
+        lines = []
+        real = package._run
+        def run(cmd, cwd, timeout, log):
+            if cmd[1:3] == ["-m", "unittest"]:
+                return 0, "OK"
+            return real(cmd, cwd, timeout, log)
+        with unittest.mock.patch.object(package, "_run", run):
+            errs = package.ci(REPO, self.godot, 60, lines.append)
+        self.assertEqual(errs, [], errs)
+        for want in ("gate: preflight clean", "gate: prep unit tests OK", "gate: kv parity items_game.txt", "gate: --uitest UITEST ok"):
+            self.assertTrue(any(l.startswith(want) for l in lines), (want, lines))
+
+    def test_ci_without_godot_says_so(self):
+        real = package._run
+        with unittest.mock.patch.object(package, "_run", lambda c, *a: (0, "OK") if c[1:3] == ["-m", "unittest"] else real(c, *a)):
+            errs = package.ci(REPO, "", 60, lambda s: None)
+        self.assertEqual(len(errs), 1, errs)
+        self.assertTrue(errs[0].startswith("no Godot binary"), errs)
 
 
 if __name__ == "__main__":

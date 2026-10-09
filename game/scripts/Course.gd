@@ -51,7 +51,8 @@ func _paint(d: Dictionary) -> void:
 		dc.texture_normal = _region(n.get_image(), Rect2i(Vector2i(Vector2(px.position) * Vector2(n.get_width(), n.get_height()) / sz), Vector2i(Vector2(px.size) * Vector2(n.get_width(), n.get_height()) / sz)))
 	dc.size = Vector3(float(d["length"]), 1.0, float(d["width"]))
 	dc.albedo_mix = float(d["opacity"])
-	dc.modulate = Color(1, 1, 1, float(d["opacity"]))
+	var tn: Array = d["tint"]
+	dc.modulate = Color(tn[0], tn[1], tn[2], float(d["opacity"]))
 	dc.upper_fade = 0.1
 	dc.lower_fade = 0.1
 	add_child(dc)
@@ -121,6 +122,7 @@ func _surface(m: Dictionary) -> Material:
 	sm.set_shader_parameter("roughness_val", float(m["roughness"]))
 	sm.set_shader_parameter("panel", float(m["panel"]))
 	sm.set_shader_parameter("crease_ao", float(m["crease_ao"]))
+	sm.set_shader_parameter("normal_depth", float(m["normal_depth"]))
 	var tn: Array = m["tint"]
 	sm.set_shader_parameter("tint", Vector3(tn[0], tn[1], tn[2]))
 	var W: Dictionary = sheet["weathering"]
@@ -133,7 +135,7 @@ func _surface(m: Dictionary) -> Material:
 	for k in ["leak_v", "debris_v"]:
 		var a: Array = W[k]
 		sm.set_shader_parameter(k, Vector2(a[0], a[1]))
-	for k in ["leak_len", "leak_width", "debris_width"]:
+	for k in ["leak_len", "leak_width", "debris_width", "groove", "groove_width", "edge_wear"]:
 		sm.set_shader_parameter(k, float(W[k]))
 	return sm
 
@@ -204,19 +206,24 @@ func _ramp(r: Dictionary) -> StaticBody3D:
 	body.add_child(tm)  # scenery only: the collision stays the bare prism
 	return body
 
-## course.json trim: a strip trim.width metres wide on the face, from the edge e0-e1 toward f1-f0,
-## lifted trim.offset off it; UV in metres with v starting at trim.v0 (the band of the trim texture).
+## course.json trim: a steel flat trim.width metres wide on the face, from the edge e0-e1 toward f1-f0,
+## standing trim.offset proud of it, with its inner side face closed so the edge reads as a solid capping
+## that catches the sun; UV in metres with v starting at trim.v0 (the band of the trim texture).
 func _trim(st: SurfaceTool, e0: Vector3, e1: Vector3, f1: Vector3, f0: Vector3, n: Vector3) -> void:
 	var T: Dictionary = sheet["trim"]
 	var w := float(T["width"])
-	var lift := n * float(T["offset"])
+	var th := float(T["offset"])
+	var lift := n * th
 	var d0 := (f0 - e0).normalized() * w
 	var d1 := (f1 - e1).normalized() * w
-	var pts: Array[Vector3] = [e0 + lift, e1 + lift, e1 + d1 + lift, e0 + d0 + lift]
 	var ulen := e0.distance_to(e1)
 	var v0 := float(T["v0"])
-	var uv := [Vector2(0, v0), Vector2(ulen, v0), Vector2(ulen, v0 + w), Vector2(0, v0 + w)]
-	var flip := (pts[1] - pts[0]).cross(pts[2] - pts[0]).dot(n) > 0.0
+	_trim_quad(st, [e0 + lift, e1 + lift, e1 + d1 + lift, e0 + d0 + lift], n, [Vector2(0, v0), Vector2(ulen, v0), Vector2(ulen, v0 + w), Vector2(0, v0 + w)])
+	var side := d0.normalized()
+	_trim_quad(st, [e0 + d0 + lift, e1 + d1 + lift, e1 + d1, e0 + d0], side, [Vector2(0, v0 + w), Vector2(ulen, v0 + w), Vector2(ulen, v0 + w + th), Vector2(0, v0 + w + th)])
+
+func _trim_quad(st: SurfaceTool, pts: Array, n: Vector3, uv: Array) -> void:
+	var flip := ((pts[1] as Vector3) - (pts[0] as Vector3)).cross((pts[2] as Vector3) - (pts[0] as Vector3)).dot(n) > 0.0
 	for tri in ([[0, 2, 1], [0, 3, 2]] if flip else [[0, 1, 2], [0, 2, 3]]):
 		for i in tri:
 			st.set_normal(n)
@@ -341,6 +348,10 @@ uniform float detail = 0.3;
 uniform float roughness_val = 0.85;
 uniform float panel = 0.0;
 uniform float crease_ao = 0.0;
+uniform float normal_depth = 1.0;
+uniform float groove = 0.0;
+uniform float groove_width = 0.05;
+uniform float edge_wear = 0.0;
 uniform vec3 tint = vec3(1.0);
 uniform sampler2D tex_leak : source_color, filter_linear_mipmap, repeat_enable;
 uniform bool has_leak = false;
@@ -444,6 +455,12 @@ void fragment() {
 		float d = min(e.x, e.y);
 		float w = max(0.03, fwidth(d) * 1.5);
 		float joint = (1.0 - smoothstep(w * 0.5, w, d)) * (1.0 - smoothstep(25.0, 90.0, dist));
+		// each joint is a shallow V groove: the slab edges either side tilt into it, so under the sun one
+		// lip catches the light and the other falls dark
+		vec2 gs = vec2(f.x < 0.5 ? -1.0 : 1.0, f.y < 0.5 ? -1.0 : 1.0);
+		vec2 g = (1.0 - smoothstep(vec2(0.0), vec2(max(groove_width, w)), e)) * (1.0 - smoothstep(30.0, 120.0, dist));
+		g *= 1.0 - smoothstep(groove_width * 0.3, groove_width, fwidth(d));  // under a pixel wide the groove only flickers
+		nm.xy += gs * g * groove;
 		c *= 1.0 - 0.24 * joint * mix(0.35, 1.0, hash(floor(pc) + vec2(13.0, 1.0)));  // some joints grouted, some dirty
 		float under = (1.0 - smoothstep(0.0, 0.9, f.y * ps.y)) * (1.0 - smoothstep(60.0, 200.0, dist));
 		c *= 1.0 - 0.12 * under * grime;
@@ -468,6 +485,11 @@ void fragment() {
 	float lip = (1.0 - smoothstep(0.06, 0.4, top)) * face * grime * step(0.001, grime);
 	float chip = smoothstep(0.35, 0.65, vnoise(vec2(m.x * 3.0, top * 6.0)));
 	c = mix(c, c * 1.22 + vec3(0.025), lip * chip);
+	// worn arris: the top edge scuffed smooth by boots, with chipped-out pits that stay rough
+	float wear = (1.0 - smoothstep(0.0, 0.9, top)) * face * edge_wear;
+	float pit = smoothstep(0.62, 0.8, vnoise(vec2(m.x * 7.0, top * 9.0) + vec2(4.0, 1.0)));
+	rough = mix(rough, mix(0.45, 1.0, pit), wear);
+	nm.xy += (vec2(vnoise(m * 14.0), vnoise(m * 14.0 + vec2(7.0, 3.0))) - 0.5) * pit * wear * 0.8;
 	if (has_leak) {  // uniform branch only: the atlas lookups need derivatives, undefined per pixel branch
 		// Rust's own leak decals (dirt_stains_leaks) hanging from the top edge, in runs along it
 		float run = smoothstep(0.35, 0.6, fbm(vec2(mo.x / 11.0, 3.7)));
@@ -483,6 +505,7 @@ void fragment() {
 	}
 	ALBEDO = c;
 	NORMAL_MAP = nm;
+	NORMAL_MAP_DEPTH = normal_depth;
 	ROUGHNESS = rough;
 	AO = occ;
 	AO_LIGHT_AFFECT = 1.0 - 0.5 * smoothstep(0.0, 1.0, UV2.y);

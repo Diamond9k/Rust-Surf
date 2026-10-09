@@ -67,8 +67,11 @@ tools such as `Source2Viewer-CLI.exe`).
   a whole prep run of this version in which every one of the 35 guns got every required stat from CS2's
   own files.
 - Where CS2 keeps live weapon stats is unverified: the reader takes `items_game.txt` attributes (the
-  CS:GO layout) first and `weapons.vdata` fields second, and the vdata path and field names in
-  `sheets/prep.json` are from memory. If the real files leave a gun without a required stat in both,
+  CS:GO layout) and fills gaps from `weapons.vdata` fields, and the vdata path and field names in
+  `sheets/prep.json` are from memory. Where both files give a stat and disagree, the game plays the
+  file `stats_conflict_winner` names (`items_game.txt` in 0.2.0, unverified), `data/prep.log` lists every
+  disagreement, and no release can be packaged on files that disagree until someone has checked which
+  value CS2 plays and marked that row verified. If the real files leave a gun without a required stat in both,
   that gun plays on class values and the error panel says which stats; that needs a Rust Surf update,
   not a reinstall. That the real CS2 files give every required stat for all 35 guns has not been seen.
 - How Melty itself presents a setup that exits 1 has not been seen; the reasons are always in
@@ -76,7 +79,7 @@ tools such as `Source2Viewer-CLI.exe`).
   panel, which reads `data/prep_status.json`.
 - Weapon constants CS2 does not publish (recoil decay, penetration, armor) are CS:GO SDK defaults or
   estimates. `python3 tools/preflight.py --list` prints every sheet cell labelled unverified
-  (about 280 in this build: weapon defaults, weapon alt/reload modes, HUD and settings values, prep's
+  (about 290 in this build: weapon defaults, weapon alt/reload modes, HUD and settings values, prep's
   vdata map and others); `tools/package.py` records the count in the release's entries file.
 - Rust weapons are not in this version.
 
@@ -92,12 +95,18 @@ tools such as `Source2Viewer-CLI.exe`).
   bundle import line).
 - `tools/preflight.py` checks every table of every sheet: each cell filled, each row verified or labelled
   unverified, every cross-sheet reference, every copy. `--strict` also fails on unverified cells.
+- `tools/package.py --ci --godot <Godot 4.7.2 headless>` is what every push runs
+  (`.github/workflows/ci.yml`): recipe and README name one version, sheet copies equal, preflight, the
+  prep unit tests, `--import` and `--check-only` on every script, the game-vs-prep `items_game.txt`
+  reader parity on the fixture, and the headless `--lobbytest`, `--wtest` and `--uitest` on the source
+  project. It needs no game files, so the two `--wtest` checks that need CS2's arms are excused there
+  (and only there); the release gate below runs them on real data.
 - `tools/package.py --godot <Godot 4.7.2> --data <prep output folder>` builds the release zip. It
   copies the sheets into `game/data/` and `prep/`, then refuses to package unless preflight is clean,
   the prep unit tests pass, and `--data` is a whole prep run of this version on a real Rust + CS2 install
   (done file, every content row, all 35 guns with model, clips and sound, and no gun left on
-  class-average stats; the hashes of its `prep_status.json` and `weapon_stats.json` go in the entries
-  file). Every game script must pass Godot's `--check-only`, and the game's own `items_game.txt` reader
+  class-average stats or on a stat CS2's two stats files disagree about while that is unchecked; the hashes
+  of its `prep_status.json` and `weapon_stats.json` go in the entries file). Every game script must pass Godot's `--check-only`, and the game's own `items_game.txt` reader
   (`tools/kv_parity.gd`) must read the test fixture and the real file exactly as prep does. It then
   empties `dist/RustSurf`, exports the game into it itself (Godot's Windows export templates must be
   installed) and runs the headless `--lobbytest`, `--wtest` and `--uitest` on that exported pack with the

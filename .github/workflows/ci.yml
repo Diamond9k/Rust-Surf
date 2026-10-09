@@ -1,0 +1,26 @@
+# Every push and pull request: tools/package.py --ci (recipe/README version, sheet copies, preflight, the prep
+# unit tests, Godot --import and --check-only on every script, the game-vs-prep items_game parity on the
+# synthetic fixture, and --lobbytest / --wtest / --uitest headless on the source project). No game files are
+# involved: the two --wtest checks that need CS2's arms are excused here and run in the release gate instead.
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GODOT_VERSION: 4.7.2-stable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Godot (pinned, headless)
+        run: |
+          curl -fsSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q godot.zip -d "$RUNNER_TEMP/godot"
+          echo "GODOT=$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}_linux.x86_64" >> "$GITHUB_ENV"
+      - name: package.py --ci
+        run: python tools/package.py --ci --godot "$GODOT"

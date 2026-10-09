@@ -18,6 +18,7 @@ var crosshair: Control
 var hit_ctl: Control   # the hit marker draws on its own Control: Weapons hides the crosshair for snipers and scopes
 var fps_label: Label
 var hit_marker := false  # Settings 'hit_marker'; CS2 gives no hit marker, so it starts off
+var hud_scale := 1.0     # Settings 'hud_scale': multiplies every hud.json size (not the crosshair)
 var convars := {}
 var font: Font
 var menu_font: Font    # the same face at the lighter weight CS2's settings text uses
@@ -55,7 +56,7 @@ func setup(cv: Dictionary, cs2_dir: String = "") -> void:
 	_pill = PanelContainer.new()
 	_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pill_sb = StyleBoxFlat.new()
-	_pill_sb.bg_color = Color(0, 0, 0, 0.5)
+	_pill_sb.bg_color = Color(0, 0, 0, float(H["timer_bg_alpha"]))
 	_pill.add_theme_stylebox_override("panel", _pill_sb)
 	_pill.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	root.add_child(_pill)
@@ -99,7 +100,7 @@ func setup(cv: Dictionary, cs2_dir: String = "") -> void:
 ## Places and sizes everything for the current window height.
 func _layout() -> void:
 	var vp := get_viewport().get_visible_rect().size
-	_s = vp.y / float(H["ref_height"])
+	_s = vp.y / float(H["ref_height"]) * hud_scale
 	var s := _s
 	for e in _sized:
 		var l: Label = e[0]
@@ -236,9 +237,12 @@ func _draw_deco() -> void:
 			_deco.draw_rect(Rect2(x - 2.5 * s, cy - 5 * s, 5 * s, 15 * s), ic)
 			_deco.draw_colored_polygon(PackedVector2Array([Vector2(x - 2.5 * s, cy - 5 * s), Vector2(x, cy - 11 * s), Vector2(x + 2.5 * s, cy - 5 * s)]), ic)
 
-## Source convar booleans come as "1"/"0" or "true"/"false".
+## Source convar booleans come as "1"/"0", "true"/"false" or a float some cfg writers print ("1.000000").
 static func on(cv: Dictionary, k: String, def: String) -> bool:
-	return str(cv.get(k, def)).to_lower() in ["1", "true"]
+	var v := str(cv.get(k, def)).strip_edges().to_lower()
+	if v.is_valid_float() or v.is_valid_int():
+		return float(v) != 0.0
+	return v == "true"
 
 static func num(cv: Dictionary, k: String, def: float) -> float:
 	var v := str(cv.get(k, def))
@@ -249,7 +253,10 @@ static func presets(hv: Dictionary) -> Array:
 	var out: Array = []
 	for t in String(hv.get("xh_colors", "50,250,50")).split("|"):
 		var p := t.split(",")
-		out.append(Color8(int(p[0]), int(p[1]), int(p[2])))
+		if p.size() < 3:
+			push_warning("hud.json xh_colors: '%s' is not r,g,b; drawn green" % t)
+			p = PackedStringArray(["50", "250", "50"])  # a hand-edited bad entry keeps its slot, so the numbering holds
+		out.append(Color8(clampi(int(p[0]), 0, 255), clampi(int(p[1]), 0, 255), clampi(int(p[2]), 0, 255)))
 	return out
 
 static func xh_color(cv: Dictionary, hv: Dictionary) -> Color:
@@ -461,6 +468,14 @@ func hitmarker(_head: bool) -> void:
 
 func set_speed_visible(b: bool) -> void:
 	speed_label.visible = b
+
+## Settings 'show_timer'. Fades the box rather than hiding it, so AimLobby's own hide and restore of it stays apart.
+func set_timer_visible(b: bool) -> void:
+	_pill.modulate.a = 1.0 if b else 0.0
+
+func set_hud_scale(v: float) -> void:
+	hud_scale = v
+	_layout()
 
 func set_fps_visible(b: bool) -> void:
 	fps_label.visible = b

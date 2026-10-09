@@ -418,7 +418,11 @@ func _all(n: Node, cls: String) -> Array:
 	return out
 
 ## VRF writes CS2 materials with no metallic factor, which glTF reads as metallic 1 (masked by the
-## metal map). Skin and gloves are set to plain dielectric so they never mirror the sky.
+## metal map). Skin and gloves are set to plain dielectric so they never mirror the sky. A weapon's mask
+## texture is CS2's csgo_weapon g_tMetalness packed as glTF's metallicRoughness image, but with roughness
+## in red, metalness in green and blue empty: read that way (vm_rough_channel / vm_metal_channel) when its
+## blue channel is empty, so a blade or a receiver is bare steel instead of grey plastic. vm_metal_scale
+## tempers it: without CS2's map cubemaps a full metal mirrors only the open sky and reads blue.
 func _fix_materials(mi: MeshInstance3D) -> void:
 	if mi.mesh == null:
 		return
@@ -432,4 +436,28 @@ func _fix_materials(mi: MeshInstance3D) -> void:
 			m.metallic = 0.0
 			m.metallic_texture = null
 			m.roughness = 0.75
+		elif m.metallic_texture != null and m.metallic_texture == m.roughness_texture and B.has("vm_metal_channel") and _blue_empty(m.metallic_texture):
+			m.metallic_texture_channel = int(B["vm_metal_channel"]) as BaseMaterial3D.TextureChannel
+			m.roughness_texture_channel = int(B["vm_rough_channel"]) as BaseMaterial3D.TextureChannel
+			m.metallic = float(B.get("vm_metal_scale", 1.0))
+			m.roughness = 1.0
 		mi.set_surface_override_material(i, m)
+
+## True when a mask texture's blue channel is black everywhere (checked on a small copy); false when the
+## image cannot be read, so an unreadable mask keeps glTF's own channels.
+func _blue_empty(tex: Texture2D) -> bool:
+	var img := tex.get_image()
+	if img == null or img.is_empty():
+		return false
+	img = img.duplicate() as Image
+	if img.is_compressed() and img.decompress() != OK:
+		return false
+	img.resize(32, 32, Image.INTERPOLATE_BILINEAR)
+	var green := 0.0
+	for y in 32:
+		for x in 32:
+			var c := img.get_pixel(x, y)
+			if c.b > 0.02:
+				return false
+			green = maxf(green, c.g)
+	return green > 0.02

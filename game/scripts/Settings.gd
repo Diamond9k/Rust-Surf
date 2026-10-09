@@ -1,6 +1,7 @@
-## systems.settings: the Esc menu laid out like CS2's: an icon nav bar (settings, resume, aim lobby, restart, quit),
-## the settings tabs (Game, Keyboard / Mouse, Audio, Video, Crosshair) over the blurred game, settings.json rows as
-## slider + number field or dropdown, the input.json binds (two keys per action) and a live crosshair preview.
+## systems.settings: the Esc menu laid out like CS2's: an icon nav bar (settings, resume, buy menu, aim lobby, restart,
+## quit), the settings tabs (Game, Keyboard / Mouse, Audio, Video, Crosshair) as one full-width page over the blurred
+## game with each tab's sections down the left, settings.json rows as slider + number field or dropdown, the
+## input.json binds (two keys per action) and a live crosshair preview.
 ## Values start from the player's CS2 convars, unrounded; only changes go to user://settings.json.
 class_name Settings
 extends CanvasLayer
@@ -41,6 +42,9 @@ var _root: Control
 var _tab := "game"
 var _pages := {}
 var _lists := {}         # tab -> the rows' VBox (its height sizes the panel, so the panel ends with its rows)
+var _scrolls := {}       # tab -> its rows' ScrollContainer
+var _heads := {}         # tab -> [[section title Control, sidebar Button], ...] in page order
+var _heads_cur: Array = []  # the section titles of the page being built
 var _area: Control
 var _tab_btns := {}
 var _ctl := {}           # id -> [slider or option, number field or null]
@@ -92,8 +96,8 @@ func toggle() -> void:
 	_show_tab(_tab)
 	main.hud.visible = not is_open  # the menu covers the game; the HUD never draws over it
 	var buy: Variant = main.weapons.get("_buy") if main.get("weapons") != null else null
-	if is_open and buy is CanvasItem and (buy as CanvasItem).visible:
-		(buy as CanvasItem).visible = false  # one menu at a time
+	if is_open and buy is CanvasLayer and (buy as CanvasLayer).visible:
+		(buy as CanvasLayer).visible = false  # one menu at a time (the buy menu is a CanvasLayer, not a CanvasItem)
 	if is_open:  # the menu pauses movement like a paused local server, and gives back whatever held it before
 		_was_frozen = main.player.frozen
 		main.player.frozen = true
@@ -251,6 +255,8 @@ func _apply(k: String) -> void:
 		return
 	match k:
 		"show_speed": h.set_speed_visible(v)
+		"show_timer": h.set_timer_visible(v)
+		"hud_scale": h.set_hud_scale(v)
 		"hit_marker": h.hit_marker = v
 		"cl_showfps": h.set_fps_visible(v)
 		"sensitivity": main.player.input.sensitivity = v
@@ -460,29 +466,28 @@ func _theme() -> Theme:
 	t.set_color("font_hover_color", "Button", Color.WHITE)
 	t.set_color("font_pressed_color", "Button", Color.WHITE)
 	t.set_color("font_hover_color", "OptionButton", Color.WHITE)
-	t.set_stylebox("normal", "OptionButton", _sb(Color(0, 0, 0, 0.35), 2, Color(1, 1, 1, 0.12)))
-	t.set_stylebox("hover", "OptionButton", _sb(Color(1, 1, 1, 0.1), 2, Color(1, 1, 1, 0.25)))
-	t.set_stylebox("pressed", "OptionButton", _sb(Color(1, 1, 1, 0.14), 2, Color(1, 1, 1, 0.25)))
+	t.set_stylebox("normal", "OptionButton", _sb(Color(1, 1, 1, 0.075), 1))
+	t.set_stylebox("hover", "OptionButton", _sb(Color(1, 1, 1, 0.14), 1))
+	t.set_stylebox("pressed", "OptionButton", _sb(Color(1, 1, 1, 0.18), 1))
 	t.set_stylebox("focus", "OptionButton", StyleBoxEmpty.new())
 	t.set_icon("arrow", "OptionButton", _caret(_px(10)))
 	t.set_stylebox("panel", "PopupMenu", _sb(Color(0.09, 0.1, 0.11, 0.98), 2, Color(1, 1, 1, 0.15)))
 	t.set_stylebox("hover", "PopupMenu", _sb(Color(1, 1, 1, 0.12)))
-	t.set_stylebox("normal", "LineEdit", _sb(Color(0, 0, 0, 0.35), 2, Color(1, 1, 1, 0.12)))
-	t.set_stylebox("focus", "LineEdit", _sb(Color(0, 0, 0, 0.5), 2, Color(1, 1, 1, 0.45)))
+	t.set_stylebox("normal", "LineEdit", _under(Color(0, 0, 0, 0.4), Color(1, 1, 1, 0.22)))
+	t.set_stylebox("focus", "LineEdit", _under(Color(0, 0, 0, 0.55), Color.WHITE))
 	t.set_stylebox("panel", "TooltipPanel", _sb(Color(0.06, 0.065, 0.07, 0.97), 2, Color(1, 1, 1, 0.18)))
 	t.set_color("font_color", "TooltipLabel", TEXT)
 	var track := StyleBoxFlat.new()
-	track.bg_color = Color(1, 1, 1, 0.16)
-	track.content_margin_top = _px(2)
-	track.content_margin_bottom = _px(2)
+	track.bg_color = Color(1, 1, 1, 0.14)
+	track.content_margin_top = maxf(_px(1.5), 1.0)
+	track.content_margin_bottom = maxf(_px(1.5), 1.0)
 	var fill := track.duplicate() as StyleBoxFlat
 	fill.bg_color = FILL
 	t.set_stylebox("slider", "HSlider", track)
 	t.set_stylebox("grabber_area", "HSlider", fill)
 	t.set_stylebox("grabber_area_highlight", "HSlider", fill)
-	var grab := _circle(_px(12), Color.WHITE)
-	t.set_icon("grabber", "HSlider", grab)
-	t.set_icon("grabber_highlight", "HSlider", grab)
+	t.set_icon("grabber", "HSlider", _knob(_px(7), _px(17), FILL))
+	t.set_icon("grabber_highlight", "HSlider", _knob(_px(7), _px(17), Color.WHITE))
 	var sbar := StyleBoxFlat.new()
 	sbar.bg_color = Color(1, 1, 1, 0.05)
 	sbar.content_margin_left = _px(3)
@@ -507,20 +512,31 @@ func _caret(d: int) -> ImageTexture:
 			img.set_pixel(x, y, Color(DIM.r, DIM.g, DIM.b, a))
 	return ImageTexture.create_from_image(img)
 
-func _circle(d: int, c: Color) -> ImageTexture:
-	var img := Image.create_empty(d, d, false, Image.FORMAT_RGBA8)
-	var r := d * 0.5
-	for x in d:
-		for y in d:
-			var dist := Vector2(x + 0.5 - r, y + 0.5 - r).length()
-			img.set_pixel(x, y, Color(c.r, c.g, c.b, clampf(r - dist, 0.0, 1.0)))
+## The slider handle: an upright bar w x h px with softened corners (a game slider's, not a browser's round thumb).
+func _knob(w: int, h: int, c: Color) -> ImageTexture:
+	var img := Image.create_empty(w, h, false, Image.FORMAT_RGBA8)
+	var r := minf(w * 0.3, 2.0)
+	for x in w:
+		for y in h:
+			var dx := maxf(maxf(r - (x + 0.5), (x + 0.5) - (w - r)), 0.0)
+			var dy := maxf(maxf(r - (y + 0.5), (y + 0.5) - (h - r)), 0.0)
+			img.set_pixel(x, y, Color(c.r, c.g, c.b, clampf(r + 0.5 - Vector2(dx, dy).length(), 0.0, 1.0) if dx > 0.0 and dy > 0.0 else 1.0))
 	return ImageTexture.create_from_image(img)
+
+## A dark field with a line under it (the number boxes): white under the one being typed in.
+func _under(c: Color, line: Color) -> StyleBoxFlat:
+	var s := _sb(c, 0)
+	s.border_color = line
+	s.border_width_bottom = maxi(_px(1.5), 1)
+	return s
 
 func _build() -> void:
 	var vp := get_viewport().get_visible_rect().size
 	_u = vp.y / float(main.hud.H["menu_ref_height"])
 	_pages.clear()
 	_lists.clear()
+	_scrolls.clear()
+	_heads.clear()
 	_tab_btns.clear()
 	_ctl.clear()
 	_bind_btns.clear()
@@ -560,6 +576,12 @@ func _build() -> void:
 	sep.custom_minimum_size = Vector2(1, nav_h * 0.5)
 	sep.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hb.add_child(sep)
+	var buy: Variant = main.weapons.get("_buy") if main.get("weapons") != null else null
+	if buy is CanvasLayer:
+		_nav_button(hb, "loadout", "", "Buy menu (B)", nav_h).pressed.connect(func() -> void:
+			toggle()
+			(buy as CanvasLayer).visible = true
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE)
 	_nav_button(hb, "target", "", "Aim lobby", nav_h).pressed.connect(func() -> void:
 		toggle()
 		main.lobby.toggle())
@@ -574,14 +596,16 @@ func _build() -> void:
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hb.add_child(sp)
 	_nav_button(hb, "power", "", "Quit", nav_h).pressed.connect(func() -> void: get_tree().quit())
-	# settings tabs under the nav bar, centred, the open one underlined
+	# one full-width page under the nav bar: tabs from its left edge (the open one underlined), then the rows
+	var margin := _px(float(main.hud.H["menu_margin"]))
+	var w := _area_w()
 	var tab_h := _px(float(main.hud.H["menu_tabs"]))
 	var tb := HBoxContainer.new()
 	tb.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	tb.offset_top = nav_h
 	tb.offset_bottom = nav_h + tab_h
-	tb.alignment = BoxContainer.ALIGNMENT_CENTER
-	tb.add_theme_constant_override("separation", _px(6))
+	tb.offset_left = floorf((vp.x - w) * 0.5)
+	tb.add_theme_constant_override("separation", _px(4))
 	_root.add_child(tb)
 	var group := ButtonGroup.new()
 	for t in TABS:
@@ -597,21 +621,19 @@ func _build() -> void:
 	line.offset_top = nav_h + tab_h
 	line.offset_bottom = nav_h + tab_h + 1
 	_root.add_child(line)
-	# pages: one centred column under the tabs
-	var w := minf(float(main.hud.H["menu_width"]) * _u, vp.x - _px(32))
 	var area := Control.new()
 	area.anchor_left = 0.5
 	area.anchor_right = 0.5
 	area.anchor_bottom = 1.0
 	area.offset_left = -w * 0.5
 	area.offset_right = w * 0.5
-	area.offset_top = nav_h + tab_h + _px(16)
-	area.offset_bottom = -_px(18)
+	area.offset_top = nav_h + tab_h + _px(14)
+	area.offset_bottom = -margin
 	_root.add_child(area)
 	_area = area
 	var back := Panel.new()  # the darker, near-opaque column behind the rows
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	back.add_theme_stylebox_override("panel", _sb(Color(0.016, 0.019, 0.024, float(main.hud.H["menu_panel_alpha"])), 3, Color(1, 1, 1, 0.06)))
+	back.add_theme_stylebox_override("panel", _sb(Color(0.016, 0.019, 0.024, float(main.hud.H["menu_panel_alpha"])), 0))
 	back.set_anchors_preset(Control.PRESET_FULL_RECT)
 	back.offset_left = -_px(12)
 	back.offset_right = _px(12)
@@ -660,7 +682,7 @@ func _nav_button(parent: Control, icon: String, text: String, tip: String, h: in
 	parent.add_child(b)
 	return b
 
-## Line icons drawn at c with radius r: gear, play, target, restart, power.
+## Line icons drawn at c with radius r: gear, play, loadout, target, restart, power.
 func _icon(ci: CanvasItem, icon: String, c: Vector2, r: float, col: Color) -> void:
 	var w := maxf(r * 0.2, 1.5)
 	match icon:
@@ -674,6 +696,11 @@ func _icon(ci: CanvasItem, icon: String, c: Vector2, r: float, col: Color) -> vo
 				pts.append(c + Vector2(cos(a), sin(a)) * r * (1.0 if tooth else 0.74))
 			ci.draw_colored_polygon(pts, col)
 			ci.draw_circle(c, r * 0.36, Color(0.015, 0.018, 0.022))
+		"loadout":  # a case: the buy menu
+			var body := Rect2(c + Vector2(-r * 0.95, -r * 0.45), Vector2(r * 1.9, r * 1.25))
+			ci.draw_rect(body, col, false, w)
+			ci.draw_rect(Rect2(c + Vector2(-r * 0.38, -r * 0.8), Vector2(r * 0.76, r * 0.35)), col, false, w)
+			ci.draw_line(Vector2(body.position.x, c.y + r * 0.08), Vector2(body.end.x, c.y + r * 0.08), col, w)
 		"target":
 			ci.draw_arc(c, r * 0.72, 0, TAU, 32, col, w, true)
 			for d in [Vector2.RIGHT, Vector2.LEFT, Vector2.UP, Vector2.DOWN]:
@@ -692,13 +719,22 @@ func _bold(c: Control) -> void:
 	if main.hud.font:
 		c.add_theme_font_override("font", main.hud.font)
 
+## The bold face with hud.json menu_header_spacing between letters, for the upper-case titles and tabs.
+func _spaced(c: Control) -> void:
+	if main.hud.font == null:
+		return
+	var fv := FontVariation.new()
+	fv.base_font = main.hud.font
+	fv.spacing_glyph = int(round(float(main.hud.H["menu_header_spacing"]) * _u))
+	c.add_theme_font_override("font", fv)
+
 func _flat_button(parent: Control, text: String, h: int) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size.y = h
-	b.add_theme_font_size_override("font_size", _px(15))
-	_bold(b)
+	b.add_theme_font_size_override("font_size", _px(14))
+	_spaced(b)
 	b.add_theme_color_override("font_color", DIM)
 	b.add_theme_color_override("font_pressed_color", Color.WHITE)
 	b.add_theme_color_override("font_hover_pressed_color", Color.WHITE)
@@ -735,7 +771,7 @@ func _fit_area() -> void:
 	var host := _pages[_tab] as Control
 	if host is HBoxContainer:
 		h = maxf(h, host.get_combined_minimum_size().y)
-	var room := get_viewport().get_visible_rect().size.y - _area.offset_top - _px(18)
+	var room := get_viewport().get_visible_rect().size.y - _area.offset_top - _px(float(main.hud.H["menu_margin"]))
 	_area.anchor_bottom = 0.0
 	_area.offset_bottom = _area.offset_top + minf(h, room)
 
@@ -748,15 +784,21 @@ func _page(tab: String, w: float) -> Control:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", _px(18))
+	var side: VBoxContainer = null
 	if tab == "crosshair":
-		var hb := HBoxContainer.new()
-		hb.add_theme_constant_override("separation", _px(18))
-		hb.add_child(_preview_panel(w * 0.36))
-		hb.add_child(scroll)
-		host = hb
+		hb.add_child(_preview_panel(floorf(w * 0.34)))
 	else:
-		host = scroll
+		side = VBoxContainer.new()  # the tab's sections down the left; a click scrolls to one
+		side.custom_minimum_size.x = floorf(minf(_px(float(main.hud.H["menu_sidebar"])), w * 0.24))
+		side.add_theme_constant_override("separation", _px(2))
+		hb.add_child(side)
+	hb.add_child(scroll)
+	host = hb
 	_lists[tab] = list
+	_scrolls[tab] = scroll
+	_heads_cur = []
 	var section := ""
 	var n := 0
 	for id in rows:
@@ -772,23 +814,80 @@ func _page(tab: String, w: float) -> Control:
 			n = 0
 		_row(list, r, n)
 		n += 1
+	_heads[tab] = []
+	if side != null:
+		var group := ButtonGroup.new()
+		for e in _heads_cur:
+			var head: Control = e[0]
+			var b := _side_button(side, String(e[1]), group)
+			b.pressed.connect(func() -> void: scroll.scroll_vertical = int(head.position.y))
+			_heads[tab].append([head, b])
+		if not _heads[tab].is_empty():
+			(_heads[tab][0][1] as Button).set_pressed_no_signal(true)
 	return host
+
+## A sidebar entry: dim text, the section in view lit with a white bar on its left.
+func _side_button(parent: Control, text: String, group: ButtonGroup) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.toggle_mode = true
+	b.button_group = group
+	b.focus_mode = Control.FOCUS_NONE
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.custom_minimum_size.y = _px(34)
+	b.clip_text = true
+	b.add_theme_font_size_override("font_size", _px(15))
+	b.add_theme_color_override("font_color", DIM)
+	b.add_theme_color_override("font_pressed_color", Color.WHITE)
+	b.add_theme_color_override("font_hover_pressed_color", Color.WHITE)
+	var pad := func(c: Color, lit: bool) -> StyleBoxFlat:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = c
+		sb.content_margin_left = _px(14)
+		sb.content_margin_right = _px(8)
+		if lit:
+			sb.border_color = Color.WHITE
+			sb.border_width_left = maxi(_px(3), 2)
+		return sb
+	b.add_theme_stylebox_override("normal", pad.call(Color(0, 0, 0, 0), false))
+	b.add_theme_stylebox_override("hover", pad.call(Color(1, 1, 1, 0.06), false))
+	b.add_theme_stylebox_override("pressed", pad.call(Color(1, 1, 1, 0.08), true))
+	b.add_theme_stylebox_override("hover_pressed", pad.call(Color(1, 1, 1, 0.1), true))
+	parent.add_child(b)
+	return b
+
+## Lights the sidebar entry of the last section title scrolled to (or past) in the open tab.
+func _track_section() -> void:
+	var hs: Array = _heads.get(_tab, [])
+	if hs.is_empty():
+		return
+	var sc := _scrolls[_tab] as ScrollContainer
+	var at := 0
+	for i in hs.size():
+		if (hs[i][0] as Control).position.y <= sc.scroll_vertical + _px(4):
+			at = i
+	if sc.scroll_vertical > 0 and sc.scroll_vertical >= int(sc.get_v_scroll_bar().max_value - sc.get_v_scroll_bar().page) - 1:
+		at = hs.size() - 1  # scrolled to the end: the last section is the one in view even if short
+	var b := hs[at][1] as Button
+	if not b.button_pressed:
+		b.set_pressed_no_signal(true)
 
 ## A section title with a rule under it; cols names the columns of the controls on the right (bind slots).
 func _header(parent: Control, text: String, cols: Array = []) -> void:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", _px(10))
 	var l := Label.new()
-	l.text = text
+	l.text = text.to_upper()
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	l.add_theme_font_size_override("font_size", _px(18))
-	l.add_theme_color_override("font_color", Color.WHITE)
-	_bold(l)
+	l.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	l.add_theme_font_size_override("font_size", _px(15))
+	l.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
+	_spaced(l)
 	hb.add_child(l)
 	for c in cols:
 		var cl := Label.new()
 		cl.text = String(c).to_upper()
-		cl.custom_minimum_size.x = _px(128)
+		cl.custom_minimum_size.x = _bind_w()
 		cl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		cl.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 		cl.add_theme_font_size_override("font_size", _px(12))
@@ -797,22 +896,29 @@ func _header(parent: Control, text: String, cols: Array = []) -> void:
 	var pad := MarginContainer.new()
 	pad.add_theme_constant_override("margin_top", _px(18) if parent.get_child_count() > 0 else _px(2))
 	pad.add_theme_constant_override("margin_bottom", _px(8))
-	pad.add_theme_constant_override("margin_left", _px(4))
+	pad.add_theme_constant_override("margin_left", _px(14))
 	pad.add_theme_constant_override("margin_right", _px(10))
 	pad.add_child(hb)
 	parent.add_child(pad)
+	_heads_cur.append([pad, text])
 	var rule := ColorRect.new()
-	rule.color = Color(1, 1, 1, 0.12)
+	rule.color = Color(1, 1, 1, 0.16)
 	rule.custom_minimum_size.y = 1
 	parent.add_child(rule)
 
-## One settings line: label left, control right, alternating shade like CS2's lists.
+## One full-width settings line: label left, controls in the right-hand column, alternating shade like CS2's
+## lists and lit under the mouse.
 func _line(parent: Control, label: String, n: int) -> HBoxContainer:
 	var pc := PanelContainer.new()
-	var s := _sb(Color(1, 1, 1, 0.045) if n % 2 == 0 else Color(0, 0, 0, 0.18), 0)
+	var s := _sb(Color(1, 1, 1, 0.04) if n % 2 == 0 else Color(0, 0, 0, 0.16), 0)
 	s.content_margin_left = _px(14)
 	s.content_margin_right = _px(10)
+	var lit := s.duplicate() as StyleBoxFlat
+	lit.bg_color = Color(1, 1, 1, 0.09)
 	pc.add_theme_stylebox_override("panel", s)
+	pc.mouse_filter = Control.MOUSE_FILTER_PASS
+	pc.mouse_entered.connect(func() -> void: pc.add_theme_stylebox_override("panel", lit))
+	pc.mouse_exited.connect(func() -> void: pc.add_theme_stylebox_override("panel", s))
 	pc.custom_minimum_size.y = _px(float(main.hud.H["menu_row"]))
 	parent.add_child(pc)
 	var hb := HBoxContainer.new()
@@ -828,12 +934,24 @@ func _line(parent: Control, label: String, n: int) -> HBoxContainer:
 	hb.add_child(l)
 	return hb
 
+## Width of the right-hand control column (hud.json menu_control_width), never more than half the page.
+func _ctl_w() -> float:
+	return minf(_px(float(main.hud.H["menu_control_width"])), _area_w() * 0.5)
+
+## A key slot: the control column holds the two of them.
+func _bind_w() -> float:
+	return floorf((_ctl_w() - _px(12)) * 0.5)
+
+func _area_w() -> float:
+	var vp := get_viewport().get_visible_rect().size
+	return minf(float(main.hud.H["menu_width"]) * _u, vp.x - _px(float(main.hud.H["menu_margin"])) * 2)
+
 func _row(parent: Control, r: Dictionary, n: int) -> void:
 	var k: String = r["id"]
 	var hb := _line(parent, r["label"], n)
 	var right := HBoxContainer.new()
-	right.add_theme_constant_override("separation", _px(10))
-	right.custom_minimum_size.x = _px(300)
+	right.add_theme_constant_override("separation", _px(12))
+	right.custom_minimum_size.x = _ctl_w()
 	right.alignment = BoxContainer.ALIGNMENT_END
 	hb.add_child(right)
 	if r["kind"] == "slider":
@@ -872,7 +990,8 @@ func _row(parent: Control, r: Dictionary, n: int) -> void:
 	else:
 		var o := OptionButton.new()
 		o.focus_mode = Control.FOCUS_NONE
-		o.custom_minimum_size.x = _px(220)
+		o.size_flags_horizontal = Control.SIZE_EXPAND_FILL  # as wide as a slider and its field: the column lines up
+		o.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		for c in String(r["choices"]).split("|"):
 			o.add_item(c)
 		o.select(int(vals[k]))
@@ -904,8 +1023,9 @@ func _binds_list(parent: Control) -> void:
 	reset.text = "RESET TO CS2 BINDS"
 	reset.focus_mode = Control.FOCUS_NONE
 	reset.size_flags_horizontal = Control.SIZE_SHRINK_END
-	reset.add_theme_stylebox_override("normal", _sb(Color(0, 0, 0, 0.35), 2, Color(1, 1, 1, 0.12)))
-	reset.add_theme_stylebox_override("hover", _sb(Color(1, 1, 1, 0.1), 2, Color(1, 1, 1, 0.3)))
+	reset.add_theme_stylebox_override("normal", _sb(Color(1, 1, 1, 0.075), 1))
+	reset.add_theme_stylebox_override("hover", _sb(Color(1, 1, 1, 0.14), 1))
+	reset.custom_minimum_size.y = _px(30)
 	reset.pressed.connect(_reset_binds)
 	var pad := MarginContainer.new()
 	pad.add_theme_constant_override("margin_top", _px(10))
@@ -929,11 +1049,12 @@ func _binds_group(parent: Control, sec: String, group: Array) -> void:
 		for i in 2:
 			var b := Button.new()
 			b.focus_mode = Control.FOCUS_NONE
-			b.custom_minimum_size.x = _px(128)
+			b.custom_minimum_size.x = _bind_w()
+			b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			b.clip_text = true
-			b.add_theme_stylebox_override("normal", _sb(Color(0, 0, 0, 0.35), 2, Color(1, 1, 1, 0.12)))
-			b.add_theme_stylebox_override("hover", _sb(Color(1, 1, 1, 0.1), 2, Color(1, 1, 1, 0.3)))
-			b.add_theme_stylebox_override("pressed", _sb(Color(1, 1, 1, 0.16), 2, Color(1, 1, 1, 0.5)))
+			b.add_theme_stylebox_override("normal", _sb(Color(1, 1, 1, 0.075), 1))
+			b.add_theme_stylebox_override("hover", _sb(Color(1, 1, 1, 0.14), 1))
+			b.add_theme_stylebox_override("pressed", _under(Color(1, 1, 1, 0.18), Color.WHITE))
 			if i == 1:
 				b.add_theme_color_override("font_color", Color(0.75, 0.77, 0.8))
 			hb.add_child(b)
@@ -955,10 +1076,10 @@ func _preview_panel(w: float) -> Control:
 	v.custom_minimum_size.x = w
 	v.add_theme_constant_override("separation", _px(6))
 	var l := Label.new()
-	l.text = "Preview"
-	l.add_theme_font_size_override("font_size", _px(18))
-	l.add_theme_color_override("font_color", Color.WHITE)
-	_bold(l)
+	l.text = "PREVIEW"
+	l.add_theme_font_size_override("font_size", _px(15))
+	l.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
+	_spaced(l)
 	v.add_child(l)
 	_preview = Control.new()
 	_preview.custom_minimum_size = Vector2(w, w * 0.8)
@@ -995,6 +1116,8 @@ func _draw_preview(pv: Control) -> void:
 func _process(_dt: float) -> void:
 	if is_open and _tab == "crosshair" and _preview:
 		_preview.queue_redraw()
+	if is_open:
+		_track_section()
 
 # --- --uitest: asserted checks of the menu and the HUD; exits 1 on any failure ---
 
@@ -1178,6 +1301,30 @@ func _uitest() -> void:
 	cam.fov = fov0
 	ok.call(px1 > px0 * 1.9, "dynamic gap widens when the fov narrows (%.1f -> %.1f px)" % [px0, px1])
 	ok.call(absf(px0 - 0.01 * 540.0 / tan(deg_to_rad(fov0) * 0.5)) < 0.01, "spread px is the camera projection (%.2f px)" % px0)
+	# float-printed convar bools read as on; a hand-edited short xh_colors entry keeps its slot instead of crashing
+	ok.call(Hud.on({"cl_crosshairdot": "1.000000"}, "cl_crosshairdot", "0") and not Hud.on({"cl_crosshairdot": "0.000000"}, "cl_crosshairdot", "1"), "'1.000000' is on, '0.000000' off")
+	var pr: Array = Hud.presets({"xh_colors": "250,50,50|50,250|250,250,50"})
+	ok.call(pr.size() == 3 and (pr[2] as Color).is_equal_approx(Color8(250, 250, 50)), "a short xh_colors entry does not crash or shift the presets")
+	# the Esc menu closes an open buy menu (one menu at a time)
+	var buy: Variant = main.weapons.get("_buy")
+	if buy is CanvasLayer:
+		(buy as CanvasLayer).visible = true
+		toggle()
+		ok.call(not (buy as CanvasLayer).visible, "opening the Esc menu closes the buy menu")
+		toggle()
+	# HUD scale and the timer switch reach the HUD
+	var s0: float = main.hud._s
+	_change("hud_scale", 1.5, false)
+	var s1: float = main.hud._s
+	_change("hud_scale", 1.0, false)
+	ok.call(is_equal_approx(s1, s0 * 1.5) and is_equal_approx(main.hud._s, s0), "HUD scale 1.5 scales every HUD size by 1.5 (%.3f -> %.3f)" % [s0, s1])
+	_change("show_timer", false)
+	var tq: float = main.hud._pill.modulate.a
+	_change("show_timer", true)
+	ok.call(tq == 0.0 and main.hud._pill.modulate.a == 1.0, "Show run timer hides and shows the timer box")
+	for p in [FILE, FILE + ".tmp", FILE + ".bad"]:
+		DirAccess.remove_absolute(gp.call(p))
+	_changed.clear()
 	# every tab at 960x540 and 1920x1080: nothing past the window edge, the HUD hidden under the menu
 	for res in [Vector2i(960, 540), Vector2i(1920, 1080)]:
 		get_window().size = res
@@ -1193,6 +1340,15 @@ func _uitest() -> void:
 			var bad := _outside(_root, vp)
 			ok.call(bad == "", "%dx%d %s tab inside the window %s" % [vp.size.x, vp.size.y, t[0], bad])
 		ok.call(not main.hud.visible, "HUD hidden while the menu is open")
+		# the sidebar's last section scrolls the keys tab to it and stays lit
+		_show_tab("keys")
+		await get_tree().process_frame
+		var hs: Array = _heads["keys"]
+		(hs[-1][1] as Button).pressed.emit()
+		for i in 3:
+			await get_tree().process_frame
+		var sc := _scrolls["keys"] as ScrollContainer
+		ok.call(hs.size() >= 4 and (hs[-1][1] as Button).button_pressed and (sc.scroll_vertical > 0 or sc.get_v_scroll_bar().max_value <= sc.size.y + 1.0), "%dx%d sidebar '%s' scrolls to its section (%d px)" % [res.x, res.y, (hs[-1][1] as Button).text, sc.scroll_vertical])
 	if is_open:
 		toggle()
 	print("UITEST %s" % ("ok" if fails.is_empty() else "FAILED %d" % fails.size()))

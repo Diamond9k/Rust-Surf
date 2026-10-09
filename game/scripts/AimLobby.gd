@@ -44,6 +44,7 @@ var _last_kill_at := 0.0   # round clock of the previous kill: the kill interval
 var _last_kill_shot := -1
 var _used := {}
 var _spawned_at := 0.0
+var _pause_now := -1.0     # Weapons' clock when the last paused frame ran, -1 while not paused
 var _best := {}
 var _targets: Array[Node3D] = []
 var _dir := 1.0
@@ -89,6 +90,7 @@ class Bot extends Node3D:
 	var kevlar := 0.0
 	var helmet := false
 	var first_hit_at := -1.0
+	var last_hit_at := -1.0
 	var alive := true
 	var up_at := 0.0
 	var down_at := 0.0
@@ -97,6 +99,7 @@ class Bot extends Node3D:
 	var fall_side := 1.0   # which way a downed bot twists as it falls
 	var tag := ""
 	var pose: Node3D
+	var head: Node3D        # the head body: it looks around on its own while the bot idles
 	var bodies: Array = []
 
 func build(c: Content, m: Node) -> void:
@@ -199,6 +202,33 @@ func _draw_gun() -> void:
 					main.viewmodel.idle()  # a Gauntlet capture shows the gun held, not mid-draw
 			return
 	main.hud.message("no CS2 gun exported yet: run prep on your PC (B opens the buy menu)", 4.0)
+
+## Weapons times draws, bolts, reloads, shells and the Zeus charge on its own clock. While the round clock
+## stands still (Esc menu, buy menu) every pending timer is pushed back by however far that clock ran, so a
+## pause never finishes a reload or a bolt for free. A weapons clock that stops by itself moves nothing here.
+const WEAPON_TIMERS := ["_next_fire", "_reload_until", "_shell_next", "_toggle_until", "_burst_at", "_dry_at", "_part_at"]
+
+func _hold_weapon_clock(paused: bool) -> void:
+	var w: Node = main.weapons
+	if w == null or not paused or not w.has_method("_now"):
+		_pause_now = -1.0
+		return
+	var now := float(w.call("_now"))
+	if _pause_now >= 0.0 and now > _pause_now:
+		var d := now - _pause_now
+		for k in WEAPON_TIMERS:
+			var v: Variant = w.get(k)
+			if v is float and float(v) > _pause_now:
+				w.set(k, float(v) + d)
+		var rc: Variant = w.get("_recharge")
+		if rc is Dictionary:
+			for id in (rc as Dictionary).keys():
+				if float(rc[id]) > _pause_now:
+					rc[id] = float(rc[id]) + d
+		var cock: Variant = w.get("_cock")
+		if cock is float and float(cock) >= 0.0:
+			w.set("_cock", float(cock) + d)  # an R8 hammer pull keeps the part it had already done
+	_pause_now = now
 
 ## The surf timer pill and speed readout mean nothing here: hide them while the lobby is open.
 func _show_surf_hud(on: bool) -> void:
@@ -513,6 +543,10 @@ func _arena() -> void:
 		var lp := at + f * (float(pw[1]) + 0.15) + Vector3(0, wh - 1.2, 0)
 		_box(lp, Vector3(0.5, 0.18, 0.3) if f.x == 0.0 else Vector3(0.3, 0.18, 0.5), lamp_box, false)
 		_box(lp - Vector3(0, 0.1, 0), Vector3(0.4, 0.03, 0.22) if f.x == 0.0 else Vector3(0.22, 0.03, 0.4), lamp, false)
+		_lamp_light(lp - Vector3(0, 0.12, 0), f)
+		_pilaster_ao(at, f, float(pw[0]), float(pw[1]), wh)
+	_corner_ao(hx, hz, wh, fh)
+	_stains(sx, sz_z)
 	var lw := _f("lane_width")
 	var fz := _f("firing_line_z")
 	var back := -hz
@@ -555,6 +589,103 @@ func _arena() -> void:
 		var a: Array = s
 		if float(a[4]) > 0.0 and int(a[5]) == 0:  # a raised spot off the catwalks: the bot stands on a crate
 			_crate(Vector3(_lane_x(float(a[0])) + float(a[2]), 0, fz - float(a[1])), Vector3(float(cr[0]), float(a[4]), float(cr[1])), cm, tm)
+
+## A vertical shade quad on a wall (normal f) centred at c, w wide and h tall, darkest at the u = 0 edge
+## when dark_left, else at u = 1 (QuadMesh u runs along UP x f).
+func _wall_shade(c: Vector3, f: Vector3, w: float, h: float, a: float, dark_left: bool) -> void:
+	var mi := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2(w, h)
+	mi.mesh = q
+	mi.material_override = _shade(a, Vector2(0.0 if dark_left else 1.0, 0.5), Vector2(1.0 if dark_left else 0.0, 0.5))
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.basis = Basis(Vector3.UP.cross(f), Vector3.UP, f)
+	mi.position = center + c
+	add_child(mi)
+
+## Ambient occlusion a baked map would give a pilaster: the wall darkens beside it and the floor at its foot.
+func _pilaster_ao(at: Vector3, f: Vector3, pw: float, pd: float, wh: float) -> void:
+	var ao: Array = V["pilaster_ao"]
+	var w := float(ao[0])
+	var x := Vector3.UP.cross(f)
+	var wall := at + f * 0.015 + Vector3(0, wh * 0.5, 0)
+	_wall_shade(wall + x * (pw * 0.5 + w * 0.5), f, w, wh, float(ao[1]), true)
+	_wall_shade(wall - x * (pw * 0.5 + w * 0.5), f, w, wh, float(ao[1]), false)
+	for side in [-1.0, 1.0]:  # the pilaster's own sides face along the wall
+		var n: Vector3 = x * side
+		_wall_shade(at + f * (pd * 0.5) + x * side * (pw * 0.5 + 0.012) + Vector3(0, wh * 0.5, 0), n, pd, wh, float(ao[1]) * 0.6, side < 0.0)
+	_floor_shade(at + f * (pd + w * 0.5), f, pw + w, w, float(ao[1]))
+
+## A floor shade quad centred at c, w along the wall and d out from it (f), darkest at the wall side.
+func _floor_shade(c: Vector3, f: Vector3, w: float, d: float, a: float) -> void:
+	var mi := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2(w, d)
+	mi.mesh = q
+	mi.material_override = _shade(a, Vector2(0.5, 1.0), Vector2(0.5, 0.0))
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.basis = Basis(f.cross(Vector3.UP), f, Vector3.UP)
+	mi.position = center + Vector3(c.x, 0.004, c.z)
+	add_child(mi)
+
+## The inner corners where two walls meet darken toward the seam.
+func _corner_ao(hx: float, hz: float, wh: float, fh: float) -> void:
+	var ao: Array = V["pilaster_ao"]
+	var w := float(ao[0]) * 2.0
+	for cz in [-1.0, 1.0]:
+		var h := wh if cz < 0.0 else fh
+		for cx in [-1.0, 1.0]:
+			var fz := Vector3(0, 0, -cz)  # the end wall faces into the range
+			var fx := Vector3(-cx, 0, 0)  # the side wall faces into the range
+			_wall_shade(Vector3(cx * (hx - w * 0.5), h * 0.5, cz * (hz - 0.17)), fz, w, h, float(ao[1]), Vector3.UP.cross(fz).x * cx < 0.0)
+			_wall_shade(Vector3(cx * (hx - 0.17), wh * 0.5, cz * (hz - w * 0.5)), fx, w, wh, float(ao[1]), Vector3.UP.cross(fx).z * cz < 0.0)
+
+## Warm pools under the wall lamps: a downward spot aimed down the wall face, no shadows.
+func _lamp_light(at: Vector3, f: Vector3) -> void:
+	var ll: Array = V["lamp_light"]
+	if float(ll[0]) <= 0.0:
+		return
+	var l := SpotLight3D.new()
+	l.light_color = _col("color_lamp")
+	l.light_energy = float(ll[0])
+	l.spot_range = float(ll[1])
+	l.spot_angle = float(ll[2])
+	l.spot_attenuation = 1.2
+	l.shadow_enabled = false
+	l.position = center + at + f * 0.1
+	l.basis = Basis.looking_at(Vector3(0, -1, 0) + f * float(ll[3]), f)
+	add_child(l)
+
+## Oil and scuff stains on the range floor: soft noise blots, placed from a fixed seed so every render matches.
+func _stains(sx: float, sz: float) -> void:
+	var st: Array = V["floor_stains"]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(st[0])
+	var n := FastNoiseLite.new()
+	n.frequency = 0.035
+	n.fractal_octaves = 4
+	var c := _col("color_stain")
+	var px := 128
+	var mats: Array = []
+	for k in 3:
+		n.seed = k + 1
+		var img := Image.create(px, px, false, Image.FORMAT_RGBA8)
+		for y in px:
+			for x in px:
+				var r := Vector2(x - px * 0.5 + 0.5, y - px * 0.5 + 0.5).length() / (px * 0.5)
+				var v := n.get_noise_2d(x * 2.0, y * 2.0) * 0.5 + 0.5 + (0.35 - r) * 0.6
+				img.set_pixel(x, y, Color(c, float(st[3]) * smoothstep(0.45, 0.75, v) * (1.0 - smoothstep(0.7, 1.0, r))))
+		img.generate_mipmaps()
+		var m := StandardMaterial3D.new()
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.albedo_texture = ImageTexture.create_from_image(img)
+		m.roughness = float(st[4])
+		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		mats.append(m)
+	for i in int(st[1]):
+		var size := rng.randf_range(float(st[2]) * 0.4, float(st[2]))
+		var at := Vector3(rng.randf_range(-sx * 0.45, sx * 0.45), -0.002, rng.randf_range(-sz * 0.45, sz * 0.45))
+		_paint(at, size, size * rng.randf_range(0.5, 1.0), mats[i % mats.size()])
 
 ## A crate: a panelled box standing on 'base' (relative to center) with a metal frame on its edges.
 func _crate(base: Vector3, size: Vector3, mat: Material, frame: Material) -> void:
@@ -898,6 +1029,7 @@ func _process(dt: float) -> void:
 	if not _inside_arena(main.player.global_position):
 		_leave("left the aim lobby, round not saved")  # restart or checkpoint teleported the player away
 		return
+	_hold_weapon_clock(_paused())
 	if not _paused():
 		_clock += dt
 		if Input.is_action_just_pressed("surf_lobby_mode"):
@@ -1053,6 +1185,7 @@ func register_hit(unit: Node3D, dmg: float, head: bool, _at: Vector3, group: Str
 			_count(head)
 			if b.first_hit_at < 0.0:
 				b.first_hit_at = _last_shot_at
+			b.last_hit_at = _clock
 			var d := minf(_hit_damage(b, dmg, head, group, _shot_weapon), b.hp)
 			b.hp -= d
 			_damage += d
@@ -1105,18 +1238,32 @@ func _count(head: bool) -> bool:
 		_heads += 1
 	return true
 
-## Track: one physics tick of time on target when the trigger is held on a gun that can fire (not reloading),
-## from behind the firing line, with the crosshair ray on the live track bot. The same for every gun: a tick is
-## a tick whatever the fire rate, and shots only count toward accuracy and the miss cost.
-func _track_tick(dt: float, trigger: bool, on_bot: bool) -> void:
+## Track: one physics tick of time on target when the trigger is held while the gun is firing (_firing), from
+## behind the firing line, with the crosshair ray on the live track bot. A tick is a tick whatever the fire
+## rate; shots only count toward accuracy and the miss cost.
+func _track_tick(dt: float, trigger: bool, on_bot: bool, firing: bool) -> void:
 	if not (active and _state == "round" and mode == "track") or _paused():
 		return
-	if not trigger or not on_bot or not _behind_line():
-		return
-	var w: Node = main.weapons
-	if w != null and float(w.get("_reload_until")) > 0.0:
+	if not trigger or not on_bot or not firing or not _behind_line():
 		return
 	_on_target += dt
+
+## True while the held gun is really firing: a round of this gun went off within its cycle (or track_fire_window,
+## so a semi-auto must keep clicking) and it can fire again now. An empty clip, a dry Zeus, a reload or shell
+## load, a draw, a silencer turn and the knife all earn nothing.
+func _firing() -> bool:
+	var w: Node = main.weapons
+	if w == null:
+		return false
+	var id := String(w.held())
+	if id == "" or id == "knife" or not w.ammo.has(id) or _shots == 0 or _shot_weapon != id:
+		return false
+	if int(w.ammo[id][0]) <= 0 or float(w._reload_until) > 0.0 or float(w._shell_next) > 0.0:
+		return false
+	var cyc := float(w.mstat(id, "cycletime"))
+	if float(w._now()) + 0.0005 < maxf(float(w._next_fire) - cyc, float(w._toggle_until)):
+		return false  # still drawing, or a silencer turn
+	return _clock - _last_shot_at <= maxf(cyc, _f("track_fire_window"))
 
 ## The crosshair ray (screen centre, where the player looks) against the world: true when the first thing it
 ## meets is a part of the track bot, so a wall or crate between them blocks it.
@@ -1162,6 +1309,8 @@ func _tick_bots(dt: float) -> void:
 		if b == null or not is_instance_valid(b):
 			continue
 		b.kick = move_toward(b.kick, 0.0, dt * 1.2)
+		if b.alive and b.first_hit_at >= 0.0 and _clock - b.last_hit_at >= _f("bot_heal_s"):
+			_heal(b)  # left alone, a wounded bot is fresh again: the next time to kill starts from scratch
 		var fall := 0.0
 		if not b.alive:
 			var since := _clock - b.down_at
@@ -1169,9 +1318,7 @@ func _tick_bots(dt: float) -> void:
 			fall = fall * fall
 			if since >= _f("bot_respawn_s") and _state == "round":
 				b.alive = true
-				b.hp = b.hp_max
-				b.kevlar = _f("bot_armor")
-				b.first_hit_at = -1.0
+				_heal(b)
 				b.kick = 0.0
 				b.up_at = _clock
 				fall = 0.0
@@ -1181,6 +1328,14 @@ func _tick_bots(dt: float) -> void:
 		b.pose.rotation = Vector3(-(b.kick + fall * PI * 0.5) + deg_to_rad(float(idle[0])) * 0.5 * sin(ph * 0.7) * still,
 			deg_to_rad(float(idle[2])) * sin(ph * 0.37) * still + fall * b.fall_side * 0.5,
 			deg_to_rad(float(idle[0])) * sin(ph) * still + fall * b.fall_side * 0.25)
+		if b.head:  # a slow scan left and right, out of step with the sway
+			b.head.rotation = Vector3(deg_to_rad(_f("bot_head_look")) * 0.3 * sin(ph * 0.31 + 1.7), deg_to_rad(_f("bot_head_look")) * sin(ph * 0.19 + b.phase), 0.0) * still
+
+func _heal(b: Bot) -> void:
+	b.hp = b.hp_max
+	b.kevlar = _f("bot_armor")
+	b.first_hit_at = -1.0
+	b.last_hit_at = -1.0
 
 func _feed_add(victim: String, head: bool) -> void:
 	var p := _pc(_feed, 0.6)
@@ -1266,7 +1421,7 @@ func _spawn_flick() -> void:
 	_spawned_at = _clock
 
 func _spawn_track() -> void:
-	_targets.append(_bot(Vector3(0, 0, _f("firing_line_z") - _f("track_distance")), 0.0, 1, "BOT"))
+	_targets.append(_bot(Vector3(0, 0, _f("firing_line_z") - _f("track_distance")), 0.0, 0, "BOT"))
 	_dir = 1.0 if _rng.randf() < 0.5 else -1.0
 	_flip = _flip_in()
 
@@ -1479,8 +1634,8 @@ func _slot_mat(outfit: int, slot: String) -> Material:
 	m.set_shader_parameter("col", col)
 	m.set_shader_parameter("cloth", cloth)
 	m.set_shader_parameter("weave", _mats["cloth"])
-	var src: StandardMaterial3D = main.course.materials.get(String(V["trim_material"])) if slot == "metal" else null
-	if src and src.albedo_texture:  # kit metal (masks, plates) wears the course's rusty trim metal
+	var src: StandardMaterial3D = main.course.materials.get(String(V["trim_material"])) if (V["bot_rusty_slots"] as Array).has(slot) else null
+	if src and src.albedo_texture:  # kit metal (masks, plates, kilt signs) wears the course's rusty trim metal
 		m.set_shader_parameter("has_tex", true)
 		m.set_shader_parameter("tex", src.albedo_texture)
 	m.set_shader_parameter("weave_scale", _f("bot_weave_scale"))
@@ -1521,6 +1676,8 @@ func _bot(at: Vector3, yaw_deg: float, outfit: int, tag: String) -> Bot:
 		(tb.get_child(0) as MeshInstance3D).set_instance_shader_parameter("base_y", b.global_position.y)
 		b.bodies.append(tb)
 		by_id[String(r["id"])] = tb
+		if tb.is_head:
+			b.head = tb
 	var gear: Array = o["gear"]
 	for r in S["props"]:
 		var when := String(r["when"])
@@ -1544,7 +1701,7 @@ func _physics_process(dt: float) -> void:
 	var t := _targets[0]
 	if not is_instance_valid(t):
 		return
-	_track_tick(dt, Input.is_action_pressed("surf_attack"), _crosshair_on(t))
+	_track_tick(dt, Input.is_action_pressed("surf_attack"), _crosshair_on(t), _firing())
 	var half := _f("track_half_range")
 	_flip -= dt
 	if _flip <= 0.0:
@@ -1652,11 +1809,12 @@ func _selftest() -> void:
 	ok = _check("track: the crosshair ray finds the bot, and misses beside it", seen and not _crosshair_on(tb), seen) and ok
 	cam.transform = keep_cam
 	var base := _on_target  # the real trigger is never held headless, so _physics_process adds nothing
-	_track_tick(tick, false, true)
-	_track_tick(tick, true, false)
-	ok = _check("track: no trigger or off the bot, no time", _on_target == base, _on_target) and ok
+	_track_tick(tick, false, true, true)
+	_track_tick(tick, true, false, true)
+	_track_tick(tick, true, true, false)
+	ok = _check("track: no trigger, off the bot or not firing, no time", _on_target == base, _on_target) and ok
 	for i in 10:
-		_track_tick(tick, true, true)
+		_track_tick(tick, true, true, true)
 	var one := _on_target
 	ok = _check("track: ten ticks on target = ten ticks, whatever the gun", is_equal_approx(one - base, 10.0 * tick), "%.4f s" % (one - base)) and ok
 	_part(tb, "chest").hit(30.0, false, Vector3.ZERO)
@@ -1668,11 +1826,50 @@ func _selftest() -> void:
 	_fire()
 	ok = _check("track: a miss earns nothing", _on_target == one and _hits == 1, _on_target) and ok
 	p.global_position = to_global(Vector3(0, 0.05, _f("firing_line_z") - 2.0))
-	_track_tick(tick, true, true)
+	_track_tick(tick, true, true, true)
 	ok = _check("track: past the firing line earns nothing", _on_target == one, _on_target) and ok
 	p.global_position = spawn_pos()
+	# the firing gate, on the real weapon state: an AK put in hand without its model (no frame runs meanwhile)
+	var wg: Node = main.weapons
+	var ak := "cs2_ak47"
+	var keep_slot := String(wg.slots["primary"])
+	var keep_cur := String(wg.current)
+	wg.slots["primary"] = ak
+	wg.current = "primary"
+	wg._next_fire = 0.0
+	wg._toggle_until = 0.0
+	wg._reload_until = 0.0
+	wg._shell_next = 0.0
+	wg.ammo[ak] = [30, 90]
+	_fire(ak)
+	var live := _firing()
+	wg.ammo[ak] = [0, 90]
+	var dry := _on_target
+	for i in 10:
+		_track_tick(tick, true, true, _firing())
+	ok = _check("track: trigger held on an empty gun earns 0 s", live and _on_target == dry, "firing with rounds %s, %.4f s empty" % [live, _on_target - dry]) and ok
+	wg.ammo[ak] = [30, 90]
+	wg._reload_until = wg._now() + 1.0
+	var rl := _firing()
+	wg._reload_until = 0.0
+	wg._shell_next = wg._now() + 1.0
+	var sh := _firing()
+	wg._shell_next = 0.0
+	wg._next_fire = wg._now() + 1.0
+	var dr := _firing()
+	wg._next_fire = 0.0
+	_last_shot_at = _clock - 1.0
+	var stale := _firing()
+	_last_shot_at = _clock
+	wg.current = "knife"
+	var kn := _firing()
+	ok = _check("track: reload, shell load, draw, no shot within the window, knife: no time", not (rl or sh or dr or stale or kn), [rl, sh, dr, stale, kn]) and ok
+	wg.current = keep_cur
+	wg.slots["primary"] = keep_slot
+	wg.refill()
+	one = _on_target
 	main.settings.is_open = true
-	_track_tick(tick, true, true)
+	_track_tick(tick, true, true, true)
 	var held_left := _left
 	await get_tree().process_frame
 	ok = _check("track: menu open earns nothing and holds the clock", _on_target == one and _left == held_left, "%.3f s" % _left) and ok
@@ -1684,7 +1881,17 @@ func _selftest() -> void:
 		await get_tree().process_frame
 		await get_tree().process_frame
 		ok = _check("buy menu open holds the round clock", _paused() and _left == held_left, "%.3f s" % _left) and ok
+		# a reload pending when the menu opens still has all of its time left when it closes
+		wg._reload_until = wg._now() + 0.5
+		var due := float(wg._reload_until) - float(wg._now())
+		var t1 := Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t1 < 300:
+			await get_tree().process_frame
+		var still := float(wg._reload_until) - float(wg._now())
 		(buy as CanvasLayer).visible = false
+		await get_tree().process_frame
+		ok = _check("pause keeps a pending reload's time", absf(still - due) < 0.06, "%.3f s left of %.3f after 0.3 s paused" % [still, due]) and ok
+		wg._reload_until = 0.0
 	else:
 		ok = _check("buy menu found", false, buy) and ok
 	_on_target += 1.0  # a full second on target, so the miss cost shows above the floor of 0
@@ -1698,6 +1905,14 @@ func _selftest() -> void:
 	_part(_targets[0] as Bot, "head").hit(400.0, true, Vector3.ZERO)
 	_part(_targets[1] as Bot, "head").hit(400.0, true, Vector3.ZERO)
 	ok = _check("double kill by one shot: one hit, two kills, one kill interval > 0", _kills == 2 and _hits == 1 and _ttk.size() == 2 and _gaps.size() == 1 and _gaps[0] > 0.0, _gaps) and ok
+	# a wounded bot left alone for bot_heal_s heals: a kill much later is a new engagement, not a long ttk
+	var bhl := _targets[8] as Bot
+	_fire()
+	_part(bhl, "chest").hit(30.0, false, Vector3.ZERO)
+	var hurt := bhl.hp < bhl.hp_max and bhl.first_hit_at >= 0.0
+	bhl.last_hit_at = _clock - _f("bot_heal_s") - 0.01
+	await get_tree().process_frame
+	ok = _check("wounded bot heals after bot_heal_s with no hits", hurt and bhl.hp == bhl.hp_max and bhl.first_hit_at < 0.0 and bhl.kevlar == _f("bot_armor"), "hp %.0f first hit %.2f" % [bhl.hp, bhl.first_hit_at]) and ok
 	# armour, CS order: hitgroup scale first, then the split; legs never armoured, the head only with a helmet
 	var w: Node = main.weapons
 	var ratio := float(w.stat("cs2_ak47", "armor ratio")) * float(w.X["armor_ratio_scale"])

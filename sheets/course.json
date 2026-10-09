@@ -291,7 +291,7 @@
         0.8
       ],
       "tint_period": 260,
-      "_doc": "terrain shader uniforms. site_shade darkens the site concrete patches (pale patches read as snow); tint_a/tint_b: olive and khaki colour patches over the open ground every ~tint_period metres (a look, unverified against Rust's biome colours); scrub_*: dry scrub blobs on the open ground (one per scrub_cell metres with probability scrub_density, patchy by noise, colour is an albedo multiplier); stone_*: small pale loose stones the same way. A look standing in for ground scatter we have no meshes for (unverified against Rust's arid biome). grass_*: dry green grass patches over the open ground (cover is the fraction, period the patch size in metres, colour an albedo multiplier) with a fine blade grain near the camera; rock_*: bare grey rock on hill flanks steeper than rock_slope (1 - normal.y); hill_shade: broad light and shade over the hills outside site_rect. Grass, rock and hill shade are a look standing in for Rust's splat map and grass meshes, which prep does not extract (unverified)",
+      "_doc": "terrain shader uniforms. site_shade darkens the site concrete patches (pale patches read as snow); tint_a/tint_b: olive and khaki colour patches over the open ground every ~tint_period metres (a look, unverified against Rust's biome colours); scrub_*: dry scrub blobs on the open ground (one per scrub_cell metres with probability scrub_density, patchy by noise, colour is an albedo multiplier); stone_*: small pale loose stones the same way. A look standing in for ground scatter we have no meshes for (unverified against Rust's arid biome). grass_*: dry green grass patches over the open ground (cover is the fraction, period the patch size in metres, colour an albedo multiplier) with a fine blade grain near the camera; rock_*: bare grey rock on hill flanks steeper than rock_slope (1 - normal.y); hill_shade: broad light and shade over the hills outside site_rect. Grass, rock and hill shade are a look standing in for Rust's splat map and grass meshes, which prep does not extract (unverified) dry_*: straw-coloured sun-dried patches over the open ground (colour an albedo multiplier, cover the fraction, period the patch size in metres); mottle: strength of a clump-scale light and dark mottle (mottle_cell metres) that reads as grass tufts from the course and fades to its average when smaller than a pixel. A look for Rust's grassland seen from height (r2 critics: flat olive grass), unverified.",
       "site_shade": 0.8,
       "scrub_cell": 4.0,
       "scrub_density": 0.14,
@@ -320,11 +320,27 @@
         0.57
       ],
       "rock_slope": 0.25,
-      "hill_shade": 0.3
+      "hill_shade": 0.3,
+      "dry_color": [
+        1.18,
+        1.06,
+        0.78
+      ],
+      "dry_cover": 0.3,
+      "dry_period": 38,
+      "mottle": 0.22,
+      "mottle_cell": 1.6
     },
-    "tuned": "2026-10-09 world_r2 (gauntlet 2): site_cover 0.32 -> 0.55 (r1 critics: the site reads as a bare field); 2026-10-09 world_r1 (gauntlet 2): scrub_density 0.32 -> 0.14 now 3D bushes stand on the ground (r3 critics saw a repeating dot pattern); world_r3 renders: grass, rock, hill shade, edge trims and the props past the end pad checked by eye in start/ramp1/valley2/site_overview/floor/sun; earlier rounds: props, roads, scatter, blended mounds, pit edges, far ridgeline. Hill heights, tints, grass, scatter and roads are a look, not Rust's terrain (unverified)",
+    "tuned": "2026-10-09 world_r3_1x (gauntlet 3): dry patches and clump mottle on the open ground, by eye; 2026-10-09 world_r2 (gauntlet 2): site_cover 0.32 -> 0.55 (r1 critics: the site reads as a bare field); 2026-10-09 world_r1 (gauntlet 2): scrub_density 0.32 -> 0.14 now 3D bushes stand on the ground (r3 critics saw a repeating dot pattern); world_r3 renders: grass, rock, hill shade, edge trims and the props past the end pad checked by eye in start/ramp1/valley2/site_overview/floor/sun; earlier rounds: props, roads, scatter, blended mounds, pit edges, far ridgeline. Hill heights, tints, grass, scatter and roads are a look, not Rust's terrain (unverified)",
     "props": {
-      "_doc": "Course scenery: extra copies of meshes prep already extracts for the real Launch Site (rust/mesh), set where the fixed views look so the land round the course reads as an industrial site. Our arrangement, not Rust's layout (the real placements are scene_launch_site). pos is course [x, z]; the prop stands on the ground level at x plus dy (dy copies the real placements' offsets: warehouses 0.3, awnings 0.2, floodlights and vents -0.1); awnings share their warehouse's origin, turned 180 deg as in the real placements.",
+      "_doc": "Course scenery: extra copies of meshes prep already extracts for the real Launch Site (rust/mesh), set where the fixed views look so the land round the course reads as an industrial site. Our arrangement, not Rust's layout (the real placements are scene_launch_site). pos is course [x, z]; the prop stands on the ground level at x plus dy (dy copies the real placements' offsets: warehouses 0.3, awnings 0.2, floodlights and vents -0.1); awnings share their warehouse's origin, turned 180 deg as in the real placements. apron_meshes: props of these meshes get a ragged concrete apron apron metres wide round their footprint in the terrain shader, like the halls (r2 critics: missing concrete aprons; our look, unverified against Rust's own site ground).",
+      "tuned": "2026-10-09 world_r2 renders, by eye",
+      "apron_meshes": [
+        "warehouse_launch_site_a_LOD0",
+        "range_outbuilding_a_LOD0",
+        "range_outbuilding_b_LOD0"
+      ],
+      "apron": 6,
       "columns": [
         "mesh",
         "pos",
@@ -853,8 +869,7 @@
           "dy": 0.0,
           "scale": 1.0
         }
-      ],
-      "tuned": "2026-10-09 world_r2 renders, by eye"
+      ]
     },
     "scatter": {
       "_doc": "Trees, bushes, grass tufts and rocks Backdrop.gd builds and scatters over the ground (Rust's own vegetation and rock meshes are not extracted). shape: conifer, conifer_far, broadleaf, broadleaf_far, bush, grass or rock (the _far shapes are low-detail for trees only seen a few pixels tall) (built about 1 m tall and scaled by size, metres). Points are drawn in rect (course [x0, z0, x1, z1]) and kept when their distance outside site_rect is within ring (negative = that deep inside it), when the cluster noise (cluster_period metres) clears 1 - cover, when the ground is no steeper than max_slope (summed rise over 2 m both ways), and when they are road_margin off a road and building_margin off any placed building or prop. color is an sRGB tint, varied by color_jitter; sink buries the base by that fraction of the size; texture names a materials.json row drawn triplanar (rocks) or (none); shadows: cast sun shadows; chunk: metres per MultiMesh (culled as a unit); view_range: metres after which a chunk fades out (0 = always drawn).",
@@ -1101,7 +1116,7 @@
       ]
     },
     "roads": {
-      "_doc": "Roads painted into the terrain shader: segments are course [x0, z0, x1, z1] (max 8), width in metres, surfaced with the materials.json row named in material and crumbling into a darker shoulder. Our layout, linking the props; not Rust's road network (unverified).",
+      "_doc": "Roads painted into the terrain shader: segments are course [x0, z0, x1, z1] (max 16), width in metres, surfaced with the materials.json row named in material and crumbling into a darker shoulder. Our layout, linking the props; not Rust's road network (unverified).",
       "material": "pad",
       "width": 8,
       "segments": [
@@ -1152,16 +1167,81 @@
           152,
           330,
           152
+        ],
+        [
+          -90,
+          100,
+          200,
+          100
+        ],
+        [
+          200,
+          108,
+          200,
+          152
+        ],
+        [
+          380,
+          -62,
+          380,
+          -150
+        ],
+        [
+          620,
+          0,
+          470,
+          0
+        ],
+        [
+          -90,
+          -100,
+          200,
+          -100
+        ],
+        [
+          100,
+          -150,
+          100,
+          -100
+        ],
+        [
+          540,
+          -150,
+          540,
+          -62
+        ],
+        [
+          45,
+          152,
+          45,
+          260
         ]
       ],
-      "tuned": "2026-10-09 world_r2 (gauntlet 2): z 152 road added along the new halls; 2026-10-09 world_r3 renders, by eye (extended to the props past the end pad)"
+      "tuned": "2026-10-09 world_r3_1x (gauntlet 3): 8 more segments, a denser network round the halls and warehouses (r2 critics: missing Rust's road network density), by eye; 2026-10-09 world_r2 (gauntlet 2): z 152 road added along the new halls; 2026-10-09 world_r3 renders, by eye (extended to the props past the end pad)"
     },
     "blend_materials": [
       "terrain_blend",
       "land_slide_blend"
     ],
+    "alpha": {
+      "_doc": "Rust materials on the placed Launch Site meshes whose albedo alpha is coverage, not smoothness: cutout (alpha-tested at scissor) for grates and walkways, blend (alpha-blended overlays, no shadow) for the decal sheets laid over walls and floors. prep's glTF exports every material opaque, so these showed their holes and clear texels as black. Chosen from the textures: in every one the alpha-0 texels are near-black RGB (grates 13,9,6; walkway 6,5,4; concrete_metal_decals_bld and conc_metal_stains 4,3,2; road_decals 6,6,5; crane_industrial_markings 25,23,19) or a soft drip/litter mask (dirt_stains_leaks). Rust's own shader settings for them are unverified.",
+      "cutout": [
+        "metal_grate_diffuse",
+        "metal_grate_a",
+        "walkway_a"
+      ],
+      "blend": [
+        "concrete_metal_decals_bld",
+        "conc_metal_stains",
+        "road_decals",
+        "dirt_stains_leaks",
+        "crane_industrial_markings"
+      ],
+      "scissor": 0.5,
+      "tuned": "2026-10-09 world_r3 (gauntlet 3): alpha statistics read from rsdata/rust/tex pngs; renders by eye; Rust shader modes unverified"
+    },
     "halls": {
-      "_doc": "Large industrial halls Backdrop.gd builds from Rust's Launch Site textures, scenery only (no collision), standing where the fixed views look: the extracted set has no Rust building bigger than the 18 x 30 m warehouse, and the critics asked for big hangars. Our arrangement and our buildings, not Rust meshes (unverified against Rust's own Launch Site buildings). pos is course [x, z] (the hall stands on the ground height there plus dy); size is [length along x before yaw, width, eave height] in metres; rise is the gable's height above the eaves (0: flat roof); base is the height of the cinder block course under the corrugated walls; windows is the [bottom, top] of the glazed band in every bay; door is [width, height] of the sheet metal door in each end wall; pilaster is the bay width (concrete posts); lantern is [share of the length, width, height above the ridge] of a glazed roof lantern (width 0: none). materials names the materials.json row for each part; plinth and eave are metres. apron: metres of site concrete laid round each hall's footprint in the terrain shader (at most 8 halls get one). grime: [shade at the foot, metres it fades out over] of the dirt darkening the bottom of the walls.",
+      "_doc": "Large industrial halls Backdrop.gd builds from Rust's Launch Site textures, scenery only (no collision), standing where the fixed views look: the extracted set has no Rust building bigger than the 18 x 30 m warehouse, and the critics asked for big hangars. Our arrangement and our buildings, not Rust meshes (unverified against Rust's own Launch Site buildings). pos is course [x, z] (the hall stands on the ground height there plus dy); size is [length along x before yaw, width, eave height] in metres; rise is the gable's height above the eaves (0: flat roof); base is the height of the cinder block course under the corrugated walls; windows is the [bottom, top] of the glazed band in every bay; door is [width, height] of the sheet metal door in each end wall; pilaster is the bay width (concrete posts); lantern is [share of the length, width, height above the ridge] of a glazed roof lantern (width 0: none). materials names the materials.json row for each part; plinth and eave are metres. apron: metres of site concrete laid round each hall's footprint in the terrain shader (at most 32 halls and terrain.props apron_meshes together get one). grime: [shade at the foot, metres it fades out over] of the dirt darkening the bottom of the walls.",
       "materials": {
         "plinth": "hall_plinth",
         "base": "hall_base",
@@ -1444,15 +1524,15 @@
     }
   },
   "trim": {
-    "_doc": "Steel strips along each ramp face's exposed edges (both edges of a ridge face, the rim of a valley), scenery only: the collision stays the bare prism. width and offset in metres (offset lifts the strip off the face so it never z-fights); v0 is the metre offset into the material's texture where the strip starts (0.1 m at uv_scale 3 is the painted, riveted band at the top of site_steel_trims).",
+    "_doc": "Steel strips along each ramp face's exposed edges (both edges of a ridge face, the rim of a valley), scenery only: the collision stays the bare prism. width and offset in metres (offset is the flat's thickness: it stands that far proud of the face, inner side closed, so the edge reads as a solid steel capping); v0 is the metre offset into the material's texture where the strip starts (1.17 m at uv_scale 3 is site_steel_trims' light painted, riveted panel band, v 0.39-0.52 of the texture: a clean edge, where the rusty top band at 0.1 m read as a smeared brown strip along the ridge).",
     "material": "trim_steel",
-    "width": 0.35,
-    "offset": 0.03,
-    "v0": 0.1,
-    "tuned": "2026-10-09 world_r3 renders, by eye"
+    "width": 0.4,
+    "offset": 0.07,
+    "v0": 1.17,
+    "tuned": "2026-10-09 world_r3_14 ramp1 render (gauntlet 3): v0 0.1 -> 1.17 (r2 critics: smeared wood-brown ridge), by eye; 2026-10-09 world_r3_1x renders (gauntlet 3): a 7 cm thick, 0.4 m capping (r2 critics: no bevel or clean trim), by eye; 2026-10-09 world_r3 renders, by eye"
   },
   "weathering": {
-    "_doc": "Decal atlas the ramp shader hangs leaks and gravel from (materials.json leaks/debris set the strength per material): leak_v is the atlas v at the top and bottom of the drip band (found by reading the png alpha: drips run v 0.595-0.925; the first rows are speckled, so the band starts at 0.607, left half dark green, right half rust), debris_v the v at the middle and edge of the gravel/litter band (alpha 1 at v 0.33, fading out by 0.175). leak_len: metres the drips hang down a face; leak_width: metres of face per half-atlas tile; debris_width: metres up from a face's foot the gravel reaches. Our use of Rust's decals, not a CS2 map's (unverified as a match for any real surf map).",
+    "_doc": "Decal atlas the ramp shader hangs leaks and gravel from (materials.json leaks/debris set the strength per material): leak_v is the atlas v at the top and bottom of the drip band (found by reading the png alpha: drips run v 0.595-0.925; the first rows are speckled, so the band starts at 0.607, left half dark green, right half rust), debris_v the v at the middle and edge of the gravel/litter band (alpha 1 at v 0.33, fading out by 0.175). leak_len: metres the drips hang down a face; leak_width: metres of face per half-atlas tile; debris_width: metres up from a face's foot the gravel reaches. Our use of Rust's decals, not a CS2 map's (unverified as a match for any real surf map). groove: how far the normal tilts into each cast-slab joint (a V groove groove_width metres either side, so one lip catches the sun); edge_wear: smooth, polished arris along each face's top metre with rough chipped pits. Our look (unverified against a CS2 surf map's materials).",
     "texture": "tex_dirt_stains_leaks",
     "leak_v": [
       0.607,
@@ -1465,7 +1545,10 @@
     "leak_len": 6.0,
     "leak_width": 5.0,
     "debris_width": 2.2,
-    "tuned": "2026-10-09 world_r1 (gauntlet 2) renders, by eye"
+    "groove": 0.25,
+    "groove_width": 0.06,
+    "edge_wear": 0.7,
+    "tuned": "2026-10-09 world_r3_1x renders (gauntlet 3): groove, groove_width, edge_wear by eye; 2026-10-09 world_r1 (gauntlet 2) renders, by eye"
   },
   "paint_columns": [
     "id",
@@ -1476,9 +1559,10 @@
     "length",
     "width",
     "opacity",
+    "tint",
     "tuned"
   ],
-  "paint_doc": "Painted lines and patch repairs on the end pad, as Decals cut from a Rust decal atlas: rect is u0, v0, u1, v1 of the texture (the atlas bands were found by reading the png's alpha: worn white line v 0.387-0.413, yellow 0.443-0.470, crack 0.320-0.342, asphalt patch 0.149-0.272); pos is the decal centre in course metres (the end pad top is y 4.25), length runs along yaw, width across. Our layout, not a Rust pad's markings (unverified).",
+  "paint_doc": "Painted lines and patch repairs on the end pad, as Decals cut from a Rust decal atlas: rect is u0, v0, u1, v1 of the texture (the atlas bands were found by reading the png's alpha: worn white line v 0.387-0.413, yellow 0.443-0.470, crack 0.320-0.342, asphalt patch 0.149-0.272); pos is the decal centre in course metres (the end pad top is y 4.25), length runs along yaw, width across. Our layout, not a Rust pad's markings (unverified). Also oil stains (the splat, u 0.005-0.499 v 0.503-1.0), tyre marks (thin strips of the asphalt patch band), a manhole cover (u 0.5-0.898 v 0.492-0.875) and a drain grate (u 0.511-0.812 v 0.875-0.998) from road_decals, and gravel and litter from dirt_stains_leaks (v 0.015-0.14, alpha 1 from 0.03 to 0.125) along the pad edge (r2 critics: no oil stains, tyre marks or debris). tint multiplies the decal's colour (oil stains and tyre marks darken Rust's asphalt patch to near black rubber and oil).",
   "paint": [
     {
       "id": "edge_line_south",
@@ -1498,6 +1582,11 @@
       "length": 42,
       "width": 0.3,
       "opacity": 1.0,
+      "tint": [
+        1,
+        1,
+        1
+      ],
       "tuned": "2026-10-09 world_r3 floor render, by eye"
     },
     {
@@ -1518,6 +1607,11 @@
       "length": 42,
       "width": 0.3,
       "opacity": 1.0,
+      "tint": [
+        1,
+        1,
+        1
+      ],
       "tuned": "2026-10-09 world_r3 floor render, by eye"
     },
     {
@@ -1538,6 +1632,11 @@
       "length": 25,
       "width": 0.45,
       "opacity": 0.95,
+      "tint": [
+        1,
+        1,
+        1
+      ],
       "tuned": "2026-10-09 world_r3 floor render, by eye"
     },
     {
@@ -1558,6 +1657,11 @@
       "length": 24,
       "width": 0.25,
       "opacity": 0.9,
+      "tint": [
+        1,
+        1,
+        1
+      ],
       "tuned": "2026-10-09 world_r3 floor render, by eye"
     },
     {
@@ -1578,6 +1682,11 @@
       "length": 7,
       "width": 2.2,
       "opacity": 0.55,
+      "tint": [
+        1,
+        1,
+        1
+      ],
       "tuned": "2026-10-09 world_r3 floor render, by eye"
     },
     {
@@ -1598,6 +1707,11 @@
       "length": 6,
       "width": 2.0,
       "opacity": 0.55,
+      "tint": [
+        1,
+        1,
+        1
+      ],
       "tuned": "2026-10-09 world_r3 floor render, by eye"
     },
     {
@@ -1618,6 +1732,11 @@
       "length": 12,
       "width": 0.22,
       "opacity": 0.7,
+      "tint": [
+        1,
+        1,
+        1
+      ],
       "tuned": "2026-10-09 world_r3 floor render, by eye"
     },
     {
@@ -1638,7 +1757,212 @@
       "length": 9,
       "width": 0.22,
       "opacity": 0.7,
+      "tint": [
+        1,
+        1,
+        1
+      ],
       "tuned": "2026-10-09 world_r3 floor render, by eye"
+    },
+    {
+      "id": "oil_stain_a",
+      "texture": "tex_road_decals",
+      "rect": [
+        0.005,
+        0.503,
+        0.499,
+        1.0
+      ],
+      "pos": [
+        364.5,
+        4.3,
+        -3.6
+      ],
+      "yaw": 30,
+      "length": 2.6,
+      "width": 2.4,
+      "opacity": 0.65,
+      "tint": [
+        0.55,
+        0.53,
+        0.5
+      ],
+      "tuned": "2026-10-09 world_r3_19 floor render (gauntlet 3): soft dark stains (tint 0.3 read as pasted black splats, 0.5 opacity barely showed), by eye; atlas rect read from the png alpha"
+    },
+    {
+      "id": "oil_stain_b",
+      "texture": "tex_road_decals",
+      "rect": [
+        0.005,
+        0.503,
+        0.499,
+        1.0
+      ],
+      "pos": [
+        363.5,
+        4.3,
+        -0.9
+      ],
+      "yaw": -70,
+      "length": 1.8,
+      "width": 1.6,
+      "opacity": 0.65,
+      "tint": [
+        0.55,
+        0.53,
+        0.5
+      ],
+      "tuned": "2026-10-09 world_r3_19 floor render (gauntlet 3): soft dark stains (tint 0.3 read as pasted black splats, 0.5 opacity barely showed), by eye; atlas rect read from the png alpha"
+    },
+    {
+      "id": "oil_stain_c",
+      "texture": "tex_road_decals",
+      "rect": [
+        0.005,
+        0.503,
+        0.499,
+        1.0
+      ],
+      "pos": [
+        378.5,
+        4.3,
+        2.0
+      ],
+      "yaw": 140,
+      "length": 3.2,
+      "width": 2.6,
+      "opacity": 0.65,
+      "tint": [
+        0.55,
+        0.53,
+        0.5
+      ],
+      "tuned": "2026-10-09 world_r3_19 floor render (gauntlet 3): soft dark stains (tint 0.3 read as pasted black splats, 0.5 opacity barely showed), by eye; atlas rect read from the png alpha"
+    },
+    {
+      "id": "tyre_mark_a",
+      "texture": "tex_road_decals",
+      "rect": [
+        0,
+        0.1494,
+        1,
+        0.2715
+      ],
+      "pos": [
+        366.0,
+        4.3,
+        -2.4
+      ],
+      "yaw": 4,
+      "length": 12,
+      "width": 0.28,
+      "opacity": 0.45,
+      "tint": [
+        0.3,
+        0.3,
+        0.3
+      ],
+      "tuned": "2026-10-09 world_r3_15 floor render (gauntlet 3): moved into the floor view, by eye; atlas rect read from the png alpha"
+    },
+    {
+      "id": "tyre_mark_b",
+      "texture": "tex_road_decals",
+      "rect": [
+        0,
+        0.1494,
+        1,
+        0.2715
+      ],
+      "pos": [
+        366.0,
+        4.3,
+        -4.0
+      ],
+      "yaw": 4,
+      "length": 12,
+      "width": 0.28,
+      "opacity": 0.45,
+      "tint": [
+        0.3,
+        0.3,
+        0.3
+      ],
+      "tuned": "2026-10-09 world_r3_15 floor render (gauntlet 3): moved into the floor view, by eye; atlas rect read from the png alpha"
+    },
+    {
+      "id": "manhole",
+      "texture": "tex_road_decals",
+      "rect": [
+        0.5,
+        0.492,
+        0.898,
+        0.875
+      ],
+      "pos": [
+        364.4,
+        4.3,
+        -5.4
+      ],
+      "yaw": 15,
+      "length": 1.2,
+      "width": 1.15,
+      "opacity": 1.0,
+      "tint": [
+        1,
+        1,
+        1
+      ],
+      "tuned": "2026-10-09 world_r3_15 floor render (gauntlet 3): moved into the floor view, by eye; atlas rect read from the png alpha"
+    },
+    {
+      "id": "drain_grate",
+      "texture": "tex_road_decals",
+      "rect": [
+        0.511,
+        0.875,
+        0.812,
+        0.998
+      ],
+      "pos": [
+        372.0,
+        4.3,
+        -12.9
+      ],
+      "yaw": 0,
+      "length": 1.3,
+      "width": 0.42,
+      "opacity": 1.0,
+      "tint": [
+        1,
+        1,
+        1
+      ],
+      "tuned": "2026-10-09 world_r3_1x floor render (gauntlet 3), by eye; atlas rect read from the png alpha"
+    },
+    {
+      "id": "debris_edge_south",
+      "texture": "tex_dirt_stains_leaks",
+      "rect": [
+        0,
+        0.015,
+        1,
+        0.14
+      ],
+      "pos": [
+        366.0,
+        4.3,
+        -13.2
+      ],
+      "yaw": 0,
+      "length": 30,
+      "width": 1.3,
+      "opacity": 0.9,
+      "tint": [
+        1,
+        1,
+        1
+      ],
+      "tuned": "2026-10-09 world_r3_1x floor render (gauntlet 3), by eye; atlas rect read from the png alpha"
     }
   ]
 }

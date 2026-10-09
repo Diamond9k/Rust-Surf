@@ -196,6 +196,31 @@ class Prep(unittest.TestCase):
         self.assertEqual(st["weapon_ak47"]["_source"], "items_game.txt")
         self.assertFalse(any("weapon_deagle" in w for w in self.status()["warnings"]))  # vdata gave every stat
 
+    def test_disagreeing_files_are_recorded_and_the_winner_played(self):
+        """items_game.txt says 30 for the AK's damage, weapons.vdata 36: logged, kept under _conflicts, and the
+        stats_conflict_winner value goes into weapon_stats.json (which the game reads over items_game.txt).
+        0.1 against 0.100000 is the same value, not a conflict."""
+        vd = ('<!-- kv3 encoding:text:version{e21c7f3c} format:generic:version{7412167c} -->\n'
+              '{ weapon_ak47 = { m_nDamage = 36 m_flCycleTime = [ 0.100000, 0.2 ] } }')
+        stats = os.path.join(self.out, "cs2", "weapon_stats.json")
+        self.assertEqual(prep_cs2.settings()["stats_conflict_winner"], "items_game.txt")
+        code, out = self.main(FakeVRF(items_game_for(WEAPONS), vdata=vd))
+        self.assertEqual(code, 0, out)
+        self.assertIn("stats conflict: weapon_ak47 damage items_game.txt 30, weapons.vdata 36; playing the items_game.txt value", out)
+        with open(stats, encoding="utf-8") as f:
+            ak = json.load(f)["weapon_ak47"]
+        self.assertEqual((ak["damage"], ak["cycletime"], ak["cycletime alt"]), ("30", "0.1", "0.2"))
+        self.assertEqual(ak["_conflicts"], {"damage": {"items_game.txt": "30", "weapons.vdata": "36"}})
+        self.assertEqual(ak["_source"], "items_game.txt + weapons.vdata")
+        real = prep_cs2.settings
+        with mock.patch.object(prep_cs2, "settings", lambda here=prep_cs2.HERE: dict(real(here), stats_conflict_winner="weapons.vdata")):
+            code, out = self.main(FakeVRF(items_game_for(WEAPONS), vdata=vd))
+        self.assertEqual(code, 0, out)
+        with open(stats, encoding="utf-8") as f:
+            ak = json.load(f)["weapon_ak47"]
+        self.assertEqual((ak["damage"], ak["_conflicts"]["damage"]["items_game.txt"]), ("36", "30"))
+        self.assertIn("playing the weapons.vdata value", out)
+
     def test_stale_items_game_is_replaced(self):
         """A CS2 update: an earlier export is never reused for the stats."""
         self.main(FakeVRF(items_game_for(WEAPONS)))

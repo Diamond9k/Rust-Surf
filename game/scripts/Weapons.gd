@@ -49,9 +49,14 @@ var _toggle_until := 0.0 # silencer going on or off
 var _inaccuracy := 0.0   # fire inaccuracy (CS's accuracy penalty), items_game units
 var _recoil_index := 0.0
 var _last_shot := -10.0
-var _aim := Vector2.ZERO      # aim punch, degrees (x pitch up, y yaw left), before recoil_scale
+var _aim := Vector2.ZERO      # aim punch now, degrees (x pitch up, y yaw left), before recoil_scale
 var _aim_vel := Vector2.ZERO
-var _view := Vector2.ZERO     # camera-only punch, degrees
+var _view := Vector2.ZERO     # camera-only punch now, degrees
+var _aim_c := Vector2.ZERO    # the punch state on the last 64-tick (_punch_at); _aim / _aim_vel / _view are it
+var _vel_c := Vector2.ZERO    # carried on to the moment being read
+var _view_c := Vector2.ZERO
+var _kick_vel := Vector2.ZERO # shots since the last tick: their kick lands on the next tick, like CS's tick
+var _kick_view := Vector2.ZERO
 var _punch := 0.0             # kept for tools that zero it; the punch lives in _aim / _view
 var _tables := {}        # "id:mode" -> PackedVector2Array (angle, magnitude) of the seeded pattern
 var _alt_on := {}        # id -> true while silencer / burst is on
@@ -80,6 +85,13 @@ var _part_id := ""
 var _dry_at := 0.0       # next dry-fire click of a held empty trigger
 var problems: PackedStringArray = []  # exported guns missing a stats_required value (running on class averages)
 var thin := {}           # id -> the stats_required keys its stats lack
+var _paused_total := 0.0 # wall seconds the weapons clock has stood still
+var _pause_from := -1.0  # wall time the clock stopped at, -1 while it runs
+var _tick_at := -1.0     # weapons-clock time of the last frame
+var _punch_at := 0.0     # weapons-clock time of the last punch tick (the committed state's time)
+var _shoot_clip := 0     # which of the shoot_clips the next shot plays
+var _alt_wait := false   # attack2 pressed while the gun was busy: it acts once ready if still held
+var _shot_log: Variant = null  # --wtest: an Array that records each shot's aim punch x recoil_scale
 
 func setup(m: Node) -> void:
 	main = m
@@ -121,6 +133,7 @@ func setup(m: Node) -> void:
 	if cv is Dictionary and str(cv.get("zoom_sensitivity_ratio", "")).is_valid_float():
 		X["zoom_sensitivity_ratio"] = float(cv["zoom_sensitivity_ratio"])  # the player's own CS2 convar
 	refill()
+	_punch_reset(_now())
 	_build_buy()
 	_build_scope()
 	var ua := OS.get_cmdline_user_args()
@@ -268,7 +281,7 @@ func switch_to(s: String) -> bool:
 			clips[k] = _glb(rows[id]["clips"][k])
 		ok = vm.equip(_glb(rows[id]["model"]), clips)
 	if not ok:
-		main.hud.message("can't draw %s: %s" % [id, vm.why], 2.0)
+		_message("can't draw %s: %s" % [id, vm.why], 2.0)
 		return false
 	_set_zoom(0)
 	_rezoom = 0
@@ -293,9 +306,20 @@ func _deploy_reset() -> void:
 	_toggle_until = 0.0
 	_cock = -1.0
 
-## Wall-clock seconds: shots keep their exact cycletime between frames, like CS2's sub-tick input.
+## The weapons clock, seconds: wall time (shots keep their exact cycletime between frames, like CS2's sub-tick
+## input) that stands still while the trigger is blocked (Esc menu, buy menu, a frozen player), so a pause never
+## finishes a draw, reload, shell, bolt, silencer turn or Zeus charge for free.
 func _now() -> float:
-	return Time.get_ticks_usec() / 1000000.0
+	var w := Time.get_ticks_usec() / 1000000.0
+	return w - _paused_total - (w - _pause_from if _pause_from >= 0.0 else 0.0)
+
+func _hold_clock(stop: bool) -> void:
+	var w := Time.get_ticks_usec() / 1000000.0
+	if stop and _pause_from < 0.0:
+		_pause_from = w
+	elif not stop and _pause_from >= 0.0:
+		_paused_total += w - _pause_from
+		_pause_from = -1.0
 
 func _blocked() -> bool:
 	return (main.settings and main.settings.is_open) or (_buy and _buy.visible) or main.player == null or main.player.frozen
@@ -303,10 +327,16 @@ func _blocked() -> bool:
 func _process(dt: float) -> void:
 	if main == null or main.player == null:
 		return
-	var id := held()
+	_hold_clock(_blocked())
 	var t := _now()
-	_decay(id, dt, t)
+	var gdt := clampf(t - _tick_at, 0.0, maxf(dt, 0.0)) if _tick_at >= 0.0 else 0.0
+	_tick_at = t
+	_tick(held(), t, gdt)
+	_punch_to(t)  # the rounds of this frame read the punch at their own slot times; the camera reads it now
 	_camera()
+
+func _tick(id: String, t: float, dt: float) -> void:
+	_decay(id, dt, t)
 	if main.viewmodel and main.viewmodel.has_method("move"):
 		main.viewmodel.move(main.player.speed_units() if main.player.grounded else 0.0, Vector2(main.player.pitch, main.player.yaw), dt)
 	if Input.is_action_just_pressed("surf_buymenu") and not (main.settings and main.settings.is_open):
@@ -318,6 +348,7 @@ func _process(dt: float) -> void:
 		if _zoom > 0 and not _posed:
 			_set_zoom(0)
 		_burst_left = 0
+		_alt_wait = false
 		return
 	for pair in [["surf_slot1", "primary"], ["surf_slot2", "secondary"]]:
 		if Input.is_action_just_pressed(pair[0]):
@@ -345,7 +376,9 @@ func _process(dt: float) -> void:
 			_knife(true)
 		return
 	if Input.is_action_just_pressed("surf_attack2"):
-		_attack2(id)
+		_alt_wait = not _attack2(id)
+	elif _alt_wait:
+		_alt_wait = Input.is_action_pressed("surf_attack2") and not _attack2(id)  # CS reads attack2 held: it acts once the gun is ready
 	_fan = alt_kind(id) == "revolver" and Input.is_action_pressed("surf_attack2") and not Input.is_action_pressed("surf_attack")
 	if alt_kind(id) == "revolver" and not _fan:
 		if hammer(Input.is_action_pressed("surf_attack"), t):
@@ -383,17 +416,18 @@ func hammer(held_down: bool, t: float) -> bool:
 	_cock = -1.0
 	return true
 
-## attack2 on a gun: scope level, silencer on/off, burst/semi, or (revolver) fan fire while held.
-func _attack2(id: String) -> void:
-	match alt_kind(id):
+## attack2 on a gun: scope level, silencer on/off, burst/semi, or (revolver) fan fire while held. Like CS's
+## m_flNextSecondaryAttack (set with every shot, draw and toggle) it waits for the gun: false when refused
+## because the gun is busy (a draw, a bolt or shot cycle, a reload or shell load, a silencer turn, a burst).
+func _attack2(id: String) -> bool:
+	var kind := alt_kind(id)
+	if kind in ["scope", "silencer", "burst"] and not alt_ready():
+		return false
+	match kind:
 		"scope":
-			if _reload_until > 0.0 or _shell_next > 0.0:
-				return
 			_rezoom = 0
 			_set_zoom((_zoom + 1) % (_zoom_levels(id) + 1))
 		"silencer":
-			if _reload_until > 0.0 or _shell_next > 0.0 or _now() < maxf(_next_fire, _toggle_until):
-				return
 			_alt_on[id] = not _alt_on.get(id, false)
 			var vm: Viewmodel = main.viewmodel
 			var clip := "silencer_on" if _alt_on[id] else "silencer_off"
@@ -405,12 +439,32 @@ func _attack2(id: String) -> void:
 			_toggle_until = _now() + dur
 			_next_fire = maxf(_next_fire, _toggle_until)
 			_silencer_part(id, dur * 0.5)
-			main.hud.message("Silencer " + ("attached" if _alt_on[id] else "detached"), 1.5)
+			_message("Silencer " + ("attached" if _alt_on[id] else "detached"), 1.5)
 		"burst":
 			_alt_on[id] = not _alt_on.get(id, false)
 			var msg: Array = X["burst_messages"]  # burst, full-auto base (FAMAS), semi-auto base (Glock)
-			main.hud.message(String(msg[0] if _alt_on[id] else (msg[1] if stat(id, "is full auto") > 0.5 else msg[2])), 1.5)
+			_message(String(msg[0] if _alt_on[id] else (msg[1] if stat(id, "is full auto") > 0.5 else msg[2])), 1.5)
 	_hud()
+	return true
+
+## The secondary attack is ready: no reload, shell load or burst under way and the next shot is due.
+func alt_ready() -> bool:
+	return _reload_until == 0.0 and _shell_next == 0.0 and _burst_left == 0 and _now() >= maxf(_next_fire, _toggle_until)
+
+## The held gun could fire a round right now (the aim lobby's track mode credits time only then): not the
+## knife, rounds in the clip, no reload, shell load, draw or silencer turn under way, and the next shot due
+## within one cycle (a held trigger between two rounds of a spray still counts).
+func can_fire_now() -> bool:
+	var id := held()
+	if id == "" or id == "knife" or not ammo.has(id) or int(ammo[id][0]) <= 0:
+		return false
+	if _reload_until > 0.0 or _shell_next > 0.0:
+		return false
+	return _now() + 0.0005 >= maxf(_next_fire - mstat(id, "cycletime"), _toggle_until)
+
+func _message(text: String, secs: float) -> void:
+	if main.hud and main.hud.has_method("message"):
+		main.hud.message(text, secs)
 
 ## The silencer mesh follows the toggle halfway through it (when the can comes off or goes on); delay 0 now.
 func _silencer_part(id: String, delay: float) -> void:
@@ -471,27 +525,29 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 	if int(a[0]) <= 0 and int(a[1]) <= 0 and rows.has(id) and rows[id]["slot"] == "gear":
 		_recharge[id] = t + float(X["taser_recharge"])
 	_last_shot = t
-	var vm: Viewmodel = main.viewmodel
-	if not vm.play("shoot1"):
-		vm.kick("shot")
+	_shoot_anim(main.viewmodel)
 	_sound(id)
 	if main.lobby and main.lobby.has_method("on_shot_fired"):
 		main.lobby.on_shot_fired()  # one trigger pull = one shot, pellets and penetration included
 	var cam: Camera3D = main.player.cam
+	_punch_to(t)  # a catch-up round of a long frame flies on the punch of its own slot time, the rounds before it included
 	var eye := _eye_basis()
+	if _shot_log is Array:
+		(_shot_log as Array).append(_aim * float(X["recoil_scale"]))
 	var inacc := _inacc(id) * float(X["inaccuracy_to_rad"])
 	var spr := mstat(id, "spread") * float(X["inaccuracy_to_rad"])
 	var reach := stat(id, "range") * u
 	var hits: Array = []  # [part, damage, head, point] per pellet per body, in firing order
 	# CS FX_FireBullets: one inaccuracy ring for the whole shot, then a spread ring per pellet; each ring is a
 	# random angle and a uniform (centre-weighted) radius
+	var squares := outer_squarings(id)
 	var t0 := _rng.randf() * TAU
-	var r0 := _rng.randf() * inacc
+	var r0 := ring_share(_rng.randf(), squares) * inacc
 	var n := int(stat(id, "bullets"))
 	var fixed := pellets(id) if n > 1 and float(X["shotgun_spread_patterns"]) > 0.0 else PackedVector2Array()
 	for i in n:
 		var t1 := _rng.randf() * TAU
-		var r1 := _rng.randf() * spr
+		var r1 := ring_share(_rng.randf(), squares) * spr
 		if i < fixed.size():
 			t1 = fixed[i].x  # CS2 shotguns: the same pellet pattern every blast, moved by the inaccuracy ring
 			r1 = fixed[i].y * spr
@@ -499,7 +555,7 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 		var dir := (-eye.z + eye.x * off.x + eye.y * off.y).normalized()
 		_trace(id, cam.global_position, dir, reach, stat(id, "damage"), hits)
 	var head_any := _deliver(hits)
-	if hits.size() > 0 and main.hud.has_method("hitmarker"):
+	if hits.size() > 0 and main.hud and main.hud.has_method("hitmarker"):
 		main.hud.hitmarker(head_any)
 	_inaccuracy += mstat(id, "inaccuracy fire")
 	_recoil(id)
@@ -510,6 +566,42 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 	if int(a[0]) <= 0:
 		_burst_left = 0
 	_hud()
+
+## The shot clip: CS2 plays its shoot clips in turn; the ones this weapon exported cycle (shoot1 alone when that
+## is all there is), else the rig's procedural kick.
+func _shoot_anim(vm: Viewmodel) -> void:
+	if vm == null:
+		return
+	var have: Array = []
+	for c in String(X["shoot_clips"]).split(",", false):
+		if vm.has_clip(c.strip_edges()):
+			have.append(c.strip_edges())
+	if have.is_empty():
+		vm.kick("shot")
+		return
+	_shoot_clip = (_shoot_clip + 1) % have.size()
+	vm.play(String(have[_shoot_clip]))
+
+## How many times FX_FireBullets squares a ring's random radius share before taking 1 - share (pushing the round
+## out towards the ring's edge): once for the R8's fan fire, and for the Negev's first shots one more time per
+## shot short of outer_ring_first_shots; 0 for a plain centre-weighted ring.
+func outer_squarings(id: String) -> int:
+	if not rows.has(id):
+		return 0
+	var item := String(rows[id]["item"])
+	if _fan and String(X["outer_ring_alt_items"]).split(",", false).has(item):
+		return 1
+	var first := float(X["outer_ring_first_shots"])
+	if String(X["outer_ring_first_items"]).split(",", false).has(item) and _recoil_index < first:
+		return int(first) - floori(_recoil_index)
+	return 0
+
+static func ring_share(r: float, squares: int) -> float:
+	if squares <= 0:
+		return r
+	for i in squares:
+		r *= r
+	return 1.0 - r
 
 ## A pull on an empty gun: with auto_reload the gun clicks (one twitch per dry_fire_delay) and reloads once the
 ## trigger is let go, like CS; without it the pull reloads.
@@ -719,28 +811,60 @@ func _recoil(id: String) -> void:
 	var e := kick_at(id, _recoil_index)
 	var mag := e.y
 	var r := deg_to_rad(e.x)
-	_aim_vel += Vector2(cos(r), -sin(r)) * mag  # angle 0 kicks straight up, positive angles to the right
-	_view.x += float(X["view_punch_extra"]) * mag
+	_kick_vel += Vector2(cos(r), -sin(r)) * mag  # angle 0 kicks straight up, positive angles to the right
+	_kick_view.x += float(X["view_punch_extra"]) * mag
 	_recoil_index += 1.0
 
-## CS's DecayAimPunchAngle in steps no longer than a 64-tick, the fire inaccuracy recovering to
-## recovery_decay_to over the recovery time, and the recoil index easing back once the trigger rests.
+## The punch at weapons-clock time t (never back): CS's DecayAimPunchAngle runs on a fixed punch_tick grid
+## (each tick first decays, then takes the kicks of the shots fired since the last one), and _aim / _aim_vel /
+## _view show that state carried on to t inside the current tick. Every shot calls it with its own slot time
+## before it reads the punch, and each frame ends with it at the frame's time, so a spray goes the same way at
+## any frame rate: only the shot times and the tick grid decide it.
+func _punch_to(t: float) -> void:
+	var tick := float(X["punch_tick"])
+	while _punch_at + tick <= t:
+		var st := punch_step(_aim_c, _vel_c, _view_c, tick)
+		_aim_c = st[0]
+		_vel_c = st[1] + _kick_vel
+		_view_c = st[2] + _kick_view
+		_kick_vel = Vector2.ZERO
+		_kick_view = Vector2.ZERO
+		_punch_at += tick
+	var now := punch_step(_aim_c, _vel_c, _view_c, maxf(t - _punch_at, 0.0))
+	_aim = now[0]
+	_aim_vel = now[1]
+	_view = now[2]
+
+## Clears the punch, its pending kicks and its clock (a test's fresh start).
+func _punch_reset(t: float) -> void:
+	_aim_c = Vector2.ZERO
+	_vel_c = Vector2.ZERO
+	_view_c = Vector2.ZERO
+	_kick_vel = Vector2.ZERO
+	_kick_view = Vector2.ZERO
+	_aim = Vector2.ZERO
+	_aim_vel = Vector2.ZERO
+	_view = Vector2.ZERO
+	_punch_at = t
+
+## CS's DecayAimPunchAngle over h seconds (at most one tick): the aim punch shrinks exponentially, then
+## linearly, then follows its velocity in two half steps around the velocity's own decay; the view punch
+## decays on its own. Returns [aim, velocity, view].
+func punch_step(aim: Vector2, vel: Vector2, view: Vector2, h: float) -> Array:
+	if h <= 0.0:
+		return [aim, vel, view]
+	aim *= exp(-float(X["recoil_decay_exp"]) * h)
+	var l := aim.length()
+	if l > 0.0:
+		aim *= maxf(l - float(X["recoil_decay_lin"]) * h, 0.0) / l
+	aim += vel * h * 0.5
+	vel *= exp(-float(X["recoil_vel_decay"]) * h)
+	aim += vel * h * 0.5
+	return [aim, vel, view * exp(-float(X["view_punch_decay"]) * h)]
+
+## The fire inaccuracy recovering to recovery_decay_to over the recovery time, and the recoil index easing back
+## once the trigger rests (the punch decays in _punch_to).
 func _decay(id: String, dt: float, t: float) -> void:
-	var n := maxi(1, ceili(dt * 64.0))
-	var h := dt / float(n)
-	var e8 := float(X["recoil_decay_exp"])
-	var l18 := float(X["recoil_decay_lin"])
-	var v45 := float(X["recoil_vel_decay"])
-	var vd := float(X["view_punch_decay"])
-	for i in n:
-		_aim *= exp(-e8 * h)
-		var l := _aim.length()
-		if l > 0.0:
-			_aim *= maxf(l - l18 * h, 0.0) / l
-		_aim += _aim_vel * h * 0.5
-		_aim_vel *= exp(-v45 * h)
-		_aim += _aim_vel * h * 0.5
-		_view *= exp(-vd * h)
 	if id == "" or id == "knife":
 		_inaccuracy = 0.0
 		_recoil_index = 0.0
@@ -902,6 +1026,7 @@ func _knife(stab: bool) -> void:
 		return
 	var first := t > _next_fire + float(X["knife_combo"])
 	var cam: Camera3D = main.player.cam
+	_punch_to(t)
 	var dir := -_eye_basis().z
 	var reach := float(X["knife_stab_range" if stab else "knife_slash_range"]) * u
 	var space: PhysicsDirectSpaceState3D = main.player.get_world_3d().direct_space_state
@@ -927,7 +1052,7 @@ func _knife(stab: bool) -> void:
 		dmg = float(X["knife_slash_back"] if back else (X["knife_slash_first"] if first else X["knife_slash"]))
 	col.hit(_armored(unit, dmg, _group(col, head), "knife"), head, at)
 	_next_fire = t + float(X["knife_stab_hit" if stab else "knife_slash_hit"])
-	if main.hud.has_method("hitmarker"):
+	if main.hud and main.hud.has_method("hitmarker"):
 		main.hud.hitmarker(head)
 
 ## What a swing meets: the first thing on the ray to the knife's reach (a wall stops it), else the hull's pick.
@@ -1231,19 +1356,21 @@ func _selftest() -> void:
 	var r3 := [rs.next(), rs.next(), rs.next()]
 	_check("source_random", r3 == [893351816, 197493099, 1624379149], "seed 1 -> %s (ran1 reference 893351816 197493099 1624379149)" % str(r3))
 	# a 10-shot AK spray at 0.1 s: the bullets climb, then the punch settles back to zero
-	_aim = Vector2.ZERO
-	_aim_vel = Vector2.ZERO
-	_view = Vector2.ZERO
+	var st0 := _now()
+	_punch_reset(st0)
 	_recoil_index = 0.0
 	var climb: Array = []
+	var stt := st0
 	for i in 10:
 		climb.append(_aim.x * float(X["recoil_scale"]))
 		_recoil("cs2_ak47")
 		_last_shot = 1000.0
 		for j in 6:
-			_decay("cs2_ak47", 1.0 / 60.0, _last_shot)
+			stt += 1.0 / 60.0
+			_punch_to(stt)
 	for j in 120:
-		_decay("cs2_ak47", 1.0 / 60.0, _last_shot)
+		stt += 1.0 / 60.0
+		_punch_to(stt)
 	_check("spray_climbs_and_settles", float(climb[9]) > float(climb[2]) and float(climb[2]) > 0.0 and _aim.length() < 0.05, "bullet pitch deg shot3=%.2f shot10=%.2f rest=%.3f" % [climb[2], climb[9], _aim.length()])
 	_inaccuracy = 0.0
 	var still := _spread("cs2_ak47")
@@ -1281,6 +1408,11 @@ func _selftest() -> void:
 		var late := cadence(1.0, 1.0 + cyc * 0.95, cyc, frame)  # a click just short of a whole cycle late
 		_check("cadence_" + wid, absf(float(shots) - want) <= maxf(1.0, want * 0.02) and gap >= cyc - fast - 0.0001 and late >= 1.0 + cyc * 1.95 - 0.0001, "cyc=%.3f held 3 s=%d rounds (want %.1f), spam min gap=%.4f, late click next=%.3f" % [cyc, shots, want, gap, late])
 	# scope: AWP levels 1, 2, off; a fast re-scope inside the zoom tween still returns to the real fov
+	_next_fire = 0.0
+	_reload_until = 0.0
+	_shell_next = 0.0
+	_toggle_until = 0.0
+	_burst_left = 0
 	var fov0 := p.cam.fov
 	var sens0: float = p.input.sensitivity
 	var keep_slot: String = slots["primary"]
@@ -1306,6 +1438,44 @@ func _selftest() -> void:
 	_check("scope_fov_restored", is_equal_approx(p.cam.fov, fov0) and is_equal_approx(p.input.sensitivity, sens0), "fov %.3f -> %.3f after a fast re-scope, sens %.3f -> %.3f" % [fov0, p.cam.fov, sens0, p.input.sensitivity])
 	var kinds := [alt_kind("cs2_awp"), alt_kind("cs2_m4a1_silencer"), alt_kind("cs2_usp_silencer"), alt_kind("cs2_glock"), alt_kind("cs2_famas"), alt_kind("cs2_revolver"), alt_kind("cs2_ak47"), alt_kind("knife")]
 	_check("alt_kinds", kinds == ["scope", "silencer", "silencer", "burst", "burst", "revolver", "none", "stab"], "awp m4a1s usp glock famas r8 ak knife = %s" % str(kinds))
+	# attack2 waits for the gun like CS's m_flNextSecondaryAttack: no scope mid bolt or draw, no burst toggle mid cycle
+	_next_fire = _now() + 1.0
+	var scope_busy := _attack2("cs2_awp") or _zoom != 0
+	_next_fire = 0.0
+	var scope_ready := _attack2("cs2_awp") and _zoom == 1
+	_set_zoom(0)
+	var burst0: bool = _alt_on.get("cs2_glock", false)
+	_next_fire = _now() + 1.0
+	var burst_busy: bool = _attack2("cs2_glock") or _alt_on.get("cs2_glock", false) != burst0
+	_next_fire = 0.0
+	_alt_on["cs2_glock"] = burst0
+	_check("attack2_waits_for_gun", not scope_busy and scope_ready and not burst_busy, "awp scope mid bolt=%s, once ready=%s; glock burst toggle mid cycle=%s" % [scope_busy, scope_ready, burst_busy])
+	# R8 fan fire pushes each round out to the cone's edge (1 - r^2); the Negev's first shots too, tightening by shot 3
+	var keep_fan := _fan
+	_fan = true
+	var sq_fan := outer_squarings("cs2_revolver")
+	var sq_ak_fan := outer_squarings("cs2_ak47")
+	_fan = false
+	var sq_r8 := outer_squarings("cs2_revolver")
+	_recoil_index = 0.0
+	var sq_n0 := outer_squarings("cs2_negev")
+	_recoil_index = float(X["outer_ring_first_shots"])
+	var sq_n3 := outer_squarings("cs2_negev")
+	_recoil_index = 0.0
+	_fan = keep_fan
+	_check("outer_ring", sq_fan == 1 and sq_ak_fan == 0 and sq_r8 == 0 and sq_n0 == int(X["outer_ring_first_shots"]) and sq_n3 == 0 and is_equal_approx(ring_share(0.5, 1), 0.75) and ring_share(0.5, 0) == 0.5, "r8 fan %d, r8 hammer %d, negev shot 1 %d, shot 4 %d squaring(s); r=0.5 -> %.3f" % [sq_fan, sq_r8, sq_n0, sq_n3, ring_share(0.5, 1)])
+	# the weapons clock stands still while the trigger is blocked (menus): a pause never finishes a reload
+	var was_held := _pause_from >= 0.0
+	_hold_clock(false)
+	var c0 := _now()
+	_hold_clock(true)
+	OS.delay_msec(60)
+	var c1 := _now()
+	_hold_clock(false)
+	OS.delay_msec(30)
+	var c2 := _now()
+	_hold_clock(was_held)
+	_check("clock_holds_in_pause", c1 - c0 < 0.005 and c2 - c1 >= 0.025, "60 ms paused moved the clock %.4f s, 30 ms running moved it %.4f s" % [c1 - c0, c2 - c1])
 	_check("silenced_at_spawn", _alt_on["cs2_m4a1_silencer"] and _alt_on["cs2_usp_silencer"] and _mode("cs2_m4a1_silencer") == 1, "m4a1s=%s usp=%s" % [_alt_on["cs2_m4a1_silencer"], _alt_on["cs2_usp_silencer"]])
 	# R8 primary: the hammer pull delays the round, letting go cancels it
 	slots["secondary"] = "cs2_revolver"
@@ -1359,10 +1529,18 @@ func _selftest() -> void:
 		ht += slow
 	var want_r := 3.0 / stat("cs2_ak47", "cycletime")
 	_check("auto_rate_low_fps", absf(rounds - want_r) <= 1.0, "ak47 held 3 s at 12 fps: %d rounds (want %.0f)" % [rounds, want_r])
+	# sub-tick spray: a 30-round spray held at a low frame rate (several rounds a frame) puts every round on the
+	# same punch as at 300 fps, each round flying on the punch of its own slot time
+	var lo := _spray_at(8.0)
+	var hi := _spray_at(300.0)
+	var worst := 0.0
+	var top := 0.0
+	for i in mini(lo.size(), hi.size()):
+		worst = maxf(worst, ((lo[i] as Vector2) - (hi[i] as Vector2)).length())
+		top = maxf(top, (hi[i] as Vector2).length())
+	_check("spray_fps_independent", lo.size() == hi.size() and lo.size() == mini(30, int(stat("cs2_ak47", "primary clip size"))) and top > 0.0 and worst <= 0.0001, "ak47 %d rounds at 8 vs 300 fps: largest gap %.6f deg of a %.2f deg spray" % [lo.size(), worst, top])
 	refill()
-	_aim = Vector2.ZERO
-	_aim_vel = Vector2.ZERO
-	_view = Vector2.ZERO
+	_punch_reset(_now())
 	# recoil index: a fractional index blends the two table entries around it, suppression included
 	_recoil_index = 0.0
 	var ka := kick_at("cs2_ak47", 5.0)
@@ -1662,9 +1840,7 @@ func _selftest() -> void:
 	slots["secondary"] = _first_ready(["cs2_usp_silencer", "cs2_glock", "cs2_deagle"], "pistol")
 	current = keep_cur
 	refill()
-	_aim = Vector2.ZERO
-	_aim_vel = Vector2.ZERO
-	_view = Vector2.ZERO
+	_punch_reset(_now())
 	_deploy_reset()
 	_last_shot = -10.0
 	_next_fire = 0.0
@@ -1672,6 +1848,33 @@ func _selftest() -> void:
 	_hud()
 	print("WTEST weapons checks=%d failed=%d" % [_checks, _fails])
 	get_tree().quit(1 if _fails > 0 else 0)
+
+## --wtest: one held AK spray at a fixed frame rate (simulated frames on the weapons clock), returning each
+## round's aim punch x recoil_scale as it flew.
+func _spray_at(fps: float) -> Array:
+	slots["primary"] = "cs2_ak47"
+	current = "primary"
+	ammo["cs2_ak47"] = [mini(30, int(stat("cs2_ak47", "primary clip size"))), 0]
+	_reload_until = 0.0
+	_shell_next = 0.0
+	_toggle_until = 0.0
+	_burst_left = 0
+	_recoil_index = 0.0
+	_inaccuracy = 0.0
+	var t0 := _now()
+	_punch_reset(t0)
+	_next_fire = t0
+	_shot_log = []
+	var dt := 1.0 / fps
+	var ft := t0
+	while int(ammo["cs2_ak47"][0]) > 0 and ft < t0 + 10.0:
+		hold_fire("cs2_ak47", ft, dt)
+		_punch_to(ft)
+		ft += dt
+	var out: Array = _shot_log
+	_shot_log = null
+	_punch_reset(_now())
+	return out
 
 ## One weapon's attributes as prep/items_game.stats gives them: the "items" entry named item (its prefab chain,
 ## its own attributes on top), else the <item>_prefab block's chain. Strings, like prep's.

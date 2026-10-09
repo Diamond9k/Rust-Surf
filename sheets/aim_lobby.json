@@ -1,6 +1,6 @@
 {
   "_sheet": "aim_lobby",
-  "_doc": "The aim-train range far above the surf course. Lengths in metres, positions in the range frame: origin at 'center', turned range_yaw about y (x right, y up, z toward the spawn; lanes run toward -z). Distances are measured from the firing line. Bot size is movement.json hull_height (72 u), so 'parts' and 'props' positions are fractions of that height in the bot's own frame (x to its left as you face it, z toward the player). A part is a hittable body in a hitgroup; a prop is a mesh riding on a part, drawn when its 'when' is 'always' or one of the outfit's 'gear' tags. Shapes: sphere (centre a, radius r; b unused), taper or capsule (from a to b, radius r at a and r2 at b), beam (a box from a to b, r half wide, r2 half tall), box (centre a, size b), cylinder (centre a, height b.y). k scales the drawn mesh in the shape's own axes (x across, y along a to b, z depth); the hitbox is the undrawn shape, or the box 'hit' gives as [centre x, y, z, size x, y, z]. Time to kill runs from the shot that first hit that bot to its death (a one-tap is 0 ms); the kill interval runs from the later of the bot standing up (or the round starting) and your previous kill, and a second kill by the same shot adds no interval.",
+  "_doc": "The aim-train range far above the surf course. Lengths in metres, positions in the range frame: origin at 'center', turned range_yaw about y (x right, y up, z toward the spawn; lanes run toward -z). Distances are measured from the firing line. Bot size is movement.json hull_height (72 u), so 'parts' and 'props' positions are fractions of that height in the bot's own frame (x to its left as you face it, z toward the player). A part is a hittable body in a hitgroup; a prop is a mesh riding on a part, drawn when its 'when' is 'always' or one of the outfit's 'gear' tags (one outfit today: every bot wears the same kit, as every aim_botz bot wears the same agent). Shapes: sphere (centre a, radius r; b unused), taper or capsule (from a to b, radius r at a and r2 at b), beam (a box from a to b, r half wide, r2 half tall), box (centre a, size b), cylinder (centre a, height b.y). k scales the drawn mesh in the shape's own axes (x across, y along a to b, z depth); the hitbox is the undrawn shape, or the box 'hit' gives as [centre x, y, z, size x, y, z]. Time to kill runs from the shot that first hit that bot to its death (a one-tap is 0 ms); the kill interval runs from the later of the bot standing up (or the round starting) and your previous kill, and a second kill by the same shot adds no interval.",
   "columns": [
     "id",
     "value",
@@ -238,6 +238,38 @@
       ],
       "what": "contact shade painted on the floor along each wall foot: [width m, darkness at the wall 0..1], fading to nothing",
       "verified": "2026-10-09 design value (Gauntlet round 2 ultracode, lobby_r2 renders): tuned by eye at 960x540, a stand-in for baked ambient occlusion"
+    },
+    {
+      "id": "pilaster_ao",
+      "value": [
+        0.6,
+        0.35
+      ],
+      "what": "[width m, alpha] of the soft shade a pilaster casts on the wall beside it and on the floor at its foot; the inner corners take twice the width",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): by eye at 960x540 after round 2 critics found the walls flat with no occlusion; a stand-in for baked AO, not taken from CS2 or Rust"
+    },
+    {
+      "id": "lamp_light",
+      "value": [
+        2.0,
+        7.0,
+        50.0,
+        0.35
+      ],
+      "what": "wall lamp light pools: [energy, range m, spot angle deg, how far the beam leans off the wall]; energy 0 turns them off. No shadows",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): by eye so the warm pools show on the walls under daylight"
+    },
+    {
+      "id": "floor_stains",
+      "value": [
+        7,
+        26,
+        3.5,
+        0.5,
+        0.5
+      ],
+      "what": "oil and scuff blots on the range floor: [seed, count, max size m, alpha, roughness]; the fixed seed keeps every render the same",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): by eye at 960x540 after round 2 critics found the walls flat with no occlusion; a stand-in for baked AO, not taken from CS2 or Rust"
     },
     {
       "id": "trim_material",
@@ -503,9 +535,9 @@
       "value": [
         [
           1,
-          4.5,
+          6,
           0.5,
-          4,
+          0,
           0,
           0
         ],
@@ -513,39 +545,31 @@
           2,
           6,
           -1,
-          1,
+          0,
           0,
           0
         ],
         [
           3,
-          3.5,
+          6,
           1.5,
-          2,
-          0,
-          0
-        ],
-        [
-          3,
-          8,
-          -2,
           0,
           0,
           0
         ],
         [
           4,
-          5,
-          1,
-          3,
+          6,
+          -0.5,
+          0,
           0,
           0
         ],
         [
           5,
-          4.5,
-          -0.5,
+          6,
           1,
+          0,
           0,
           0
         ],
@@ -553,29 +577,29 @@
           1,
           15,
           -1,
-          2,
+          0,
           0,
           0
         ],
         [
           2,
-          18,
+          15,
           1,
-          3,
+          0,
           0,
           0
         ],
         [
           3,
-          14,
+          15,
           0,
-          4,
+          0,
           0,
           0
         ],
         [
           4,
-          17,
+          15,
           -1.5,
           0,
           0,
@@ -583,63 +607,111 @@
         ],
         [
           5,
-          20,
-          1,
-          2,
-          0,
-          0
-        ],
-        [
-          2,
-          13,
-          -2.5,
-          0,
-          0.8,
-          0
-        ],
-        [
-          1,
-          30,
+          15,
           0.5,
+          0,
+          0,
+          0
+        ],
+        [
           1,
-          0.8,
+          24,
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          2,
+          24,
+          -0.5,
+          0,
+          0,
+          0
+        ],
+        [
+          3,
+          24,
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          4,
+          24,
+          0.5,
+          0,
+          0,
+          0
+        ],
+        [
+          5,
+          24,
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          36,
+          0,
+          0,
+          0,
           0
         ],
         [
           2,
           36,
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          3,
+          36,
+          0.5,
+          0,
+          0,
+          0
+        ],
+        [
+          4,
+          36,
           -1,
           0,
-          1.6,
-          0
-        ],
-        [
-          3,
-          27,
           0,
-          2,
-          0.8,
-          0
-        ],
-        [
-          3,
-          42,
-          0,
-          3,
-          0,
-          0
-        ],
-        [
-          4,
-          33,
-          1,
-          4,
-          0.8,
           0
         ],
         [
           5,
-          40,
+          36,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          46,
+          0.5,
+          0,
+          0,
+          0
+        ],
+        [
+          3,
+          46,
+          -0.5,
+          0,
+          0,
+          0
+        ],
+        [
+          5,
+          46,
           0,
           0,
           0,
@@ -649,7 +721,7 @@
           1,
           24,
           -5.5,
-          3,
+          0,
           2.0,
           1
         ],
@@ -657,7 +729,7 @@
           1,
           38,
           -5.5,
-          4,
+          0,
           2.0,
           1
         ],
@@ -665,7 +737,7 @@
           5,
           28,
           5.5,
-          2,
+          0,
           2.0,
           1
         ],
@@ -673,13 +745,13 @@
           5,
           40,
           5.5,
-          1,
+          0,
           2.0,
           1
         ]
       ],
-      "what": "where bots stand: [lane, metres from the firing line, sideways offset m, outfit index, standing height m, on a catwalk 0/1]; a raised spot that is not on a catwalk gets a crate of that height under the bot, like aim_botz's raised spots",
-      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
+      "what": "where bots stand: [lane, metres from the firing line, sideways offset m, outfit index, standing height m, on a catwalk 0/1]; a raised spot that is not on a catwalk gets a crate of that height under the bot",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): set out in aim_botz-style rows across the five lanes at 6, 15, 24, 36 and 46 m with small sideways offsets, plus the four catwalk spots; crate stands removed after round 2 critics read them as bots on flat crates; every bot wears outfit 0; rows keep clear of the cover crates"
     },
     {
       "id": "bot_crate",
@@ -721,6 +793,12 @@
       "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
+      "id": "bot_heal_s",
+      "value": 3.0,
+      "what": "seconds a wounded, living bot goes without a hit before it is back to full health and armour; its time to kill then starts again from the next hit, so one chip shot never inflates the average",
+      "verified": "unverified: whether CS2 practice-map bots regenerate is not checked here; 3 s is a 2026-10-09 design value, scored headless (--lobbytest heal case)"
+    },
+    {
       "id": "bot_fall_s",
       "value": 0.35,
       "what": "seconds a killed bot takes to tip over backwards",
@@ -741,6 +819,12 @@
       ],
       "what": "live bots' idle motion about their feet: side sway amplitude (degrees, half of it forward and back), sway cycles per second, slow look-around yaw amplitude (degrees). Hitboxes move with the body",
       "verified": "2026-10-09 design value (Gauntlet round 4): small enough that a held headshot stays on the head at 10 m (0.8 degrees sways the head about 2.4 cm); rendered in lobby_r1 renders; not taken from CS2"
+    },
+    {
+      "id": "bot_head_look",
+      "value": 9.0,
+      "what": "idle head scan: the most a live bot turns its head left or right (degrees; a third of it up and down), slow and out of step with the body sway; the head hitbox turns with it",
+      "verified": "2026-10-09 design value (Gauntlet round 3): small enough that a head-level crosshair stays on the head; not taken from CS2 bot behaviour"
     },
     {
       "id": "hitgroup_head",
@@ -836,6 +920,12 @@
       "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
+      "id": "track_fire_window",
+      "value": 0.25,
+      "what": "track mode: on-target time counts only while a round of the held gun went off within max(its cycletime, this many seconds), so holding the trigger on an empty gun, the knife or an unclicked semi-auto earns nothing",
+      "verified": "2026-10-09 design value (Gauntlet round 3): scored headless (--lobbytest track gate cases); not playtested on the PC"
+    },
+    {
       "id": "color_flick",
       "value": [
         1.0,
@@ -904,6 +994,16 @@
       ],
       "what": "wall lamp glow",
       "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "color_stain",
+      "value": [
+        0.06,
+        0.055,
+        0.05
+      ],
+      "what": "colour of the floor stains",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): by eye at 960x540 after round 2 critics found the walls flat with no occlusion; a stand-in for baked AO, not taken from CS2 or Rust"
     },
     {
       "id": "cloth_noise",
@@ -983,6 +1083,15 @@
       "value": 6.0,
       "what": "cloth weave repeats per metre of a part's own frame (triplanar, so it rides the part as the bot sways and falls)",
       "verified": "2026-10-09 design value (Gauntlet round 2 ultracode, lobby_r2 renders): tuned by eye on the range at 960x540; a stand-in for the baked AO and PBR maps of a real character model, not taken from CS2 or Rust"
+    },
+    {
+      "id": "bot_rusty_slots",
+      "value": [
+        "metal",
+        "sign"
+      ],
+      "what": "outfit slots drawn with the course trim metal texture (rust and scratches) multiplied into their colour: the facemask, chest plates and the road sign kilt",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): by eye, so the kilt reads as a weathered sign and not a bright apron"
     },
     {
       "id": "ui_ct",
@@ -1954,404 +2063,29 @@
       "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
-      "id": "eye_r",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        0.0175,
-        0.9268,
-        0.0591
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.0046,
-      "r2": 0.0046,
-      "k": [
-        1.2,
-        0.8,
-        0.6
-      ],
-      "slot": "eyes",
-      "when": "face",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "eye_l",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        -0.0175,
-        0.9268,
-        0.0591
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.0046,
-      "r2": 0.0046,
-      "k": [
-        1.2,
-        0.8,
-        0.6
-      ],
-      "slot": "eyes",
-      "when": "face",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "brow",
-      "on": "head",
-      "shape": "beam",
-      "a": [
-        -0.0284,
-        0.9367,
-        0.0596
-      ],
-      "b": [
-        0.0284,
-        0.9367,
-        0.0596
-      ],
-      "r": 0.0066,
-      "r2": 0.0038,
-      "k": [
-        1,
-        1,
-        1
-      ],
-      "slot": "hair",
-      "when": "face",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "nose",
-      "on": "head",
-      "shape": "taper",
-      "a": [
-        0.0,
-        0.9268,
-        0.0618
-      ],
-      "b": [
-        0.0,
-        0.9082,
-        0.0684
-      ],
-      "r": 0.0049,
-      "r2": 0.0071,
-      "k": [
-        1,
-        1,
-        1
-      ],
-      "slot": "skin",
-      "when": "face",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "ear_r",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        0.0492,
-        0.9203,
-        0.0137
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.012,
-      "r2": 0.012,
-      "k": [
-        0.45,
-        1.25,
-        0.8
-      ],
-      "slot": "skin",
-      "when": "face",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "ear_l",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        -0.0492,
-        0.9203,
-        0.0137
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.012,
-      "r2": 0.012,
-      "k": [
-        0.45,
-        1.25,
-        0.8
-      ],
-      "slot": "skin",
-      "when": "face",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "hair",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        0.0,
-        0.9345,
-        0.0049
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.064,
-      "r2": 0.064,
-      "k": [
-        0.84,
-        0.86,
-        0.9
-      ],
-      "slot": "hair",
-      "when": "hair",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "bandana",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        0.0,
-        0.8984,
-        0.017
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.064,
-      "r2": 0.064,
-      "k": [
-        0.84,
-        0.6,
-        0.92
-      ],
-      "slot": "accent",
-      "when": "bandana",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "bandana_knot",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        0.0,
-        0.9093,
-        -0.041
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.0137,
-      "r2": 0.0137,
-      "k": [
-        1.3,
-        1,
-        0.8
-      ],
-      "slot": "accent",
-      "when": "bandana",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "sack",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        0.0,
-        0.9225,
-        0.0115
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.0673,
-      "r2": 0.0673,
-      "k": [
-        0.84,
-        1.06,
-        0.93
-      ],
-      "slot": "shirt",
-      "when": "wrap",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "sack_tie",
-      "on": "neck",
-      "shape": "taper",
-      "a": [
-        0.0,
-        0.853,
-        0.0044
-      ],
-      "b": [
-        0.0,
-        0.8667,
-        0.0055
-      ],
-      "r": 0.0328,
-      "r2": 0.0317,
-      "k": [
-        1,
-        1,
-        1
-      ],
-      "slot": "boots",
-      "when": "wrap",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "eyehole_r",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        0.0186,
-        0.9268,
-        0.0651
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.0087,
-      "r2": 0.0087,
-      "k": [
-        1.1,
-        0.75,
-        0.5
-      ],
-      "slot": "eyes",
-      "when": "wrap",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "eyehole_l",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        -0.0186,
-        0.9268,
-        0.0651
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.0087,
-      "r2": 0.0087,
-      "k": [
-        1.1,
-        0.75,
-        0.5
-      ],
-      "slot": "eyes",
-      "when": "wrap",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "can",
-      "on": "head",
-      "shape": "cylinder",
-      "a": [
-        0.0,
-        0.9531,
-        0.0115
-      ],
-      "b": [
-        0.0,
-        0.082,
-        0.0
-      ],
-      "r": 0.0612,
-      "r2": 0.0612,
-      "k": [
-        1,
-        1,
-        1
-      ],
-      "slot": "metal",
-      "when": "can",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "can_rim",
-      "on": "head",
-      "shape": "cylinder",
-      "a": [
-        0.0,
-        0.9203,
-        0.0115
-      ],
-      "b": [
-        0.0,
-        0.0109,
-        0.0
-      ],
-      "r": 0.0645,
-      "r2": 0.0645,
-      "k": [
-        1,
-        1,
-        1
-      ],
-      "slot": "boots",
-      "when": "can",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
       "id": "hood",
       "on": "head",
       "shape": "sphere",
       "a": [
         0.0,
         0.9268,
-        0.0016
+        -0.0115
       ],
       "b": [
         0,
         0,
         0
       ],
-      "r": 0.0738,
-      "r2": 0.0738,
+      "r": 0.0712,
+      "r2": 0.0712,
       "k": [
         0.86,
         1.06,
-        0.96
+        0.97
       ],
       "slot": "shirt",
       "when": "hood",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
     },
     {
       "id": "hood_hang",
@@ -2379,121 +2113,46 @@
       "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
     },
     {
-      "id": "mask_hood",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        0.0,
-        0.9236,
-        0.0071
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.0689,
-      "r2": 0.0689,
-      "k": [
-        0.84,
-        1.06,
-        0.94
-      ],
-      "slot": "shirt",
-      "when": "mask",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "visor",
-      "on": "head",
-      "shape": "sphere",
-      "a": [
-        0.0,
-        0.929,
-        0.0519
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.0383,
-      "r2": 0.0383,
-      "k": [
-        1.05,
-        0.55,
-        0.4
-      ],
-      "slot": "eyes",
-      "when": "mask",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "filter",
-      "on": "head",
-      "shape": "cylinder",
-      "a": [
-        0.0,
-        0.8875,
-        0.0684
-      ],
-      "b": [
-        0.0,
-        0.0328,
-        0.0
-      ],
-      "r": 0.0164,
-      "r2": 0.0164,
-      "k": [
-        1,
-        1,
-        1
-      ],
-      "slot": "boots",
-      "when": "mask",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
       "id": "face_plate",
       "on": "head",
       "shape": "sphere",
       "a": [
         0.0,
-        0.9203,
-        0.041
+        0.919,
+        0.0425
       ],
       "b": [
         0,
         0,
         0
       ],
-      "r": 0.0547,
-      "r2": 0.0547,
+      "r": 0.0585,
+      "r2": 0.0585,
       "k": [
-        0.9,
-        1.12,
-        0.62
+        0.93,
+        1.13,
+        0.56
       ],
       "slot": "metal",
       "when": "facemask",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
     },
     {
       "id": "slit_r",
       "on": "head",
       "shape": "beam",
       "a": [
-        0.0066,
-        0.9301,
-        0.0749
+        0.0062,
+        0.9312,
+        0.0752
       ],
       "b": [
-        0.0317,
-        0.9312,
-        0.0684
+        0.0335,
+        0.9322,
+        0.0688
       ],
-      "r": 0.0044,
-      "r2": 0.0033,
+      "r": 0.0046,
+      "r2": 0.0052,
       "k": [
         1,
         1,
@@ -2501,24 +2160,24 @@
       ],
       "slot": "eyes",
       "when": "facemask",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
     },
     {
       "id": "slit_l",
       "on": "head",
       "shape": "beam",
       "a": [
-        -0.0066,
-        0.9301,
-        0.0749
+        -0.0062,
+        0.9312,
+        0.0752
       ],
       "b": [
-        -0.0317,
-        0.9312,
-        0.0684
+        -0.0335,
+        0.9322,
+        0.0688
       ],
-      "r": 0.0044,
-      "r2": 0.0033,
+      "r": 0.0046,
+      "r2": 0.0052,
       "k": [
         1,
         1,
@@ -2526,7 +2185,7 @@
       ],
       "slot": "eyes",
       "when": "facemask",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
     },
     {
       "id": "plate_ridge",
@@ -2534,16 +2193,16 @@
       "shape": "beam",
       "a": [
         0.0,
-        0.9695,
-        0.0629
+        0.979,
+        0.0662
       ],
       "b": [
         0.0,
-        0.8711,
-        0.0673
+        0.862,
+        0.0705
       ],
-      "r": 0.0044,
-      "r2": 0.0033,
+      "r": 0.0046,
+      "r2": 0.0036,
       "k": [
         1,
         1,
@@ -2551,7 +2210,7 @@
       ],
       "slot": "boots",
       "when": "facemask",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
     },
     {
       "id": "plate",
@@ -2559,16 +2218,16 @@
       "shape": "beam",
       "a": [
         0.0,
-        0.6616,
-        0.0667
+        0.655,
+        0.0705
       ],
       "b": [
         0.0,
-        0.7819,
-        0.0591
+        0.79,
+        0.0625
       ],
-      "r": 0.082,
-      "r2": 0.0066,
+      "r": 0.088,
+      "r2": 0.0072,
       "k": [
         1,
         1,
@@ -2576,24 +2235,24 @@
       ],
       "slot": "metal",
       "when": "plate",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
     },
     {
       "id": "plate_strap_r",
       "on": "chest",
       "shape": "beam",
       "a": [
-        0.0547,
-        0.7819,
-        0.0547
+        0.056,
+        0.786,
+        0.058
       ],
       "b": [
-        0.0656,
-        0.8038,
-        -0.0437
+        0.064,
+        0.808,
+        -0.05
       ],
-      "r": 0.0098,
-      "r2": 0.0027,
+      "r": 0.011,
+      "r2": 0.003,
       "k": [
         1,
         1,
@@ -2601,24 +2260,24 @@
       ],
       "slot": "boots",
       "when": "plate",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
     },
     {
       "id": "plate_strap_l",
       "on": "chest",
       "shape": "beam",
       "a": [
-        -0.0547,
-        0.7819,
-        0.0547
+        -0.056,
+        0.786,
+        0.058
       ],
       "b": [
-        -0.0656,
-        0.8038,
-        -0.0437
+        -0.064,
+        0.808,
+        -0.05
       ],
-      "r": 0.0098,
-      "r2": 0.0027,
+      "r": 0.011,
+      "r2": 0.003,
       "k": [
         1,
         1,
@@ -2626,182 +2285,7 @@
       ],
       "slot": "boots",
       "when": "plate",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "vest",
-      "on": "chest",
-      "shape": "taper",
-      "a": [
-        0.0,
-        0.6398,
-        0.0
-      ],
-      "b": [
-        0.0,
-        0.7437,
-        0.0022
-      ],
-      "r": 0.093,
-      "r2": 0.1017,
-      "k": [
-        1.0,
-        1,
-        0.76
-      ],
-      "slot": "rig",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "pouch_l",
-      "on": "stomach",
-      "shape": "beam",
-      "a": [
-        -0.0383,
-        0.6234,
-        0.0667
-      ],
-      "b": [
-        -0.0383,
-        0.5796,
-        0.0684
-      ],
-      "r": 0.0153,
-      "r2": 0.0109,
-      "k": [
-        1,
-        1,
-        1
-      ],
-      "slot": "rig",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "pouch_c",
-      "on": "stomach",
-      "shape": "beam",
-      "a": [
-        0.0,
-        0.6234,
-        0.07
-      ],
-      "b": [
-        0.0,
-        0.5796,
-        0.0711
-      ],
-      "r": 0.0153,
-      "r2": 0.0109,
-      "k": [
-        1,
-        1,
-        1
-      ],
-      "slot": "rig",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "pouch_r",
-      "on": "stomach",
-      "shape": "beam",
-      "a": [
-        0.0383,
-        0.6234,
-        0.0667
-      ],
-      "b": [
-        0.0383,
-        0.5796,
-        0.0684
-      ],
-      "r": 0.0153,
-      "r2": 0.0109,
-      "k": [
-        1,
-        1,
-        1
-      ],
-      "slot": "rig",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "radio",
-      "on": "chest",
-      "shape": "beam",
-      "a": [
-        -0.0547,
-        0.7546,
-        0.0612
-      ],
-      "b": [
-        -0.0547,
-        0.7054,
-        0.0645
-      ],
-      "r": 0.0109,
-      "r2": 0.0087,
-      "k": [
-        1,
-        1,
-        1
-      ],
-      "slot": "boots",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "knee_pad_r",
-      "on": "shin_r",
-      "shape": "sphere",
-      "a": [
-        0.0711,
-        0.2843,
-        0.0038
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.0246,
-      "r2": 0.0246,
-      "k": [
-        1,
-        1.3,
-        0.7
-      ],
-      "slot": "rig",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
-    },
-    {
-      "id": "knee_pad_l",
-      "on": "shin_l",
-      "shape": "sphere",
-      "a": [
-        -0.0711,
-        0.2843,
-        0.0694
-      ],
-      "b": [
-        0,
-        0,
-        0
-      ],
-      "r": 0.0246,
-      "r2": 0.0246,
-      "k": [
-        1,
-        1.3,
-        0.7
-      ],
-      "slot": "rig",
-      "when": "rig",
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; clothing bulk, trapezius and boots filled out in ultracode round 2, lobby_r2 renders): rifle-ready stance laid out in metres from standard adult proportions (1.83 m, shoulders about 0.47 m across, arm 0.6 m) with the arms solved onto the rifle by two-bone IK (scratchpad lobby_bot.py); not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
     },
     {
       "id": "gun_butt",
@@ -3102,202 +2586,475 @@
       "slot": "gun_metal",
       "when": "always",
       "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders; ultracode round 2 kept): AK-style rifle silhouette (about 0.95 m) laid along the bore from the shoulder pocket; proportions by eye, not a CS2 or Rust model; draw only, never hittable"
+    },
+    {
+      "id": "mask_strap",
+      "on": "head",
+      "shape": "taper",
+      "a": [
+        0.0,
+        0.9312,
+        0.0
+      ],
+      "b": [
+        0.0,
+        0.9378,
+        0.0
+      ],
+      "r": 0.0712,
+      "r2": 0.0712,
+      "k": [
+        0.9,
+        1,
+        0.97
+      ],
+      "slot": "boots",
+      "when": "facemask",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "plate_low",
+      "on": "stomach",
+      "shape": "beam",
+      "a": [
+        0.0,
+        0.565,
+        0.0705
+      ],
+      "b": [
+        0.0,
+        0.655,
+        0.0725
+      ],
+      "r": 0.077,
+      "r2": 0.0068,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "metal",
+      "when": "plate",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "plate_back",
+      "on": "chest",
+      "shape": "beam",
+      "a": [
+        0.0,
+        0.6,
+        -0.0695
+      ],
+      "b": [
+        0.0,
+        0.785,
+        -0.0625
+      ],
+      "r": 0.086,
+      "r2": 0.0068,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "metal",
+      "when": "plate",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "plate_side_r",
+      "on": "chest",
+      "shape": "beam",
+      "a": [
+        0.0905,
+        0.62,
+        0.0
+      ],
+      "b": [
+        0.0905,
+        0.71,
+        0.0
+      ],
+      "r": 0.0085,
+      "r2": 0.052,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "boots",
+      "when": "plate",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "plate_side_l",
+      "on": "chest",
+      "shape": "beam",
+      "a": [
+        -0.0905,
+        0.62,
+        0.0
+      ],
+      "b": [
+        -0.0905,
+        0.71,
+        0.0
+      ],
+      "r": 0.0085,
+      "r2": 0.052,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "boots",
+      "when": "plate",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "mag_pouch_0",
+      "on": "stomach",
+      "shape": "beam",
+      "a": [
+        -0.041,
+        0.648,
+        0.081
+      ],
+      "b": [
+        -0.041,
+        0.596,
+        0.083
+      ],
+      "r": 0.0165,
+      "r2": 0.0115,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "rig",
+      "when": "plate",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "mag_pouch_1",
+      "on": "stomach",
+      "shape": "beam",
+      "a": [
+        0.0,
+        0.648,
+        0.081
+      ],
+      "b": [
+        0.0,
+        0.596,
+        0.083
+      ],
+      "r": 0.0165,
+      "r2": 0.0115,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "rig",
+      "when": "plate",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "mag_pouch_2",
+      "on": "stomach",
+      "shape": "beam",
+      "a": [
+        0.041,
+        0.648,
+        0.081
+      ],
+      "b": [
+        0.041,
+        0.596,
+        0.083
+      ],
+      "r": 0.0165,
+      "r2": 0.0115,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "rig",
+      "when": "plate",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "radio",
+      "on": "chest",
+      "shape": "beam",
+      "a": [
+        -0.058,
+        0.775,
+        0.071
+      ],
+      "b": [
+        -0.058,
+        0.733,
+        0.073
+      ],
+      "r": 0.0115,
+      "r2": 0.009,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "boots",
+      "when": "plate",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "kilt_f",
+      "on": "pelvis",
+      "shape": "beam",
+      "a": [
+        0.0,
+        0.548,
+        0.07
+      ],
+      "b": [
+        0.0,
+        0.425,
+        0.081
+      ],
+      "r": 0.068,
+      "r2": 0.0045,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "sign",
+      "when": "kilt",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "kilt_b",
+      "on": "pelvis",
+      "shape": "beam",
+      "a": [
+        0.0,
+        0.548,
+        -0.068
+      ],
+      "b": [
+        0.0,
+        0.43,
+        -0.079
+      ],
+      "r": 0.068,
+      "r2": 0.0045,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "sign",
+      "when": "kilt",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "kilt_r",
+      "on": "pelvis",
+      "shape": "beam",
+      "a": [
+        0.089,
+        0.548,
+        0.0
+      ],
+      "b": [
+        0.1,
+        0.44,
+        0.0
+      ],
+      "r": 0.0045,
+      "r2": 0.06,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "metal",
+      "when": "kilt",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "kilt_l",
+      "on": "pelvis",
+      "shape": "beam",
+      "a": [
+        -0.089,
+        0.548,
+        0.0
+      ],
+      "b": [
+        -0.1,
+        0.44,
+        0.0
+      ],
+      "r": 0.0045,
+      "r2": 0.06,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "metal",
+      "when": "kilt",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "kilt_stripe",
+      "on": "pelvis",
+      "shape": "beam",
+      "a": [
+        0.0,
+        0.512,
+        0.0774
+      ],
+      "b": [
+        0.0,
+        0.497,
+        0.0782
+      ],
+      "r": 0.0685,
+      "r2": 0.0012,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "accent",
+      "when": "kilt",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "cargo_r",
+      "on": "thigh_r",
+      "shape": "beam",
+      "a": [
+        0.112,
+        0.43,
+        -0.012
+      ],
+      "b": [
+        0.117,
+        0.36,
+        -0.015
+      ],
+      "r": 0.0075,
+      "r2": 0.03,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "pants",
+      "when": "cargo",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "cargo_l",
+      "on": "thigh_l",
+      "shape": "beam",
+      "a": [
+        -0.112,
+        0.43,
+        0.02
+      ],
+      "b": [
+        -0.117,
+        0.36,
+        0.028
+      ],
+      "r": 0.0075,
+      "r2": 0.03,
+      "k": [
+        1,
+        1,
+        1
+      ],
+      "slot": "pants",
+      "when": "cargo",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "knee_pad_r",
+      "on": "shin_r",
+      "shape": "sphere",
+      "a": [
+        0.0711,
+        0.2843,
+        0.0062
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0262,
+      "r2": 0.0262,
+      "k": [
+        1,
+        1.35,
+        0.72
+      ],
+      "slot": "rig",
+      "when": "cargo",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "knee_pad_l",
+      "on": "shin_l",
+      "shape": "sphere",
+      "a": [
+        -0.0711,
+        0.2843,
+        0.072
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.0262,
+      "r2": 0.0262,
+      "k": [
+        1,
+        1.35,
+        0.72
+      ],
+      "slot": "rig",
+      "when": "cargo",
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
     }
   ],
   "outfits": [
     {
-      "id": "burlap",
+      "id": "fullmetal",
       "shirt": [
-        0.5,
-        0.41,
-        0.28
-      ],
-      "pants": [
-        0.42,
-        0.35,
+        0.25,
+        0.27,
         0.24
       ],
-      "boots": [
-        0.17,
-        0.12,
-        0.08
-      ],
-      "gloves": [
-        0.32,
-        0.25,
-        0.16
-      ],
-      "rig": [
-        0.28,
-        0.24,
-        0.17
-      ],
-      "skin": [
-        0.74,
-        0.55,
-        0.43
-      ],
-      "hair": [
-        0.2,
-        0.13,
-        0.08
-      ],
-      "eyes": [
-        0.03,
-        0.025,
-        0.02
-      ],
-      "metal": [
-        0.8,
-        0.8,
-        0.8
-      ],
-      "accent": [
-        0.36,
-        0.3,
-        0.2
-      ],
-      "gear": [
-        "wrap"
-      ],
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): colours and gear chosen by eye to read like Rust kits (burlap, hide, road sign, hoodie, scientist, metal facemask); not taken from Rust files"
-    },
-    {
-      "id": "hide",
-      "shirt": [
-        0.36,
-        0.25,
-        0.16
-      ],
       "pants": [
-        0.28,
-        0.2,
-        0.14
-      ],
-      "boots": [
-        0.14,
-        0.1,
-        0.065
-      ],
-      "gloves": [
-        0.22,
-        0.15,
-        0.1
-      ],
-      "rig": [
+        0.33,
         0.3,
-        0.21,
-        0.13
-      ],
-      "skin": [
-        0.6,
-        0.42,
-        0.31
-      ],
-      "hair": [
-        0.08,
-        0.06,
-        0.05
-      ],
-      "eyes": [
-        0.04,
-        0.03,
-        0.03
-      ],
-      "metal": [
-        0.8,
-        0.8,
-        0.8
-      ],
-      "accent": [
-        0.45,
-        0.12,
-        0.09
-      ],
-      "gear": [
-        "face",
-        "hair",
-        "bandana",
-        "rig"
-      ],
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): colours and gear chosen by eye to read like Rust kits (burlap, hide, road sign, hoodie, scientist, metal facemask); not taken from Rust files"
-    },
-    {
-      "id": "roadsign",
-      "shirt": [
-        0.27,
-        0.29,
         0.23
       ],
-      "pants": [
-        0.24,
-        0.23,
-        0.2
-      ],
       "boots": [
-        0.13,
-        0.11,
-        0.09
-      ],
-      "gloves": [
-        0.13,
         0.12,
-        0.11
-      ],
-      "rig": [
-        0.23,
-        0.23,
-        0.2
-      ],
-      "skin": [
-        0.72,
-        0.53,
-        0.41
-      ],
-      "hair": [
-        0.3,
-        0.2,
-        0.1
-      ],
-      "eyes": [
-        0.04,
-        0.03,
-        0.03
-      ],
-      "metal": [
-        0.85,
-        0.82,
-        0.76
-      ],
-      "accent": [
-        0.16,
-        0.18,
-        0.15
-      ],
-      "gear": [
-        "face",
-        "can",
-        "plate",
-        "bandana"
-      ],
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): colours and gear chosen by eye to read like Rust kits (burlap, hide, road sign, hoodie, scientist, metal facemask); not taken from Rust files"
-    },
-    {
-      "id": "hoodie",
-      "shirt": [
-        0.15,
-        0.18,
-        0.25
-      ],
-      "pants": [
-        0.2,
-        0.2,
-        0.22
-      ],
-      "boots": [
-        0.11,
-        0.09,
-        0.07
+        0.1,
+        0.08
       ],
       "gloves": [
         0.09,
@@ -3305,127 +3062,9 @@
         0.09
       ],
       "rig": [
-        0.2,
+        0.21,
         0.22,
         0.18
-      ],
-      "skin": [
-        0.45,
-        0.31,
-        0.22
-      ],
-      "hair": [
-        0.05,
-        0.04,
-        0.04
-      ],
-      "eyes": [
-        0.03,
-        0.03,
-        0.03
-      ],
-      "metal": [
-        0.8,
-        0.8,
-        0.8
-      ],
-      "accent": [
-        0.1,
-        0.1,
-        0.11
-      ],
-      "gear": [
-        "face",
-        "hood",
-        "bandana",
-        "rig"
-      ],
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): colours and gear chosen by eye to read like Rust kits (burlap, hide, road sign, hoodie, scientist, metal facemask); not taken from Rust files"
-    },
-    {
-      "id": "scientist",
-      "shirt": [
-        0.22,
-        0.37,
-        0.47
-      ],
-      "pants": [
-        0.2,
-        0.33,
-        0.42
-      ],
-      "boots": [
-        0.09,
-        0.09,
-        0.09
-      ],
-      "gloves": [
-        0.07,
-        0.07,
-        0.08
-      ],
-      "rig": [
-        0.15,
-        0.17,
-        0.19
-      ],
-      "skin": [
-        0.72,
-        0.53,
-        0.41
-      ],
-      "hair": [
-        0.1,
-        0.08,
-        0.06
-      ],
-      "eyes": [
-        0.06,
-        0.08,
-        0.1
-      ],
-      "metal": [
-        0.8,
-        0.8,
-        0.8
-      ],
-      "accent": [
-        0.12,
-        0.12,
-        0.13
-      ],
-      "gear": [
-        "mask",
-        "rig"
-      ],
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): colours and gear chosen by eye to read like Rust kits (burlap, hide, road sign, hoodie, scientist, metal facemask); not taken from Rust files"
-    },
-    {
-      "id": "metal",
-      "shirt": [
-        0.2,
-        0.19,
-        0.17
-      ],
-      "pants": [
-        0.22,
-        0.2,
-        0.17
-      ],
-      "boots": [
-        0.12,
-        0.1,
-        0.08
-      ],
-      "gloves": [
-        0.2,
-        0.15,
-        0.1
-      ],
-      "rig": [
-        0.23,
-        0.2,
-        0.15
       ],
       "skin": [
         0.66,
@@ -3438,26 +3077,33 @@
         0.05
       ],
       "eyes": [
-        0.02,
-        0.02,
-        0.02
+        0.015,
+        0.015,
+        0.015
       ],
       "metal": [
-        0.72,
-        0.68,
-        0.62
+        0.78,
+        0.74,
+        0.68
       ],
       "accent": [
-        0.26,
-        0.22,
-        0.17
+        0.72,
+        0.7,
+        0.64
+      ],
+      "sign": [
+        0.58,
+        0.47,
+        0.2
       ],
       "gear": [
         "hood",
         "facemask",
-        "plate"
+        "plate",
+        "kilt",
+        "cargo"
       ],
-      "verified": "2026-10-09 design value (Gauntlet round 4, lobby_r1 renders): colours and gear chosen by eye to read like Rust kits (burlap, hide, road sign, hoodie, scientist, metal facemask); not taken from Rust files"
+      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
     }
   ],
   "stk_checks_columns": [

@@ -52,6 +52,13 @@
       "verified": "design value, unverified: not checked against the CS2 client"
     },
     {
+      "id": "timer_bg_alpha",
+      "value": 0.72,
+      "unit": "0-1",
+      "note": "opacity of the dark box behind the surf timer (over a bright sky it must read black, not grey)",
+      "verified": "design value after Gauntlet round 2 visual reviewers called the 0.5 box grey; unverified: not checked against the CS2 client"
+    },
+    {
       "id": "font_pb",
       "value": 15,
       "unit": "px",
@@ -258,7 +265,7 @@
       "id": "menu_nav",
       "value": 54,
       "unit": "px",
-      "note": "Esc menu icon nav bar height (settings, resume, aim lobby, restart, quit)",
+      "note": "Esc menu icon nav bar height (settings, resume, buy menu, aim lobby, restart, quit)",
       "verified": "design value modelled on the CS2 main menu top bar; unverified: not checked against the CS2 client"
     },
     {
@@ -291,10 +298,38 @@
     },
     {
       "id": "menu_width",
-      "value": 900,
+      "value": 1240,
       "unit": "px",
-      "note": "settings column width (clamped to the window)",
-      "verified": "design value"
+      "note": "settings page width at menu_ref_height, clamped to the window less menu_margin each side: a full-width page like CS2's settings, not a centred card",
+      "verified": "design value after Gauntlet round 2 visual reviewers called the 900 px column a small centred card; CS2's own page width unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "menu_margin",
+      "value": 24,
+      "unit": "px",
+      "note": "blurred game left visible each side of the settings page (and under it)",
+      "verified": "design value; unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "menu_control_width",
+      "value": 430,
+      "unit": "px",
+      "note": "right-hand control column of every settings row, so sliders with their number field, dropdowns and key slots all line up",
+      "verified": "design value; unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "menu_sidebar",
+      "value": 190,
+      "unit": "px",
+      "note": "width of the section list down the left of each settings tab (at most 24% of the page); the crosshair tab has its preview there instead",
+      "verified": "design value after Gauntlet round 2 visual reviewers asked for category sidebars; CS2's own sidebar layout unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "menu_header_spacing",
+      "value": 1.5,
+      "unit": "px",
+      "note": "extra letter spacing of the upper-case section titles and tab names",
+      "verified": "design value judged on the ui_r3 renders; unverified: not checked against the CS2 client"
     },
     {
       "id": "menu_panel_alpha",

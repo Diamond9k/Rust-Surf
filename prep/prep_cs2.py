@@ -264,6 +264,8 @@ def write_json(path, data):
 
 def write_stats(outdir, ws, here=HERE):
     """items_game.txt (and weapons.vdata for what it lacks) -> weapon_stats.json. Returns (problems, warnings).
+    Where both files give a stat and disagree, stats_conflict_winner picks the value played; each pair is logged
+    and kept under the gun's "_conflicts" (tools/package.py refuses a release on one until that row is verified).
     A weapon without every stats_required attribute as a number is never silent: a player-visible warning naming
     the weapon and keys, or a problem when stats_required_blocks is yes (stats_light_slots guns need only
     stats_required_light). No readable stats file, or no entry for a weapon, is always a problem.
@@ -286,16 +288,25 @@ def write_stats(outdir, ws, here=HERE):
             src.append("weapons.vdata")
         except Exception as e:
             LOG("weapons.vdata could not be read (%s: %s)" % (type(e).__name__, e))
-    filled = 0
+    filled, clash = 0, conflicts(st, vst, cfg)
     for n, a in vst.items():
         cur = st.setdefault(n, {})
         for k, v in a.items():
-            if k not in cur:  # items_game.txt wins; vdata only fills what it lacks
+            if k not in cur:  # vdata fills what items_game.txt lacks
                 cur[k] = v
                 filled += 1
+    vd_wins = str(cfg.get("stats_conflict_winner", "items_game.txt")).strip() == "weapons.vdata"
+    for n, c in sorted(clash.items()):
+        for k, pair in sorted(c.items()):
+            LOG("  stats conflict: %s %s items_game.txt %s, weapons.vdata %s; playing the %s value"
+                % (n, k, pair["items_game.txt"], pair["weapons.vdata"], "weapons.vdata" if vd_wins else "items_game.txt"))
+            if vd_wins:
+                st[n][k] = pair["weapons.vdata"]
+        st[n]["_conflicts"] = c  # not a number, so Weapons.gd skips it; tools/package.py reads it
     for n in st:  # not a number, so Weapons.gd skips it; says where each weapon's stats came from
-        st[n]["_source"] = " + ".join(x for x, has in (("items_game.txt", n not in vst or len(st[n]) > len(vst[n])), ("weapons.vdata", n in vst)) if has)
-    LOG("weapon stats: %d of %d weapons from %s; %d value(s) filled from weapons.vdata" % (len(st), len(names), " + ".join(src) or "nothing", filled))
+        st[n]["_source"] = " + ".join(x for x, has in (("items_game.txt", n not in vst or len(st[n]) - (n in clash) > len(vst[n])), ("weapons.vdata", n in vst)) if has)
+    LOG("weapon stats: %d of %d weapons from %s; %d value(s) filled from weapons.vdata; %d value(s) the two files disagree on"
+        % (len(st), len(names), " + ".join(src) or "nothing", filled, sum(len(c) for c in clash.values())))
     if not src:
         return ["CS2 weapon stats could not be read: scripts/items/items_game.txt did not export or is damaged (verify CS2's files in Steam)"], []
     write_json(os.path.join(outdir, "weapon_stats.json"), st)
@@ -317,6 +328,19 @@ def write_stats(outdir, ws, here=HERE):
     if part:
         warnings.append("%d weapon(s) use class averages for some stats: %s" % (len(part), short(part, 3)))
     return problems, warnings
+
+
+def conflicts(ig, vd, cfg):
+    """{weapon: {key: {"items_game.txt": value, "weapons.vdata": value}}} for every stat both files give as a
+    number, further apart than stats_conflict_tolerance."""
+    tol = float(cfg.get("stats_conflict_tolerance", 0.0005))
+    out = {}
+    for n, a in vd.items():
+        c = {k: {"items_game.txt": ig[n][k], "weapons.vdata": v} for k, v in a.items()
+             if n in ig and number(ig[n].get(k)) and number(v) and abs(float(ig[n][k]) - float(v)) > tol}
+        if c:
+            out[n] = c
+    return out
 
 
 def stats_gaps(st, ws, cfg):

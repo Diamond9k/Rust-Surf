@@ -5,6 +5,8 @@ class_name Backdrop
 extends Node3D
 
 const EMPTY := -1.0e9
+const MAX_ROADS := 16  # the terrain shader's array sizes
+const MAX_APRONS := 32
 
 var content: Content
 var meshes := {}
@@ -60,8 +62,11 @@ func build(c: Content, offset: Vector3, yaw_deg: float) -> void:
 	_scatter()
 
 ## course.json terrain.props: extra copies of the extracted Launch Site meshes set around the course as
-## scenery (our arrangement, not Rust's layout), standing on the ground height at their x, z.
+## scenery (our arrangement, not Rust's layout), standing on the ground height at their x, z. The
+## buildings named in apron_meshes get a concrete apron round them, as the halls do.
 func _props() -> void:
+	var with_apron: Array = T["props"]["apron_meshes"]
+	var mg := float(T["props"]["apron"])
 	for p in T["props"]["rows"]:
 		var mesh := _mesh(p["mesh"])
 		if mesh == null:
@@ -74,7 +79,10 @@ func _props() -> void:
 		var sc := float(p["scale"])
 		mi.global_transform = Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(float(p["yaw"])), 0)).scaled(Vector3.ONE * sc), Vector3(at[0], height(at[0], at[1]) + float(p["dy"]), at[1]))
 		props += 1
-		_avoid.append(mi.global_transform * mesh.get_aabb())
+		var box := mi.global_transform * mesh.get_aabb()
+		_avoid.append(box)
+		if String(p["mesh"]) in with_apron:
+			aprons.append(Vector4(box.position.x - mg, box.position.z - mg, box.end.x + mg, box.end.z + mg))
 
 ## course.json terrain.halls: large industrial halls built here from Rust's own Launch Site textures
 ## (corrugated sheet_metal walls over a cinder block base, roof_plating_a gable roofs, glass_industrial
@@ -108,10 +116,10 @@ func _halls() -> void:
 		halls += 1
 		var mg := float(H["apron"])
 		aprons.append(Vector4(box.position.x - mg, box.position.z - mg, box.end.x + mg, box.end.z + mg))
-	# the ground round each hall is the site concrete (terrain shader aprons)
-	_ground_material().set_shader_parameter("apron_count", mini(aprons.size(), 8))
+	# the ground round each hall (and apron prop) is the site concrete (terrain shader aprons)
+	_ground_material().set_shader_parameter("apron_count", mini(aprons.size(), MAX_APRONS))
 	var ap := aprons.duplicate()
-	ap.resize(8)
+	ap.resize(MAX_APRONS)
 	_ground_material().set_shader_parameter("aprons", ap)
 
 ## One hall in its own frame: length along x, width along z, ground at y 0. Returns the roles it drew.
@@ -382,23 +390,27 @@ func _blocked(x: float, z: float) -> bool:
 	return false
 
 ## Plant and rock meshes, about 1 m tall (scaled per instance), vertex-coloured so the instance colour
-## tints them: a conifer (trunk and four jagged cones), a broadleaf (trunk and three lumpy crowns), a
-## low bush, a grass tuft (a fan of thin blades) and a rock (a lumpy, flattened ball).
+## tints them: a spruce (a bare trunk and nine tiers of drooping branch tips), a broadleaf (trunk and
+## three lumpy crowns), a low bush, a grass tuft (a fan of thin blades) and a rock (a lumpy, flattened ball).
 func _plant_mesh(shape: String, rng: RandomNumberGenerator) -> Mesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	match shape:
 		"conifer":
-			_cyl(st, 0.0, 0.3, 0.025, 0.018, Color(0.32, 0.24, 0.18))
-			var y := 0.16
+			_cyl(st, 0.0, 0.45, 0.022, 0.012, Color(0.3, 0.24, 0.2))
+			for i in 9:
+				var t := i / 8.0
+				var y := lerpf(0.12, 0.84, t)
+				var rad := lerpf(0.3, 0.07, pow(t, 0.9)) * rng.randf_range(0.85, 1.12)
+				var k := lerpf(0.62, 1.0, t)  # the lower, shaded tiers darker
+				_tier(st, y, rad, rad * 0.75, 7 + (i % 2), rng, Color(k, k, k), true)
+			_cone(st, 0.86, 0.16, 0.05, 5, rng, Color(1.05, 1.05, 1.05), false)
+		"conifer_far":  # a few pixels tall: four tiers, no trunk or undersides
 			for i in 4:
-				var h := 0.42 - i * 0.06
-				var rad := 0.27 - i * 0.055
-				_cone(st, y, h, rad, 9, rng, Color(0.75 + i * 0.08, 0.75 + i * 0.08, 0.75 + i * 0.08), true)
-				y += h * 0.52
-		"conifer_far":  # a few pixels tall: two cones, no trunk or undersides
-			_cone(st, 0.1, 0.55, 0.24, 6, rng, Color(0.8, 0.8, 0.8), false)
-			_cone(st, 0.42, 0.58, 0.17, 6, rng, Color(0.95, 0.95, 0.95), false)
+				var t := i / 3.0
+				var k := lerpf(0.72, 1.0, t)
+				_tier(st, lerpf(0.1, 0.72, t), lerpf(0.26, 0.09, t), lerpf(0.3, 0.22, t), 5, rng, Color(k, k, k), false)
+			_cone(st, 0.78, 0.22, 0.06, 4, rng, Color(1, 1, 1), false)
 		"broadleaf":
 			_cyl(st, 0.0, 0.55, 0.035, 0.02, Color(0.62, 0.6, 0.55))
 			for c in [Vector3(0, 0.62, 0), Vector3(0.14, 0.5, 0.08), Vector3(-0.12, 0.52, -0.1)]:
@@ -457,6 +469,37 @@ func _cone(st: SurfaceTool, y: float, h: float, rad: float, seg: int, rng: Rando
 		if not under_side:
 			continue
 		for v in [[under, Vector3.DOWN, 0.5], [a, Vector3.DOWN, 0.6], [b, Vector3.DOWN, 0.6]]:
+			st.set_color(c * float(v[2]))
+			st.set_normal(v[1])
+			st.add_vertex(v[0])
+
+## One tier of spruce branches: a low peaked skirt whose rim is a star of seg drooping branch tips
+## (radius rad) with notches between them, the tips lighter than the dark heart of the tree, so the
+## silhouette is ragged and layered instead of a smooth cone.
+func _tier(st: SurfaceTool, y: float, rad: float, h: float, seg: int, rng: RandomNumberGenerator, c: Color, under_side: bool) -> void:
+	var rim: Array[Vector3] = []
+	var lit: Array[float] = []
+	var a0 := rng.randf() * TAU
+	for i in seg * 2:
+		var tip := i % 2 == 0
+		var a := a0 + TAU * (i + rng.randf_range(-0.25, 0.25)) / (seg * 2)
+		var rr := rad * (rng.randf_range(0.85, 1.15) if tip else rng.randf_range(0.35, 0.5))
+		var droop := rad * (rng.randf_range(0.35, 0.55) if tip else 0.12)
+		rim.append(Vector3(cos(a) * rr, y - droop, sin(a) * rr))
+		lit.append(1.0 if tip else 0.7)
+	var top := Vector3(rng.randf_range(-0.008, 0.008), y + h * 0.55, rng.randf_range(-0.008, 0.008))
+	var under := Vector3(0, y - rad * 0.2, 0)
+	var n := rim.size()
+	for i in n:
+		var a := rim[i]
+		var b := rim[(i + 1) % n]
+		for v in [[top, Vector3.UP, 0.55], [b, b.normalized() + Vector3(0, 0.9, 0), lit[(i + 1) % n]], [a, a.normalized() + Vector3(0, 0.9, 0), lit[i]]]:
+			st.set_color(c * float(v[2]))
+			st.set_normal((v[1] as Vector3).normalized())
+			st.add_vertex(v[0])
+		if not under_side:
+			continue
+		for v in [[under, Vector3.DOWN, 0.35], [a, Vector3.DOWN, 0.5], [b, Vector3.DOWN, 0.5]]:
 			st.set_color(c * float(v[2]))
 			st.set_normal(v[1])
 			st.add_vertex(v[0])
@@ -594,6 +637,14 @@ func _fix(m: Material) -> Material:
 				img.generate_mipmaps()
 				b.set_texture(slot, ImageTexture.create_from_image(img))
 	b.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	# prep's glTF marks every material opaque, so grates showed their holes and decal sheets their clear
+	# texels as black; course.json terrain.alpha says which Rust materials are cut out or laid over
+	var A: Dictionary = T["alpha"]
+	if key in A["cutout"]:
+		b.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+		b.alpha_scissor_threshold = float(A["scissor"])
+	elif key in A["blend"]:
+		b.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	if key != "":
 		mats[key] = b
 	return b
@@ -829,8 +880,8 @@ func _terrain_material() -> ShaderMaterial:
 	var segs := PackedVector4Array()
 	for a in rd["segments"]:
 		segs.append(Vector4(a[0], a[1], a[2], a[3]))
-	sm.set_shader_parameter("road_count", mini(segs.size(), 8))
-	segs.resize(8)
+	sm.set_shader_parameter("road_count", mini(segs.size(), MAX_ROADS))
+	segs.resize(MAX_ROADS)
 	sm.set_shader_parameter("roads", segs)
 	sm.set_shader_parameter("roughness_val", float(rows[layers[0]]["roughness"]))
 	return sm
@@ -865,9 +916,9 @@ uniform sampler2D nrm_road : hint_normal, filter_linear_mipmap_anisotropic, repe
 uniform float road_scale = 6.0;
 uniform float road_width = 8.0;
 uniform int road_count = 0;
-uniform vec4 roads[8];
+uniform vec4 roads[16];
 uniform int apron_count = 0;
-uniform vec4 aprons[8];
+uniform vec4 aprons[32];
 uniform float scrub_cell = 4.0;
 uniform float scrub_density = 0.3;
 uniform vec3 scrub_color = vec3(0.3, 0.32, 0.2);
@@ -880,6 +931,11 @@ uniform float grass_period = 55.0;
 uniform vec3 rock_color = vec3(0.62, 0.6, 0.57);
 uniform float rock_slope = 0.25;
 uniform float hill_shade = 0.3;
+uniform vec3 dry_color = vec3(1.0);
+uniform float dry_cover = 0.0;
+uniform float dry_period = 35.0;
+uniform float mottle = 0.0;
+uniform float mottle_cell = 1.6;
 varying vec3 wpos;
 varying vec3 wn;
 
@@ -948,9 +1004,10 @@ void fragment() {
 	float site = inside * (1.0 - low) * smoothstep(1.0 - site_cover - 0.05, 1.0 - site_cover + 0.05, m2);
 	// concrete aprons round the halls, with ragged edges
 	float apron = 0.0;
+	float ragged = (fbm(p / 5.0 + vec2(3.0, 17.0)) - 0.5) * 6.0;
 	for (int i = 0; i < apron_count; i++) {
 		vec2 da = max(max(aprons[i].xy - p, p - aprons[i].zw), vec2(0.0));
-		apron = max(apron, 1.0 - smoothstep(0.0, 4.0, length(da) + (fbm(p / 5.0 + vec2(3.0, 17.0)) - 0.5) * 6.0));
+		apron = max(apron, 1.0 - smoothstep(0.0, 4.0, length(da) + ragged));
 	}
 	site = max(site, apron * (1.0 - low));
 	vec3 c = mix(mix(c0, c1, dirt), c2 * site_shade, site);
@@ -965,6 +1022,14 @@ void fragment() {
 	float grass = smoothstep(1.0 - grass_cover - 0.12, 1.0 - grass_cover + 0.12, gm) * opn * (1.0 - smoothstep(0.15, 0.35, slope));
 	float blade = mix(vnoise(p * vec2(9.0, 2.3)) * 0.6 + vnoise(p * 23.0) * 0.4, 0.5, far);
 	c = mix(c, c * grass_color * mix(0.78, 1.18, blade), grass);
+	// sun-dried straw-coloured patches, and a clump-scale mottle of light and dark tufts that fades to
+	// its average once a cell is under a pixel (no shimmer far off)
+	float dry = smoothstep(1.0 - dry_cover - 0.15, 1.0 - dry_cover + 0.15, fbm(p / dry_period + vec2(53.0, 17.0))) * opn;
+	c = mix(c, c * dry_color, dry);
+	vec2 mp = p / mottle_cell;
+	float mot = vnoise(mp) * 0.6 + vnoise(mp * 2.7 + vec2(5.0, 9.0)) * 0.4;
+	mot = mix(mot, 0.5, smoothstep(0.4, 1.5, length(fwidth(mp))));
+	c *= 1.0 + (mot - 0.5) * 2.0 * mottle * opn;
 	// outside the site: bare rock on steep hill flanks, and broad light and shade so the coarse far
 	// hills read as folded land instead of flat cut-outs
 	float hill = 1.0 - inside;

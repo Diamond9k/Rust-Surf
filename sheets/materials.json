@@ -1,6 +1,6 @@
 {
   "_sheet": "materials",
-  "_doc": "One row per surface material the course and terrain use. albedo/normal/weather are content.json ids; uv_scale is metres per texture tile. Course.gd draws every textured row with one weathering shader: weather is a second texture mixed in by noise over weather_cover of the surface, grime is the strength of dirt streaks running down from a ramp's top edge (and its chipped lip), detail is the close-up detail overlay that keeps the texture sharp under the player. filter: aniso = mipmapped anisotropic (every shader material samples this way since world_r1). panel: cast slab size in metres on ramp faces (dark joints, a tone per slab; 0 = none); tint: albedo multiplier; crease_ao: how much the foot of a ramp face (the valley crease) is darkened and occluded. leaks: strength of Rust's dirt_stains_leaks drip decals hanging from a ramp face's top edge; debris: strength of the same atlas's gravel/litter band along the foot of a face (the crease of a valley); course.json weathering says which atlas bands. 0 turns either off.",
+  "_doc": "One row per surface material the course and terrain use. albedo/normal/weather are content.json ids; uv_scale is metres per texture tile. Course.gd draws every textured row with one weathering shader: weather is a second texture mixed in by noise over weather_cover of the surface, grime is the strength of dirt streaks running down from a ramp's top edge (and its chipped lip), detail is the close-up detail overlay that keeps the texture sharp under the player. filter: aniso = mipmapped anisotropic (every shader material samples this way since world_r1). panel: cast slab size in metres on ramp faces (dark joints, a tone per slab; 0 = none); tint: albedo multiplier; crease_ao: how much the foot of a ramp face (the valley crease) is darkened and occluded. leaks: strength of Rust's dirt_stains_leaks drip decals hanging from a ramp face's top edge; debris: strength of the same atlas's gravel/litter band along the foot of a face (the crease of a valley); course.json weathering says which atlas bands. 0 turns either off. normal_depth: strength of the normal map on the course shader (1 = as Rust ships it; higher deepens the slab seams, cracks and pitting under a low sun).",
   "columns": [
     "id",
     "albedo",
@@ -14,6 +14,7 @@
     "panel",
     "tint",
     "crease_ao",
+    "normal_depth",
     "leaks",
     "debris",
     "filter",
@@ -37,10 +38,11 @@
         0.97
       ],
       "crease_ao": 0.6,
+      "normal_depth": 1.8,
       "leaks": 0.75,
       "debris": 0.85,
       "filter": "aniso",
-      "verified": "2026-10-08 seen in game on the start pad; world_r1 (gauntlet 2): leaks/debris from Rust dirt_stains_leaks decals, by eye in renders"
+      "verified": "2026-10-09 world_r3_1x renders (gauntlet 3): normal_depth 1.8 so the seams carry depth, by eye; 2026-10-08 seen in game on the start pad; world_r1 (gauntlet 2): leaks/debris from Rust dirt_stains_leaks decals, by eye in renders"
     },
     {
       "id": "metal",
@@ -59,6 +61,7 @@
         1
       ],
       "crease_ao": 0.5,
+      "normal_depth": 1.5,
       "leaks": 0.6,
       "debris": 0.8,
       "filter": "aniso",
@@ -81,6 +84,7 @@
         1
       ],
       "crease_ao": 0,
+      "normal_depth": 1.0,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
@@ -90,23 +94,24 @@
       "id": "ramp_concrete",
       "albedo": "tex_concrete_f_site",
       "normal": "tex_concrete_f_site",
-      "uv_scale": 10.0,
+      "uv_scale": 6.0,
       "roughness": 0.85,
       "weather": "tex_concrete_d_chute",
-      "weather_cover": 0.45,
+      "weather_cover": 0.32,
       "grime": 0.85,
       "detail": 0.3,
       "panel": 4.0,
       "tint": [
-        0.8,
-        0.8,
-        0.82
+        0.9,
+        0.9,
+        0.92
       ],
       "crease_ao": 0.6,
+      "normal_depth": 2.0,
       "leaks": 0.75,
       "debris": 0,
       "filter": "aniso",
-      "verified": "2026-10-09 world_r3 renders: Launch Site panel concrete instead of the beige concrete_d_site (r2 critics: untextured beige ramp), by eye; world_r1 (gauntlet 2): leaks/debris from Rust dirt_stains_leaks decals, by eye in renders"
+      "verified": "2026-10-09 world_r3_1x renders (gauntlet 3): 6 m tiles (was 10: r2 critics saw a smeared low-res ramp), normal_depth 2 and a neutral tint (was 0.8, read brown), by eye; 2026-10-09 world_r3 renders: Launch Site panel concrete instead of the beige concrete_d_site (r2 critics: untextured beige ramp), by eye; world_r1 (gauntlet 2): leaks/debris from Rust dirt_stains_leaks decals, by eye in renders"
     },
     {
       "id": "ramp_panels",
@@ -125,6 +130,7 @@
         1
       ],
       "crease_ao": 0.5,
+      "normal_depth": 1.0,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
@@ -142,15 +148,16 @@
       "detail": 0,
       "panel": 0,
       "tint": [
-        0.55,
-        0.56,
-        0.58
+        0.78,
+        0.78,
+        0.8
       ],
       "crease_ao": 0,
+      "normal_depth": 1.5,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
-      "verified": "2026-10-09 world_r3 renders: ramp edge trims (r2 critics: no edge trim), by eye"
+      "verified": "2026-10-09 world_r3_14 renders (gauntlet 3): tint 0.55 -> 0.78 for the light riveted band, by eye; 2026-10-09 world_r3 renders: ramp edge trims (r2 critics: no edge trim), by eye"
     },
     {
       "id": "pad",
@@ -169,6 +176,7 @@
         1
       ],
       "crease_ao": 0,
+      "normal_depth": 1.3,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
@@ -191,6 +199,7 @@
         1
       ],
       "crease_ao": 0,
+      "normal_depth": 1.0,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
@@ -213,6 +222,7 @@
         1
       ],
       "crease_ao": 0,
+      "normal_depth": 1.0,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
@@ -235,6 +245,7 @@
         0.82
       ],
       "crease_ao": 0,
+      "normal_depth": 1.0,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
@@ -257,6 +268,7 @@
         0.5
       ],
       "crease_ao": 0,
+      "normal_depth": 1.0,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
@@ -279,6 +291,7 @@
         0.86
       ],
       "crease_ao": 0,
+      "normal_depth": 1.0,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
@@ -301,6 +314,7 @@
         1
       ],
       "crease_ao": 0,
+      "normal_depth": 1.0,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
@@ -323,6 +337,7 @@
         0.9
       ],
       "crease_ao": 0,
+      "normal_depth": 1.0,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
@@ -345,6 +360,7 @@
         0.95
       ],
       "crease_ao": 0,
+      "normal_depth": 1.0,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
@@ -367,6 +383,7 @@
         1
       ],
       "crease_ao": 0,
+      "normal_depth": 1.0,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",

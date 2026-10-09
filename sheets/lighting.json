@@ -69,18 +69,18 @@
     {
       "id": "bounce_color",
       "value": [
-        0.78,
         0.66,
-        0.5
+        0.64,
+        0.6
       ],
       "note": "bounce fill colour: the warm dust of the lit plain",
-      "tuned": "2026-10-09 world_r3 renders, by eye (a look, not measured from Rust)"
+      "tuned": "2026-10-09 world_r3_1x renders (gauntlet 3), by eye: [0.78, 0.66, 0.5] -> [0.66, 0.64, 0.6] (r2 critics: the shaded ramp face read as a flat brown slab); 2026-10-09 world_r3 renders, by eye (a look, not measured from Rust)"
     },
     {
       "id": "bounce_energy",
-      "value": 0.8,
+      "value": 0.75,
       "note": "bounce fill strength (the sun is sun_energy): shaded ramp faces keep their panels and cracks instead of going nearly black",
-      "tuned": "2026-10-09 world_r3 renders, by eye (a look, not measured from Rust)"
+      "tuned": "2026-10-09 world_r3_18 start render (gauntlet 3), by eye: 0.6 -> 0.75 (the shaded ramp face lost its slab and crack detail); 2026-10-09 world_r3_1x renders (gauntlet 3), by eye: 0.8 -> 0.6 (shade reads as grey concrete in shadow, not lit brown); 2026-10-09 world_r3 renders, by eye (a look, not measured from Rust)"
     },
     {
       "id": "sun_angular",
@@ -215,52 +215,52 @@
     {
       "id": "ambient_color",
       "value": [
-        0.62,
         0.6,
-        0.56
+        0.62,
+        0.66
       ],
       "note": "neutral fill mixed with the sky light so shaded faces read grey concrete, not navy",
-      "tuned": "2026-10-09 world_r1 renders, by eye"
+      "tuned": "2026-10-09 world_r3_1x renders (gauntlet 3), by eye: [0.62, 0.6, 0.56] -> [0.6, 0.62, 0.66] (cooler open-sky shade); 2026-10-09 world_r1 renders, by eye"
     },
     {
       "id": "ambient_sky_mix",
-      "value": 0.55,
+      "value": 0.65,
       "note": "share of the ambient light taken from the sky (the rest is ambient_color)",
-      "tuned": "2026-10-09 world_r1 renders, by eye"
+      "tuned": "2026-10-09 world_r3_1x renders (gauntlet 3), by eye: 0.55 -> 0.65 (more of the blue sky in the shade); 2026-10-09 world_r1 renders, by eye"
     },
     {
       "id": "fog_color",
       "value": [
-        0.6,
-        0.68,
-        0.76
+        0.56,
+        0.65,
+        0.77
       ],
       "note": "distance haze",
-      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: bluer haze to match the horizon (was [0.66, 0.7, 0.72])"
+      "tuned": "2026-10-09 world_r3_1x renders (gauntlet 3), by eye: [0.6, 0.68, 0.76] -> [0.56, 0.65, 0.77] (bluer, less milky haze); 2026-10-09 world_r2 (gauntlet 2) renders, by eye: bluer haze to match the horizon (was [0.66, 0.7, 0.72])"
     },
     {
       "id": "fog_density",
-      "value": 0.0011,
+      "value": 0.0006,
       "note": "exponential fog per metre",
-      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: flat grey horizon strip, washed-out mid-ground (was 0.0016)"
+      "tuned": "2026-10-09 world_r3_14 renders (gauntlet 3), by eye: 0.0008 -> 0.0006 (the horizon was still a milky band); 2026-10-09 world_r3_1x renders (gauntlet 3), by eye: 0.0011 -> 0.0008 (r2 critics: a uniform grey band flattens the hills); 2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: flat grey horizon strip, washed-out mid-ground (was 0.0016)"
     },
     {
       "id": "fog_sun_scatter",
-      "value": 0.05,
+      "value": 0.12,
       "note": "how much the haze glows toward the sun",
-      "tuned": "2026-10-09 world_r3: 0.1 still whitened the hills under the sun; world_r1: 0.25 washed the sky round the sun white"
+      "tuned": "2026-10-09 world_r3_16 sun render (gauntlet 3), by eye: 0.2 -> 0.12 (0.2 washed the hills under the sun white); 2026-10-09 world_r3_1x renders (gauntlet 3), by eye: 0.05 -> 0.2 (haze glows toward the sun: sun-aligned in-scattering the critics asked for); 2026-10-09 world_r3: 0.1 still whitened the hills under the sun; world_r1: 0.25 washed the sky round the sun white"
     },
     {
       "id": "fog_aerial",
-      "value": 0.9,
+      "value": 0.6,
       "note": "how much the haze takes the sky colour behind it (1 = distant hills fade into the sky with no grey band)",
-      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: distant hills take the blue sky colour instead of a grey band (was 0.75)"
+      "tuned": "2026-10-09 world_r3_1x renders (gauntlet 3), by eye: 0.9 -> 0.6 (distant hills keep their own darker colour instead of taking the pale horizon sky); 2026-10-09 world_r2 (gauntlet 2) renders, by eye: distant hills take the blue sky colour instead of a grey band (was 0.75)"
     },
     {
       "id": "fog_sky_affect",
-      "value": 0.35,
+      "value": 0.2,
       "note": "how much the haze covers the sky itself near the horizon",
-      "tuned": "2026-10-09 world_r1 renders, by eye"
+      "tuned": "2026-10-09 world_r3_14 renders (gauntlet 3), by eye: 0.25 -> 0.2 (clearer sky just above the hills); 2026-10-09 world_r3_1x renders (gauntlet 3), by eye: 0.35 -> 0.25 (less of the sky washed out at the horizon); 2026-10-09 world_r1 renders, by eye"
     },
     {
       "id": "exposure",

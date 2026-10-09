@@ -46,7 +46,7 @@
       "id": "weapons_vdata",
       "value": "scripts/weapons.vdata_c",
       "unit": "VPK path",
-      "used_by": "prep_cs2.cs2_step: exported on its own after items_game.txt; read by prep/kv3.py for any stat items_game.txt does not give",
+      "used_by": "prep_cs2.cs2_step: exported on its own after items_game.txt; read by prep/kv3.py for any stat items_game.txt does not give, and compared with items_game.txt where both give one (stats_conflict_winner)",
       "note": "optional: a VPK without it is not a problem by itself, only weapons left without the stats in stats_required are",
       "verified": "unverified: path from memory of CS2 modding notes, not seen in a VPK listing here"
     },
@@ -97,6 +97,22 @@
       "used_by": "prep_cs2.write_stats: a gun missing any of these still finishes setup, with a warning in prep_status.json naming the weapon and the keys (those values come from weapon_defaults.json class columns)",
       "note": "keys with one engine-wide value in CS:GO (headshot x4) or that only shape secondary feel; zoom and alt keys are left out because only some guns have them",
       "verified": "build choice; the CS:GO key names are from its items_game.txt, the CS2 file is unverified here"
+    },
+    {
+      "id": "stats_conflict_winner",
+      "value": "items_game.txt",
+      "unit": "items_game.txt or weapons.vdata",
+      "used_by": "prep_cs2.write_stats: when both files give a number for the same stat of a gun and they differ (by more than stats_conflict_tolerance), this file's value goes into weapon_stats.json (which Weapons.gd reads over the raw items_game.txt); every such pair is logged in prep.log and kept under the gun's _conflicts. tools/package.py refuses a release with any conflict while this row's verified cell still says unverified",
+      "note": "items_game.txt was CS:GO's stats file; CS2 also ships weapons.vdata, and a value tuned only there would lose to a stale items_game.txt attribute. A disagreement can equally be a wrong vdata_keys mapping, so the packager settles it on the packaging PC's real files and marks this row verified",
+      "verified": "unverified: which of the two files CS2 itself plays from was not checked here (no CS2 install); tested both ways in prep/tests/test_prep.py and the release refusal in prep/tests/test_release.py"
+    },
+    {
+      "id": "stats_conflict_tolerance",
+      "value": 0.0005,
+      "unit": "absolute stat units",
+      "used_by": "prep_cs2.write_stats: two numbers closer than this are the same value (0.1 written as 0.100000 or 0.1 is no conflict)",
+      "note": "the same tolerance Weapons.gd --wtest stats_reference compares known values with",
+      "verified": "build choice; tested in prep/tests/test_prep.py"
     }
   ],
   "vdata_keys_columns": [
@@ -110,187 +126,187 @@
       "id": "m_nDamage",
       "attribute": "damage",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_flCycleTime",
       "attribute": "cycletime",
       "attribute_alt": "cycletime alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner); a [primary, alt] pair fills the alt attribute"
     },
     {
       "id": "m_iMaxClip1",
       "attribute": "primary clip size",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_nPrimaryReserveAmmoMax",
       "attribute": "primary reserve ammo max",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_flHeadshotMultiplier",
       "attribute": "headshot multiplier",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_flArmorRatio",
       "attribute": "armor ratio",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_flPenetration",
       "attribute": "penetration",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_flRange",
       "attribute": "range",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_flRangeModifier",
       "attribute": "range modifier",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_bIsFullAuto",
       "attribute": "is full auto",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_nNumBullets",
       "attribute": "bullets",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_flMaxSpeed",
       "attribute": "max player speed",
       "attribute_alt": "max player speed alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner); a [primary, alt] pair fills the alt attribute"
     },
     {
       "id": "m_flSpread",
       "attribute": "spread",
       "attribute_alt": "spread alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner); a [primary, alt] pair fills the alt attribute"
     },
     {
       "id": "m_flInaccuracyStand",
       "attribute": "inaccuracy stand",
       "attribute_alt": "inaccuracy stand alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner); a [primary, alt] pair fills the alt attribute"
     },
     {
       "id": "m_flInaccuracyCrouch",
       "attribute": "inaccuracy crouch",
       "attribute_alt": "inaccuracy crouch alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner); a [primary, alt] pair fills the alt attribute"
     },
     {
       "id": "m_flInaccuracyMove",
       "attribute": "inaccuracy move",
       "attribute_alt": "inaccuracy move alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner); a [primary, alt] pair fills the alt attribute"
     },
     {
       "id": "m_flInaccuracyJump",
       "attribute": "inaccuracy jump",
       "attribute_alt": "inaccuracy jump alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner); a [primary, alt] pair fills the alt attribute"
     },
     {
       "id": "m_flInaccuracyFire",
       "attribute": "inaccuracy fire",
       "attribute_alt": "inaccuracy fire alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner); a [primary, alt] pair fills the alt attribute"
     },
     {
       "id": "m_flRecoilAngle",
       "attribute": "recoil angle",
       "attribute_alt": "recoil angle alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner); a [primary, alt] pair fills the alt attribute"
     },
     {
       "id": "m_flRecoilAngleVariance",
       "attribute": "recoil angle variance",
       "attribute_alt": "recoil angle variance alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner); a [primary, alt] pair fills the alt attribute"
     },
     {
       "id": "m_flRecoilMagnitude",
       "attribute": "recoil magnitude",
       "attribute_alt": "recoil magnitude alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner); a [primary, alt] pair fills the alt attribute"
     },
     {
       "id": "m_flRecoilMagnitudeVariance",
       "attribute": "recoil magnitude variance",
       "attribute_alt": "recoil magnitude variance alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner); a [primary, alt] pair fills the alt attribute"
     },
     {
       "id": "m_nRecoilSeed",
       "attribute": "recoil seed",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_flRecoveryTimeStand",
       "attribute": "recovery time stand",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_flRecoveryTimeCrouch",
       "attribute": "recovery time crouch",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_nZoomLevels",
       "attribute": "zoom levels",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_nZoomFOV1",
       "attribute": "zoom fov 1",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_nZoomFOV2",
       "attribute": "zoom fov 2",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_flZoomTime1",
       "attribute": "zoom time 1",
       "attribute_alt": "-",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_flInaccuracyJumpInitial",
       "attribute": "inaccuracy jump initial",
       "attribute_alt": "inaccuracy jump initial alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     },
     {
       "id": "m_flInaccuracyLand",
       "attribute": "inaccuracy land",
       "attribute_alt": "inaccuracy land alt",
-      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; fills a stat items_game.txt lacks and is compared where both give one (stats_conflict_winner)"
     }
   ]
 }
