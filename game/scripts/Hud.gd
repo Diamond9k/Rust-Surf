@@ -124,14 +124,31 @@ func _draw_crosshair() -> void:
 	var th: float = maxf(float(convars.get("cl_crosshairthickness", "0.5")) * 2.0, 1.0)
 	var colors := {"0": Color(1, 0, 0), "1": Color(0, 1, 0), "2": Color(1, 1, 0), "3": Color(0, 0, 1), "4": Color(0, 1, 1), "5": Color(1, 1, 1)}
 	var c: Color = colors.get(str(convars.get("cl_crosshaircolor", "1")), Color(0, 1, 0))
-	for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
+	if str(convars.get("cl_crosshaircolor", "1")) == "5":  # CS2 colour 5 is the player's own RGB
+		c = Color8(int(convars.get("cl_crosshaircolor_r", "50")), int(convars.get("cl_crosshaircolor_g", "250")), int(convars.get("cl_crosshaircolor_b", "50")))
+	if _on("cl_crosshairusealpha", "true"):
+		c.a = float(convars.get("cl_crosshairalpha", "200")) / 255.0
+	var outline := _on("cl_crosshair_drawoutline", "false")
+	var ot := float(convars.get("cl_crosshair_outlinethickness", "1"))
+	var dot := _on("cl_crosshairdot", "false")
+	var arms: Array = [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]
+	if outline:
+		for d in arms:
+			crosshair.draw_line(d * (gap - ot), d * (gap + size + ot), Color(0, 0, 0, c.a), th + ot * 2.0)
+		if dot:
+			crosshair.draw_rect(Rect2(-th - ot, -th - ot, (th + ot) * 2, (th + ot) * 2), Color(0, 0, 0, c.a))
+	for d in arms:
 		crosshair.draw_line(d * gap, d * (gap + size), c, th)
-	if str(convars.get("cl_crosshairdot", "false")) == "true":
+	if dot:
 		crosshair.draw_rect(Rect2(-th, -th, th * 2, th * 2), c)
 	if _hit > 0.0:
-		var hc := Color(1, 0.3, 0.25, _hit / 0.15) if _hit_head else Color(1, 1, 1, _hit / 0.15)
+		var hc := Color(1, 1, 1, _hit / 0.15)  # CS2's hit marker is white for every hit
 		for d in [Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
 			crosshair.draw_line(d * 6.0, d * 13.0, hc, 2.0)
+
+## Source convar booleans come as "1"/"0" or "true"/"false".
+func _on(k: String, def: String) -> bool:
+	return str(convars.get(k, def)).to_lower() in ["1", "true"]
 
 func _process(delta: float) -> void:
 	if _hit > 0.0:
@@ -155,7 +172,7 @@ func errors(lines: PackedStringArray) -> void:
 	err_label.text = "\n".join(lines)
 
 ## Bottom-right ammo block: "30 / 90", weapon name above; clip -1 hides the ammo (knife).
-func weapon(wname: String, clip: int, reserve: int) -> void:
+func weapon(wname: String, clip: int, reserve: int, clip_max: int = -1) -> void:
 	_ammo_box.visible = true
 	weapon_label.text = wname.to_upper()
 	clip_label.visible = clip >= 0
@@ -163,7 +180,7 @@ func weapon(wname: String, clip: int, reserve: int) -> void:
 	if clip >= 0:
 		clip_label.text = str(clip)
 		reserve_label.text = "/ %d" % reserve
-		clip_label.modulate = Color(1, 0.35, 0.3) if clip <= 5 else Color.WHITE
+		clip_label.modulate = Color(1, 0.35, 0.3) if clip <= maxi(1, int(clip_max * 0.2) if clip_max > 0 else 5) else Color.WHITE
 
 func hitmarker(head: bool) -> void:
 	_hit = 0.15

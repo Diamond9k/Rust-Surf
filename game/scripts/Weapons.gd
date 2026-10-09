@@ -83,13 +83,23 @@ func give(id: String) -> void:
 		return
 	var s: String = SLOT_OF[rows[id]["slot"]]
 	slots[s] = id
-	ammo[id] = [int(stat(id, "primary clip size", "clip")), int(stat(id, "primary reserve ammo max", "reserve"))]
-	current = ""
-	switch_to(s)
-
-func switch_to(s: String) -> void:
-	if s == current or slots.get(s, "") == "":
+	var prev: String = slots[s]
+	slots[s] = id
+	if current == s:
+		current = ""  # same slot: force the redraw
+		if not switch_to(s):
+			slots[s] = prev
+			current = s
+			return
+	elif not switch_to(s):
+		slots[s] = prev
 		return
+	ammo[id] = [int(stat(id, "primary clip size", "clip")), int(stat(id, "primary reserve ammo max", "reserve"))]
+	_hud()
+
+func switch_to(s: String) -> bool:
+	if s == current or slots.get(s, "") == "":
+		return false
 	var vm: Viewmodel = main.viewmodel
 	var id: String = slots[s]
 	var ok := false
@@ -102,13 +112,14 @@ func switch_to(s: String) -> void:
 		ok = vm.equip(_glb(rows[id]["model"]), clips)
 	if not ok:
 		main.hud.message("can't draw %s: %s" % [id, vm.why], 2.0)
-		return
+		return false
 	if current != "":
 		last = current
 	current = s
 	_reload_until = 0.0
 	_next_fire = _now() + maxf(vm.clip_length("draw"), 0.3)
 	_hud()
+	return true
 
 func _now() -> float:
 	return Time.get_ticks_msec() / 1000.0
@@ -125,7 +136,7 @@ func _process(dt: float) -> void:
 	_inaccuracy = move_toward(_inaccuracy, 0.0, dt * maxf(_inaccuracy, 1.0) / maxf(rec, 0.05))
 	_punch = move_toward(_punch, 0.0, dt * maxf(_punch * 4.0, 2.0))
 	main.player.cam.rotation_degrees.x = clampf(main.player.pitch + _punch, -89.0, 89.0)
-	if Input.is_action_just_pressed("surf_buymenu"):
+	if Input.is_action_just_pressed("surf_buymenu") and not (main.settings and main.settings.is_open):
 		_buy.visible = not _buy.visible
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if _buy.visible else Input.MOUSE_MODE_CAPTURED
 	if _blocked():
@@ -152,7 +163,9 @@ func fire() -> void:
 	if id != "knife" and int(a[0]) <= 0:
 		reload()
 		return
-	_next_fire = t + stat(id, "cycletime", "cycletime")
+	# tick-accurate cadence: holding fire keeps the exact cycletime instead of drifting a frame per shot
+	var cyc := stat(id, "cycletime", "cycletime")
+	_next_fire = _next_fire + cyc if t - _next_fire < cyc else t + cyc
 	if id != "knife":
 		a[0] = int(a[0]) - 1
 	var vm: Viewmodel = main.viewmodel
@@ -166,7 +179,8 @@ func fire() -> void:
 	var spread_mrad := _spread(id)
 	var hit_any := false
 	var head_any := false
-	for b in int(stat(id, "bullets", "bullets")):
+	var per_target := {}  # collider -> [damage, head, point]: shotgun pellets land as one hit per target
+	for i in int(stat(id, "bullets", "bullets")):
 		var r := _shoot_ray(cam, reach, spread_mrad)
 		if r.is_empty():
 			continue
@@ -177,13 +191,18 @@ func fire() -> void:
 			var head: bool = col.get_meta("head", false) or col.get("is_head") == true
 			if head:
 				dmg *= stat(id, "headshot multiplier", "headshot")
-			col.hit(dmg, head, r["position"])
-			hit_any = true
-			head_any = head_any or head
+			var key: Object = col.get("unit") if col.get("unit") is Object else col  # a bot's head and body are one target
+			var e: Array = per_target.get(key, [0.0, false, r["position"], col])
+			per_target[key] = [float(e[0]) + dmg, bool(e[1]) or head, e[2], e[3]]
 		elif id != "knife":
 			_decal(r["position"], r["normal"])
-	if main.lobby and main.lobby.has_method("on_shot_fired"):
-		main.lobby.on_shot_fired()
+	for key in per_target:
+		var e: Array = per_target[key]
+		(e[3] as Object).hit(float(e[0]), bool(e[1]), e[2])
+		hit_any = true
+		head_any = head_any or bool(e[1])
+	if id != "knife" and main.lobby and main.lobby.has_method("on_shot_fired"):
+		main.lobby.on_shot_fired()  # one trigger pull = one shot; knife swings are not shots
 	if hit_any and main.hud.has_method("hitmarker"):
 		main.hud.hitmarker(head_any)
 	if id != "knife":
@@ -207,7 +226,8 @@ func _spread(id: String) -> float:
 		key = "inaccuracy crouch"
 	var inacc := stat(id, key, "damage") if _has(id, key) else (60.0 if key == "inaccuracy jump" else 5.0)
 	if p.grounded and _has(id, "inaccuracy move"):
-		var k := clampf(p.speed_units() / maxf(stat(id, "max player speed", "damage"), 1.0), 0.0, 1.0)
+		var maxspd := stat(id, "max player speed", "damage") if _has(id, "max player speed") else 250.0
+		var k := clampf(p.speed_units() / maxspd, 0.0, 1.0)
 		inacc = lerpf(inacc, stat(id, "inaccuracy move", "damage"), k)
 	return base + inacc + _inaccuracy
 
@@ -281,7 +301,7 @@ func _hud() -> void:
 	if id == "" or id == "knife":
 		main.hud.weapon("Knife", -1, -1)
 	else:
-		main.hud.weapon(String(rows[id]["name"]), int(ammo[id][0]), int(ammo[id][1]))
+		main.hud.weapon(String(rows[id]["name"]), int(ammo[id][0]), int(ammo[id][1]), int(stat(id, "primary clip size", "clip")))
 
 ## B: CS2's buy menu as columns by class; weapons prep has not exported are greyed out.
 func _build_buy() -> void:

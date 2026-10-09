@@ -27,6 +27,7 @@ var _readouts := {}
 var _checks := {}
 var _root: Control
 var _loading := true
+var _changed := {}
 
 func setup(m: Node) -> void:
 	main = m
@@ -43,19 +44,22 @@ func setup(m: Node) -> void:
 func toggle() -> void:
 	is_open = not is_open
 	_root.visible = is_open
+	main.hud.msg_label.visible = not is_open
+	main.player.frozen = is_open  # the menu pauses movement like a paused local server
+	if main.timer: main.timer.set_process(not is_open)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if is_open else Input.MOUSE_MODE_CAPTURED
 
 func _load_defaults() -> void:
 	var h: Hud = main.hud
 	var V: Dictionary = main.viewmodel.V
 	vals = {
-		"sens": main.player.input.sensitivity, "fov": 90.0,
+		"sens": main.player.input.sensitivity, "fov": float(Sheets.movement()["fov_default"]),
 		"vm_fov": V.get("viewmodel_fov", 68.0), "vm_x": V.get("viewmodel_offset_x", 0.0),
 		"vm_y": V.get("viewmodel_offset_y", 0.0), "vm_z": V.get("viewmodel_offset_z", 0.0),
 		"volume": 100.0,
 		"xh_size": float(h.convars.get("cl_crosshairsize", "5")), "xh_gap": float(h.convars.get("cl_crosshairgap", "1")),
 		"xh_thick": float(h.convars.get("cl_crosshairthickness", "0.5")), "xh_color": float(h.convars.get("cl_crosshaircolor", "1")),
-		"xh_dot": str(h.convars.get("cl_crosshairdot", "false")) == "true", "speed": true,
+		"xh_dot": str(h.convars.get("cl_crosshairdot", "false")).to_lower() in ["true", "1"], "speed": true,
 	}
 	if FileAccess.file_exists(FILE):
 		var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(FILE))
@@ -63,11 +67,16 @@ func _load_defaults() -> void:
 			for k in vals:
 				if d.has(k) and typeof(d[k]) == typeof(vals[k]):
 					vals[k] = d[k]
+					_changed[k] = true
 
 func _save() -> void:
 	var f := FileAccess.open(FILE, FileAccess.WRITE)
 	if f:
-		f.store_string(JSON.stringify(vals))
+		# only what the player changed here, so the rest keeps following their CS2 config
+		var out := {}
+		for k in _changed:
+			out[k] = vals[k]
+		f.store_string(JSON.stringify(out))
 
 func _apply(k: String) -> void:
 	var v: Variant = vals[k]
@@ -95,6 +104,7 @@ func _change(k: String, v: Variant) -> void:
 	vals[k] = v
 	_apply(k)
 	if not _loading:
+		_changed[k] = true
 		_save()
 
 func _build() -> void:

@@ -2,9 +2,22 @@
 usage: package.py <version>  -> dist/RustSurf-<version>.zip, dist/RustSurf-<version>.entries.json"""
 import os, sys, json, hashlib, zipfile
 R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ver = sys.argv[1] if len(sys.argv) > 1 else "0.1.0"
+# the version is the one melty.recipe.json ships (RustSurf-<ver>.zip), so the zip and the recipe never disagree
+recipe = json.load(open(os.path.join(R, "melty.recipe.json"), encoding="utf-8"))
+rver = recipe["components"][0]["fileName"][len("RustSurf-"):-len(".zip")]
+ver = sys.argv[1] if len(sys.argv) > 1 else rver
+if ver != rver:
+    sys.exit("version %s does not match melty.recipe.json (%s)" % (ver, rver))
 out = os.path.join(R, "dist", "RustSurf-%s.zip" % ver)
 parts = [(os.path.join(R, "dist", "RustSurf"), ""), (os.path.join(R, ".work", "prepbundle"), "prep/"), (os.path.join(R, "LICENSES"), "LICENSES/")]
+for base, _ in parts:
+    if not os.path.isdir(base):
+        sys.exit("missing " + base + " (export the game to dist/RustSurf and build .work/prepbundle first)")
+# our own prep sources and sheets always come from the repo, so the bundle never ships a stale copy
+import shutil
+for f in os.listdir(os.path.join(R, "prep")):
+    if f.endswith((".py", ".json")):
+        shutil.copy2(os.path.join(R, "prep", f), os.path.join(R, ".work", "prepbundle", f))
 entries = []
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
     for base, prefix in parts:

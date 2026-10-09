@@ -33,7 +33,7 @@
     {
       "id": "sun_energy",
       "value": 1.8,
-      "note": "",
+      "note": "direct sun strength",
       "tuned": "2026-10-08 by eye"
     },
     {
@@ -49,7 +49,7 @@
         0.38,
         0.68
       ],
-      "note": "",
+      "note": "sky colour overhead",
       "tuned": "2026-10-08 by eye"
     },
     {
@@ -69,7 +69,7 @@
         0.48,
         0.42
       ],
-      "note": "",
+      "note": "sky colour just below the horizon",
       "tuned": "2026-10-08 by eye"
     },
     {
@@ -79,7 +79,7 @@
         0.21,
         0.18
       ],
-      "note": "",
+      "note": "sky colour straight down",
       "tuned": "2026-10-08 by eye"
     },
     {
@@ -100,14 +100,14 @@
     },
     {
       "id": "fog_density",
-      "value": 0.0016,
+      "value": 0.0019,
       "note": "exponential fog per metre",
-      "tuned": "2026-10-08 by eye"
+      "tuned": "2026-10-09 Gauntlet r2: 0.0024 washed out the site, 0.0019 still hides the ground edge"
     },
     {
       "id": "fog_sun_scatter",
       "value": 0.25,
-      "note": "",
+      "note": "how much the haze glows toward the sun",
       "tuned": "2026-10-08 by eye"
     },
     {

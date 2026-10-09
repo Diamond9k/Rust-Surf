@@ -113,6 +113,30 @@
       "reads": "content.json",
       "status": "tested",
       "evidence": "tested: clean install from RustSurf-0.1.0.zip, bundled Python, 75 s, missing none; game then completed the course from that install"
+    },
+    {
+      "id": "weapons",
+      "script": "game/scripts/Weapons.gd",
+      "does": "loadout (primary, pistol, knife) on the CS2 arms, hitscan fire with items_game.txt stats, ammo, reload, recoil punch, B buy menu",
+      "reads": "weapons.json, weapon_defaults.json, input.json",
+      "status": "tested (knife only)",
+      "evidence": "2026-10-09: knife equip renders; ray and hit() contract tested headless (--wtest); guns need the PC prep export"
+    },
+    {
+      "id": "aim_lobby",
+      "script": "game/scripts/AimLobby.gd",
+      "does": "F2 aim-train arena: flick, tracking and bot targets, round scoring, best per mode",
+      "reads": "aim_lobby.json, movement.json",
+      "status": "tested",
+      "evidence": "2026-10-09: arena rendered (shots lobby); hits and shots counted in --wtest"
+    },
+    {
+      "id": "settings",
+      "script": "game/scripts/Settings.gd",
+      "does": "Esc menu: pause, sensitivity, fov, viewmodel, volume, crosshair; saves only what the player changed",
+      "reads": "movement.json",
+      "status": "tested",
+      "evidence": "2026-10-09: menu rendered with --menu; values applied through Viewmodel.set_view and Hud convars"
     }
   ]
 }

@@ -174,7 +174,7 @@ func _on_finished(t: float, is_pb: bool) -> void:
 func _physics_process(_dt: float) -> void:
 	if player == null:
 		return
-	if lobby.active or (shots_running and lobby.center.distance_to(player.global_position) < 80.0):
+	if lobby.active or shots_running:  # Gauntlet poses teleport around: never start a run
 		_in_start = false
 	elif _in_start and not _inside_start():
 		_in_start = false

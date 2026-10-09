@@ -84,6 +84,8 @@ def main():
              "columns": ["id", "game", "slot", "name", "item", "model", "clips", "sound_shot", "verified"],
              "rows": rows}
     json.dump(sheet, open(out, "w"), indent=1)
+    # prep reads its own copy from the prep folder (it ships without sheets/): keep the two identical
+    json.dump(sheet, open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "prep", "weapons.json"), "w"), indent=1)
     print("\n".join(report))
     print("%d weapons, %d complete" % (len(rows), sum(1 for r in report if r.endswith("ok"))))
 

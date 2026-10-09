@@ -115,7 +115,8 @@ def weapons_step(a, run, gi):
         sounds.append(w["sound_shot"])
     models = sorted(set(models))
     LOG("cs2 weapons: %d models+clips, %d sounds+scripts" % (len(models), len(sounds)))
-    run(["-f", ",".join(sounds)])
+    run(["-f", "scripts/items/items_game.txt"])  # alone, so a bad sound path cannot cost the stats
+    run(["-f", ",".join(sounds[1:])])
     outdir = os.path.join(a.out, "cs2")
     ig = os.path.join(outdir, "scripts", "items", "items_game.txt")
     if os.path.exists(ig):
@@ -127,6 +128,24 @@ def weapons_step(a, run, gi):
         LOG("items_game.txt missing: weapons use weapon_defaults.json")
     for i in range(0, len(models), 40):  # keep each command line well under the Windows limit
         run(["-f", ",".join(models[i:i + 40]), "--gltf_export_format", "glb", "--gltf_export_materials", "--gltf_export_animations", "--game", gi])
+
+
+def weapons_missing(a):
+    """Weapons whose model, idle clip or shot sound did not export (the game greys these out)."""
+    sheet = json.load(open(os.path.join(HERE, "weapons.json"), encoding="utf-8"))
+    out = []
+    base = os.path.join(a.out, "cs2")
+    for w in sheet["rows"]:
+        if w.get("game") != "cs2":
+            continue
+        need = [os.path.splitext(w["model"])[0] + ".glb", os.path.splitext(w["clips"]["idle"])[0] + ".glb"]
+        snd = os.path.splitext(w["sound_shot"])[0]
+        ok = all(os.path.exists(os.path.join(base, p)) for p in need) and any(os.path.exists(os.path.join(base, snd + e)) for e in (".wav", ".mp3"))
+        if not ok:
+            out.append(w["id"])
+    if not os.path.exists(os.path.join(base, "weapon_stats.json")):
+        out.append("weapon_stats.json")
+    return out
 
 
 def main():
@@ -149,7 +168,9 @@ def main():
         cs2_step(a)
         rust_step(a)
         missing = [r["id"] for r in rows() if r["kind"] != "config" and "{" not in r["out"] and "*" not in r["out"] and not os.path.exists(os.path.join(a.out, r["out"].split(" ")[0]))]
-        both("done in %.0fs; missing rows: %s" % (time.time() - t, missing or "none"))
+        wmiss = weapons_missing(a)
+        both("done in %.0fs; missing rows: %s; weapons missing: %s" % (time.time() - t, missing or "none", wmiss or "none"))
+        missing += ["weapon:" + w for w in wmiss]
         open(os.path.join(a.out, "done-%s.txt" % a.version), "w").write("ok %s missing=%s\n" % (a.version, missing))
     except Exception:
         both(traceback.format_exc())

@@ -5,7 +5,7 @@ extends Node3D
 
 var main: Node
 var active := false
-var mode := "flick"
+var mode := "bots"
 var modes: Array = []
 
 var V := {}
@@ -93,6 +93,8 @@ func toggle() -> void:
 		_gen += 1
 		_label.visible = false
 		_summary.visible = false
+		_clear()
+		main.hud.message("aim lobby closed, round not saved", 2.0)
 		main.course.restart(p)
 		main.timer.reset()
 		main.ghost.stop_run(false)
@@ -197,7 +199,9 @@ func _score() -> int:
 	return _hits * int(_f("points_hit")) + _heads * int(_f("points_head"))
 
 func _stats_line() -> String:
-	var s := "hits %d  shots %d  acc %.0f%%  hs %.0f%%" % [_hits, _shots, _acc(), _hs()]
+	var s := "hits %d  shots %d  acc %.0f%%" % [_hits, _shots, _acc()]
+	if mode == "bots":
+		s += "  hs %.0f%%" % _hs()
 	if mode == "flick" and _react_n > 0:
 		s += "  react %.0f ms" % _react_ms()
 	return s
@@ -220,6 +224,9 @@ func _process(dt: float) -> void:
 				i = k
 		mode = String(modes[(i + 1) % modes.size()]["id"])
 		_start_round()
+	if main.settings and main.settings.is_open:
+		_spawned_at += dt  # the Esc menu pauses the round and the reaction clock
+		return
 	if _state == "round":
 		_left -= dt
 		if _left <= 0.0:
@@ -283,16 +290,15 @@ func register_hit(unit: Node3D, dmg: float, head: bool, _at: Vector3) -> void:
 		"flick":
 			_react_sum += Time.get_ticks_msec() * 0.001 - _spawned_at
 			_react_n += 1
-			head = true
-			_count(head)
+			_count(false)
 			_spawn_mode()
 		"track":
-			_count(true)
+			_count(false)
 		"bots":
 			_count(head)
 			var hp := float(unit.get_meta("hp")) - dmg
 			unit.set_meta("hp", hp)
-			if hp <= 0.0 or head and dmg >= float(unit.get_meta("hp_max")):
+			if hp <= 0.0:
 				_down(unit)
 
 func _count(head: bool) -> void:

@@ -28,6 +28,7 @@ func texture(id: String, suffix: String = "MainTex") -> Texture2D:
 	if img.load(p) != OK:
 		_miss(id)
 		return null
+	img.generate_mipmaps()  # without mips the 2048 Rust textures sparkle into grain at a distance
 	var t := ImageTexture.create_from_image(img)
 	cache[key] = t
 	return t

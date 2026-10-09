@@ -102,9 +102,9 @@
       "length": 60,
       "half_width": 12,
       "height": 16,
-      "material": "ramp_panels",
+      "material": "concrete",
       "order": 2,
-      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+      "tuned": "2026-10-09 Gauntlet r1: green panels read as tarp, now Launch Site concrete"
     },
     {
       "id": "cp1_pad",
@@ -174,9 +174,9 @@
       "length": 80,
       "half_width": 12,
       "height": 16,
-      "material": "ramp_panels",
+      "material": "metal",
       "order": 5,
-      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+      "tuned": "2026-10-09 Gauntlet r1: green panels read as tarp, now Launch Site steel trims"
     },
     {
       "id": "end_pad",
@@ -243,12 +243,12 @@
       ],
       "yaw": 0,
       "pitch": 0,
-      "length": 900,
-      "half_width": 450,
+      "length": 4000,
+      "half_width": 2000,
       "height": 1,
       "material": "terrain",
       "order": 98,
-      "tuned": "2026-10-08 seen in recorded frames"
+      "tuned": "2026-10-09 Gauntlet r1: ground now runs into the haze instead of ending in a grey strip"
     },
     {
       "id": "kill_floor",
