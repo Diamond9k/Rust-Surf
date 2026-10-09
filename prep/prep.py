@@ -10,6 +10,8 @@ import UnityPy
 import prep_rust
 from prep_rust import load_env, material_files, decode_fsb, LOG
 import prep_scene
+import normals
+import items_game
 
 RUST_BUNDLES = ["content.bundle", "assetscenes.bundle", "audio.bundle",
                 "textures.0.bundle", "textures.1.bundle", "textures.2.bundle", "textures.3.bundle", "textures.4.bundle"]
@@ -62,6 +64,8 @@ def rust_step(a):
     # the Launch Site itself
     n = prep_scene.extract_scene(env, out, 1024)
     LOG("scene row scene_launch_site ok (%d placements)" % n)
+    # Unity DXTnm normal maps -> RGB tangent normals (idempotent, so it also fixes 0.1.0 data folders)
+    normals.fix_dir(tex_dir, LOG)
 
 
 def cs2_step(a):
@@ -95,6 +99,34 @@ def cs2_step(a):
     run(["-f", ",".join(plain)])
     LOG("cs2 models+clips: %d" % len(gltf))
     run(["-f", ",".join(gltf), "--gltf_export_format", "glb", "--gltf_export_materials", "--gltf_export_animations", "--game", gi])
+    weapons_step(a, run, gi)
+
+
+def weapons_step(a, run, gi):
+    """weapons.json: every CS2 weapon model, its viewmodel clips and shot sound, plus items_game.txt
+    for the stats. Same VRF calls as the knife rows; the output keeps the VPK paths."""
+    sheet = json.load(open(os.path.join(HERE, "weapons.json"), encoding="utf-8"))
+    models, sounds = [], ["scripts/items/items_game.txt"]
+    for w in sheet["rows"]:
+        if w.get("game") != "cs2":
+            continue
+        models.append(w["model"])
+        models += sorted(set(w["clips"].values()))
+        sounds.append(w["sound_shot"])
+    models = sorted(set(models))
+    LOG("cs2 weapons: %d models+clips, %d sounds+scripts" % (len(models), len(sounds)))
+    run(["-f", ",".join(sounds)])
+    outdir = os.path.join(a.out, "cs2")
+    ig = os.path.join(outdir, "scripts", "items", "items_game.txt")
+    if os.path.exists(ig):
+        names = [w["item"] for w in sheet["rows"] if w.get("game") == "cs2"]
+        st = items_game.stats(ig, names)
+        json.dump(st, open(os.path.join(outdir, "weapon_stats.json"), "w"), indent=1)
+        LOG("weapon stats: %d of %d weapons from items_game.txt" % (len(st), len(names)))
+    else:
+        LOG("items_game.txt missing: weapons use weapon_defaults.json")
+    for i in range(0, len(models), 40):  # keep each command line well under the Windows limit
+        run(["-f", ",".join(models[i:i + 40]), "--gltf_export_format", "glb", "--gltf_export_materials", "--gltf_export_animations", "--game", gi])
 
 
 def main():

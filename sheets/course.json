@@ -48,7 +48,7 @@
       "length": 12,
       "half_width": 6,
       "height": 0.5,
-      "material": "concrete",
+      "material": "pad",
       "order": 0,
       "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
     },
@@ -84,7 +84,7 @@
       "length": 70,
       "half_width": 10,
       "height": 14,
-      "material": "concrete",
+      "material": "ramp_concrete",
       "order": 1,
       "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
     },
@@ -102,7 +102,7 @@
       "length": 60,
       "half_width": 12,
       "height": 16,
-      "material": "metal",
+      "material": "ramp_panels",
       "order": 2,
       "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
     },
@@ -120,7 +120,7 @@
       "length": 14,
       "half_width": 8,
       "height": 0.5,
-      "material": "concrete",
+      "material": "pad",
       "order": 3,
       "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
     },
@@ -156,7 +156,7 @@
       "length": 80,
       "half_width": 10,
       "height": 14,
-      "material": "metal",
+      "material": "ramp_concrete",
       "order": 4,
       "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
     },
@@ -174,7 +174,7 @@
       "length": 80,
       "half_width": 12,
       "height": 16,
-      "material": "concrete",
+      "material": "ramp_panels",
       "order": 5,
       "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
     },
@@ -192,7 +192,7 @@
       "length": 44,
       "half_width": 14,
       "height": 0.5,
-      "material": "concrete",
+      "material": "pad",
       "order": 6,
       "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
     },
@@ -215,12 +215,30 @@
       "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
     },
     {
+      "id": "site_slab",
+      "kind": "decor",
+      "shape": "box",
+      "pos": [
+        170,
+        -0.95,
+        20
+      ],
+      "yaw": 0,
+      "pitch": 0,
+      "length": 440,
+      "half_width": 105,
+      "height": 1,
+      "material": "ground",
+      "order": 97,
+      "tuned": "2026-10-09 matches the Launch Site prefab footprint"
+    },
+    {
       "id": "ground",
       "kind": "decor",
       "shape": "box",
       "pos": [
         180,
-        -1,
+        -1.2,
         0
       ],
       "yaw": 0,
@@ -228,7 +246,7 @@
       "length": 900,
       "half_width": 450,
       "height": 1,
-      "material": "ground",
+      "material": "terrain",
       "order": 98,
       "tuned": "2026-10-08 seen in recorded frames"
     },

@@ -63,6 +63,46 @@
       "verified": "2026-10-08 prep run 8: site_ground_concrete albedo+normal exported"
     },
     {
+      "id": "tex_tarmac",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material tarmac (Launch Site, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/tarmac_{albedo,normal}.png",
+      "used_by": "materials (start and end pads)",
+      "verified": "2026-10-09 present in this PC's 0.1.0 data folder (exported with the backdrop materials)"
+    },
+    {
+      "id": "tex_site_panels_green",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material site_metal_panels_d_green (Launch Site, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/site_metal_panels_d_green_{albedo,normal}.png",
+      "used_by": "materials (green Launch Site panels on valley ramps)",
+      "verified": "2026-10-09 present in this PC's 0.1.0 data folder (exported with the backdrop materials)"
+    },
+    {
+      "id": "tex_concrete_d_site",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material concrete_d_site (Launch Site, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/concrete_d_site_{albedo,normal}.png",
+      "used_by": "materials (concrete ridge ramps)",
+      "verified": "2026-10-09 present in this PC's 0.1.0 data folder (exported with the backdrop materials)"
+    },
+    {
+      "id": "tex_terrain_blend",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material terrain_blend (Launch Site, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/terrain_blend_{albedo,normal}.png",
+      "used_by": "materials (open ground around the Launch Site)",
+      "verified": "2026-10-09 present in this PC's 0.1.0 data folder (exported with the backdrop materials)"
+    },
+    {
       "id": "amb_wind_rust",
       "game": "rust",
       "kind": "audio",
