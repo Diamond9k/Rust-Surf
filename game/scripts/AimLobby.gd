@@ -5,8 +5,6 @@
 class_name AimLobby
 extends Node3D
 
-const FEED_PLAYER := Color(0.62, 0.77, 1.0)
-const FEED_BOT := Color(0.93, 0.76, 0.36)
 const GREY := Color(0.72, 0.74, 0.78)
 
 var main: Node
@@ -39,6 +37,10 @@ var _ttk: Array[float] = []
 var _flick_sum := 0.0
 var _flick_n := 0
 var _on_target := 0.0
+var _last_shot_at := 0.0   # round clock of the previous shot (track credits the gap a hitting shot covers)
+var _shot_gap := 0.0
+var _last_kill_at := 0.0   # round clock of the previous kill: time to kill counts from it or the bot's stand-up
+var _last_kill_shot := -1
 var _used := {}
 var _spawned_at := 0.0
 var _best := {}
@@ -59,10 +61,12 @@ var _feed: VBoxContainer
 var _feed_items: Array = []   # [Control, expires at _clock]
 var _big: Label
 var _warn: Label
-var _hint: Label
+var _hint: Control
 var _summary: PanelContainer
 var _sum_title: Label
+var _sum_grid: GridContainer
 var _sum_body: Label
+var _layer: CanvasLayer
 
 ## Every hittable body: group "aim_target", hit(dmg, head, at). A bot's head is its own body with is_head=true;
 ## every part of one bot shares the bot as its unit, so Weapons merges a bot's parts into one hit per shot.
@@ -80,7 +84,7 @@ class Bot extends Node3D:
 	var hp := 100.0
 	var hp_max := 100.0
 	var alive := true
-	var first_hit := -1.0
+	var up_at := 0.0
 	var down_at := 0.0
 	var kick := 0.0
 	var tag := ""
@@ -93,7 +97,11 @@ func build(c: Content, m: Node) -> void:
 	S = Sheets.load_sheet("aim_lobby")
 	V = Sheets.values("aim_lobby")
 	modes = S["modes"]
-	center = _v3("center")
+	# the range has its own frame: origin at the sheet centre, turned range_yaw so the sun lights the bots'
+	# faces. Everything below is placed in that frame (center stays zero); player checks go through to_local.
+	position = _v3("center")
+	rotation_degrees.y = _f("range_yaw")
+	center = Vector3.ZERO
 	H = float(M["hull_height"])
 	mode = String(modes[0]["id"])
 	var ua := OS.get_cmdline_user_args()
@@ -135,7 +143,7 @@ func _input_action() -> void:
 		InputMap.action_add_event("surf_lobby_mode", ev)
 
 func spawn_pos() -> Vector3:
-	return center + _v3("spawn_offset")
+	return to_global(_v3("spawn_offset"))
 
 func toggle() -> void:
 	if not active:
@@ -150,7 +158,7 @@ func _enter(teleport: bool) -> void:
 	var p: SurfPlayer = main.player
 	active = true
 	if teleport:
-		p.teleport(spawn_pos(), _f("spawn_yaw"))
+		p.teleport(spawn_pos(), _f("spawn_yaw") + _f("range_yaw"))
 		p.pitch = 0.0
 		p.cam.rotation_degrees.x = 0.0
 	main.timer.reset()
@@ -205,11 +213,11 @@ func _paused() -> bool:
 
 func _inside_arena(at: Vector3) -> bool:
 	var sz: Array = V["arena_size"]
-	var l := at - center
+	var l := to_local(at)
 	return absf(l.x) < float(sz[0]) * 0.5 + 5.0 and absf(l.z) < float(sz[1]) * 0.5 + 5.0 and l.y > -5.0 and l.y < _f("wall_height") + 30.0
 
 func _behind_line() -> bool:
-	return main.player.global_position.z - center.z >= _f("firing_line_z")
+	return to_local(main.player.global_position).z >= _f("firing_line_z")
 
 # --- arena ---
 
@@ -282,6 +290,80 @@ func _text3d(s: String, c: Vector3, rot: Vector3, height_m: float, col: Color) -
 func _lane_x(lane: float) -> float:
 	return -_f("lane_count") * _f("lane_width") * 0.5 + (lane - 0.5) * _f("lane_width")
 
+## The walls' own concrete: the wall material's Rust texture with tonal variation, pour lines every
+## wall_lift_m and grime streaks running down from the top edge (UV is metres along / up the wall, UV2.x
+## metres below the top).
+const WALL_SHADER := "shader_type spatial;
+uniform sampler2D tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform bool has_tex = false;
+uniform bool has_nrm = false;
+uniform vec3 base = vec3(0.6);
+uniform float scale = 5.0;
+uniform float grime = 0.6;
+uniform float lift = 1.5;
+uniform float rough = 0.85;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p) {
+	vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm(vec2 p) {
+	float s = 0.0; float a = 0.5;
+	for (int i = 0; i < 4; i++) { s += a * vn(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; }
+	return s / 0.9375;
+}
+void fragment() {
+	vec2 m = UV;
+	vec2 uv = m / scale;
+	vec3 c = has_tex ? texture(tex, uv).rgb : base;
+	c *= mix(0.8, 1.08, fbm(m / 9.0 + vec2(4.0, 1.0)));
+	float d = abs(fract(m.y / lift + 0.5) - 0.5) * lift;
+	c *= 1.0 - 0.22 * (1.0 - smoothstep(0.008, 0.03, d));
+	float top = UV2.x;
+	float streak = smoothstep(0.45, 0.85, fbm(vec2(m.x * 1.4, top * 0.06) + vec2(3.0, 7.0)));
+	float s = streak * exp(-top / 4.5) * grime;
+	float lip = (1.0 - smoothstep(0.05, 0.35, top)) * grime;
+	c *= 1.0 - 0.55 * s - 0.3 * lip;
+	ALBEDO = c;
+	if (has_nrm) { NORMAL_MAP = texture(nrm, uv).rgb; }
+	ROUGHNESS = mix(rough, 1.0, s * 0.5);
+}
+"
+
+func _weathered(id: String) -> Material:
+	var src: StandardMaterial3D = main.course.materials.get(id)
+	var m := ShaderMaterial.new()
+	var sh := Shader.new()
+	sh.code = WALL_SHADER
+	m.shader = sh
+	if src:
+		m.set_shader_parameter("has_tex", src.albedo_texture != null)
+		m.set_shader_parameter("tex", src.albedo_texture)
+		m.set_shader_parameter("has_nrm", src.normal_texture != null)
+		m.set_shader_parameter("nrm", src.normal_texture)
+		m.set_shader_parameter("rough", src.roughness)
+	m.set_shader_parameter("scale", float(main.course.uv_scales.get(id, 5.0)))
+	m.set_shader_parameter("grime", _f("wall_grime"))
+	m.set_shader_parameter("lift", _f("wall_lift_m"))
+	return m
+
+## One inner wall face: a quad from 'from' along 'along' for span metres, h tall, facing n.
+func _face(from: Vector3, along: Vector3, span: float, h: float, n: Vector3, mat: Material) -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var p := [from, from + along * span, from + along * span + Vector3.UP * h, from + Vector3.UP * h]
+	var top := [h, h, 0.0, 0.0]
+	for i in [0, 1, 2, 0, 2, 3]:
+		st.set_normal(n)
+		st.set_uv(Vector2((p[i] as Vector3).dot(along), (p[i] as Vector3).y))
+		st.set_uv2(Vector2(top[i], 1.0))
+		st.add_vertex(center + p[i])
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = mat
+	add_child(mi)
+
 func _arena() -> void:
 	var sz: Array = V["arena_size"]
 	var sx := float(sz[0])
@@ -292,19 +374,57 @@ func _arena() -> void:
 	var trim := _f("wall_trim_height")
 	_box(Vector3(0, -1.55, 0), Vector3(g, 1.0, g), _mat(String(V["ground_material"])))
 	_box(Vector3(0, -t * 0.5, 0), Vector3(sx, t, sz_z), _mat(String(V["floor_material"])))
+	var fh := _f("front_wall_height")  # low behind the player, so its shadow never covers the firing line
 	var wm := _mat(String(V["wall_material"]))
 	var tm := _mat(String(V["trim_material"]))
+	var face := _weathered(String(V["wall_material"]))
+	var hx := sx * 0.5
+	var hz := sz_z * 0.5
 	for s in [-1.0, 1.0]:
-		_box(Vector3(0, wh * 0.5, s * (sz_z * 0.5 + t * 0.5)), Vector3(sx + t * 2.0, wh, t), wm)
-		_box(Vector3(s * (sx * 0.5 + t * 0.5), wh * 0.5, 0), Vector3(t, wh, sz_z), wm)
-		_box(Vector3(0, trim * 0.5, s * (sz_z * 0.5 - 0.06)), Vector3(sx, trim, 0.12), tm)
-		_box(Vector3(s * (sx * 0.5 - 0.06), trim * 0.5, 0), Vector3(0.12, trim, sz_z), tm)
-		_box(Vector3(0, wh + 0.12, s * (sz_z * 0.5 + t * 0.5)), Vector3(sx + t * 2.0 + 0.3, 0.24, t + 0.3), tm)
-		_box(Vector3(s * (sx * 0.5 + t * 0.5), wh + 0.12, 0), Vector3(t + 0.3, 0.24, sz_z), tm)
+		var zh := wh if s < 0.0 else fh
+		_box(Vector3(0, zh * 0.5, s * (hz + t * 0.5)), Vector3(sx + t * 2.0, zh, t), wm)
+		_box(Vector3(s * (hx + t * 0.5), wh * 0.5, 0), Vector3(t, wh, sz_z), wm)
+		_box(Vector3(0, zh + 0.12, s * (hz + t * 0.5)), Vector3(sx + t * 2.0 + 0.3, 0.24, t + 0.3), tm)
+		_box(Vector3(s * (hx + t * 0.5), wh + 0.12, 0), Vector3(t + 0.3, 0.24, sz_z), tm)
+	_face(Vector3(-hx, 0, -hz + 0.005), Vector3.RIGHT, sx, wh, Vector3.BACK, face)
+	_face(Vector3(hx, 0, hz - 0.005), Vector3.LEFT, sx, fh, Vector3.FORWARD, face)
+	_face(Vector3(-hx + 0.005, 0, hz), Vector3.FORWARD, sz_z, wh, Vector3.RIGHT, face)
+	_face(Vector3(hx - 0.005, 0, -hz), Vector3.BACK, sz_z, wh, Vector3.LEFT, face)
+	# lower band of green site panels with a metal skirting, broken by concrete pilasters with lamps
+	var wn := _mat(String(V["wainscot_material"]))
+	var bh := _f("wainscot_height")
+	for s in [-1.0, 1.0]:
+		_box(Vector3(0, bh * 0.5, s * (hz - 0.04)), Vector3(sx, bh, 0.08), wn)
+		_box(Vector3(s * (hx - 0.04), bh * 0.5, 0), Vector3(0.08, bh, sz_z), wn)
+		_box(Vector3(0, bh + 0.04, s * (hz - 0.07)), Vector3(sx, 0.08, 0.14), tm)
+		_box(Vector3(s * (hx - 0.07), bh + 0.04, 0), Vector3(0.14, 0.08, sz_z), tm)
+		_box(Vector3(0, trim * 0.5, s * (hz - 0.1)), Vector3(sx, trim, 0.12), tm)
+		_box(Vector3(s * (hx - 0.1), trim * 0.5, 0), Vector3(0.12, trim, sz_z), tm)
+	var pm := _mat(String(V["pilaster_material"]))
+	var pw: Array = V["pilaster_size"]
+	var lamp := _flat(_col("color_lamp"), 2.5, 0.4)
+	var lamp_box := _flat(Color(0.12, 0.12, 0.12), 0.0, 0.5)
+	var spots: Array = []  # [position, facing]
 	var n := int(_f("lane_count"))
+	for i in n + 1:
+		spots.append([Vector3(_lane_x(i + 0.5), 0, -hz), Vector3(0, 0, 1)])
+	var step := _f("pilaster_step")
+	var zz := -hz + step
+	while zz < hz - 1.0:
+		for s in [-1.0, 1.0]:
+			spots.append([Vector3(s * hx, 0, zz), Vector3(-s, 0, 0)])
+		zz += step
+	for sp in spots:
+		var at: Vector3 = sp[0]
+		var f: Vector3 = sp[1]
+		var size := Vector3(float(pw[0]), wh + 0.3, float(pw[1])) if f.x == 0.0 else Vector3(float(pw[1]), wh + 0.3, float(pw[0]))
+		_box(at + f * float(pw[1]) * 0.5 + Vector3(0, (wh + 0.3) * 0.5, 0), size, pm)
+		var lp := at + f * (float(pw[1]) + 0.15) + Vector3(0, wh - 1.2, 0)
+		_box(lp, Vector3(0.5, 0.18, 0.3) if f.x == 0.0 else Vector3(0.3, 0.18, 0.5), lamp_box, false)
+		_box(lp - Vector3(0, 0.1, 0), Vector3(0.4, 0.03, 0.22) if f.x == 0.0 else Vector3(0.22, 0.03, 0.4), lamp, false)
 	var lw := _f("lane_width")
 	var fz := _f("firing_line_z")
-	var back := -sz_z * 0.5
+	var back := -hz
 	var pc := _col("color_paint")
 	var paint := _flat(pc, 0.0, 0.85)
 	var plaque := _flat(_col("color_plaque"), 0.0, 0.7)
@@ -313,42 +433,88 @@ func _arena() -> void:
 	for i in n:
 		var x := _lane_x(i + 1)
 		_text3d(str(i + 1), Vector3(x, 0.012, fz - 2.6), Vector3(-90, 0, 0), 2.2, pc)
-		_box(Vector3(x, wh * 0.62, back + 0.04), Vector3(2.6, 2.8, 0.08), plaque, false)
-		_text3d(str(i + 1), Vector3(x, wh * 0.62, back + 0.1), Vector3.ZERO, 2.4, pc)
+		_box(Vector3(x, wh * 0.62, back + 0.06), Vector3(2.6, 2.8, 0.08), plaque, false)
+		_text3d(str(i + 1), Vector3(x, wh * 0.62, back + 0.12), Vector3.ZERO, 2.4, pc)
 	var edge := n * lw * 0.5
 	for d in V["distance_marks"]:
 		var z := fz - float(d)
 		_paint(Vector3(0, 0, z), n * lw, 0.1, paint)
 		for s in [-1.0, 1.0]:
-			_text3d("%d m" % int(d), Vector3(s * (edge + (sx * 0.5 - edge) * 0.5), 0.012, z + 0.55), Vector3(-90, 0, 0), 0.75, pc)
-			_box(Vector3(s * (sx * 0.5 - 0.04), 2.4, z), Vector3(0.08, 1.0, 2.3), plaque, false)
-			_text3d("%d m" % int(d), Vector3(s * (sx * 0.5 - 0.1), 2.4, z), Vector3(0, -90.0 * s, 0), 0.7, pc)
-	_paint(Vector3(0, 0.002, fz), sx, 0.3, _flat(_col("color_line"), 0.0, 0.8))
+			_text3d("%d m" % int(d), Vector3(s * (edge + (hx - edge) * 0.5), 0.012, z + 0.55), Vector3(-90, 0, 0), 0.75, pc)
+			var py := _f("distance_plaque_y")
+			_box(Vector3(s * (hx - 0.09), py, z), Vector3(0.08, 1.0, 2.3), plaque, false)
+			_text3d("%d m" % int(d), Vector3(s * (hx - 0.15), py, z), Vector3(0, -90.0 * s, 0), 0.7, pc)
+	_paint(Vector3(0, 0.002, fz), sx, 0.18, _flat(_col("color_line"), 0.0, 0.8))
 	var rh := _f("rail_height")
-	_box(Vector3(0, rh * 0.5, fz - 0.35), Vector3(sx, rh, 0.4), _flat(_col("color_line"), 0.0, 0.8))
+	_box(Vector3(0, rh * 0.5, fz - 0.4), Vector3(sx, rh, 0.4), pm)
 	var cm := _mat(String(V["cover_material"]))
 	for r in V["cover"]:
 		var a: Array = r
-		_box(Vector3(_lane_x(float(a[0])), float(a[3]) * 0.5, fz - float(a[1])), Vector3(a[2], a[3], a[4]), cm)
+		_crate(Vector3(_lane_x(float(a[0])), 0, fz - float(a[1])), Vector3(a[2], a[3], a[4]), cm, tm)
+	for r in V["crate_stacks"]:
+		var a: Array = r
+		_crate(Vector3(a[0], a[1], a[2]), Vector3(a[3], a[4], a[5]), cm, tm)
+	for r in V["catwalks"]:
+		_catwalk(r, tm)
 	var cr: Array = V["bot_crate"]
 	for s in V["bot_spots"]:
 		var a: Array = s
-		if float(a[4]) > 0.0:  # a raised spot: the bot stands on a crate
-			_box(Vector3(_lane_x(float(a[0])) + float(a[2]), float(a[4]) * 0.5, fz - float(a[1])), Vector3(float(cr[0]), float(a[4]), float(cr[1])), cm)
+		if float(a[4]) > 0.0 and int(a[5]) == 0:  # a raised spot off the catwalks: the bot stands on a crate
+			_crate(Vector3(_lane_x(float(a[0])) + float(a[2]), 0, fz - float(a[1])), Vector3(float(cr[0]), float(a[4]), float(cr[1])), cm, tm)
+
+## A crate: a panelled box standing on 'base' (relative to center) with a metal frame on its edges.
+func _crate(base: Vector3, size: Vector3, mat: Material, frame: Material) -> void:
+	_box(base + Vector3(0, size.y * 0.5, 0), size, mat)
+	var e := _f("crate_frame")
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			_box(base + Vector3(sx * (size.x * 0.5 - e * 0.5 + 0.01), size.y * 0.5, sz * (size.z * 0.5 - e * 0.5 + 0.01)), Vector3(e, size.y + 0.01, e), frame, false)
+		_box(base + Vector3(sx * (size.x * 0.5 - e * 0.5 + 0.01), size.y - e * 0.5 + 0.005, 0), Vector3(e, e, size.z + 0.02), frame, false)
+	for sz in [-1.0, 1.0]:
+		_box(base + Vector3(0, size.y - e * 0.5 + 0.005, sz * (size.z * 0.5 - e * 0.5 + 0.01)), Vector3(size.x + 0.02, e, e), frame, false)
+
+## A raised walkway along a side wall: [side -1/1, near m, far m (from the firing line), width, height].
+## Concrete under a metal deck, a rail on the open edge, and a stair down at the near end.
+func _catwalk(r: Array, metal: Material) -> void:
+	var sx := float(V["arena_size"][0]) * 0.5
+	var side := float(r[0])
+	var fz := _f("firing_line_z")
+	var z0 := fz - float(r[1])
+	var z1 := fz - float(r[2])
+	var w := float(r[3])
+	var h := float(r[4])
+	var x := side * (sx - w * 0.5)
+	var span := z0 - z1
+	var zc := (z0 + z1) * 0.5
+	_box(Vector3(x, (h - 0.12) * 0.5, zc), Vector3(w, h - 0.12, span), _mat(String(V["pilaster_material"])))
+	_box(Vector3(x, h - 0.06, zc), Vector3(w + 0.1, 0.12, span), metal)
+	var ex := side * (sx - w) - side * 0.05
+	var post := _f("catwalk_rail")
+	var k := 0.0
+	while k <= span + 0.01:
+		_box(Vector3(ex, h + post * 0.5, z1 + k), Vector3(0.06, post, 0.06), metal)
+		k += 2.0
+	_box(Vector3(ex, h + post, zc), Vector3(0.07, 0.07, span), metal, false)
+	_box(Vector3(ex, h + post * 0.5, zc), Vector3(0.04, 0.04, span), metal, false)
+	var steps := int(ceil(h / 0.3))
+	for i in steps:
+		var sh := h * float(i + 1) / steps
+		_box(Vector3(x, sh * 0.5, z0 + 0.35 + (steps - 1 - i) * 0.35), Vector3(w * 0.8, sh, 0.35), metal)
 
 # --- hud ---
+# CS2 look: square dark panels, team-colour strips, small uppercase captions with a soft shadow. Every size is
+# a pixel at the hud.json ref_height; the whole layer scales with the window height like Hud.gd.
 
-func _style(a: float, border: Color = Color(0, 0, 0, 0)) -> StyleBoxFlat:
+func _style(a: float, accent: Color = Color(0, 0, 0, 0), side: int = SIDE_TOP) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.04, 0.05, 0.06, a)
-	sb.set_corner_radius_all(4)
-	sb.content_margin_left = 12
-	sb.content_margin_right = 12
-	sb.content_margin_top = 5
+	sb.bg_color = Color(0.0, 0.0, 0.0, a)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
+	sb.content_margin_top = 4
 	sb.content_margin_bottom = 6
-	if border.a > 0.0:
-		sb.border_color = border
-		sb.set_border_width_all(2)
+	if accent.a > 0.0:
+		sb.border_color = accent
+		sb.set_border_width(side, 3)
 	return sb
 
 func _lab(parent: Node, size: int, col: Color = Color.WHITE, align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT, text: String = "") -> Label:
@@ -360,15 +526,38 @@ func _lab(parent: Node, size: int, col: Color = Color.WHITE, align: HorizontalAl
 		l.add_theme_font_override("font", main.hud.font)
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", col)
-	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
-	l.add_theme_constant_override("outline_size", 4)
+	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.75))
+	l.add_theme_constant_override("shadow_offset_x", 1)
+	l.add_theme_constant_override("shadow_offset_y", 2)
+	l.add_theme_constant_override("shadow_outline_size", 2)
 	parent.add_child(l)
 	return l
 
-func _pc(parent: Node, a: float, border: Color = Color(0, 0, 0, 0)) -> PanelContainer:
+func _pc(parent: Node, a: float, accent: Color = Color(0, 0, 0, 0), side: int = SIDE_TOP) -> PanelContainer:
 	var p := PanelContainer.new()
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_theme_stylebox_override("panel", _style(a, border))
+	p.add_theme_stylebox_override("panel", _style(a, accent, side))
+	parent.add_child(p)
+	return p
+
+## A panel that fades out to the right (CS2's side panels), with a thin accent line down its left edge.
+func _fade_panel(parent: Node, a: float, accent: Color) -> PanelContainer:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.01, 0.011, 0.6, 1.0])
+	g.colors = PackedColorArray([accent, accent, Color(0, 0, 0, a), Color(0, 0, 0, a * 0.7), Color(0, 0, 0, 0.0)])
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.width = 256
+	gt.height = 4
+	var sb := StyleBoxTexture.new()
+	sb.texture = gt
+	sb.content_margin_left = 20
+	sb.content_margin_right = 40
+	sb.content_margin_top = 10
+	sb.content_margin_bottom = 12
+	var p := PanelContainer.new()
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_theme_stylebox_override("panel", sb)
 	parent.add_child(p)
 	return p
 
@@ -376,89 +565,130 @@ func _hud() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 5
 	add_child(layer)
+	_layer = layer
 	_ui = Control.new()
-	_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(_ui)
-	# top centre, CS2-style: kills | round clock | score
+	var ct := _col("ui_ct")
+	var tt := _col("ui_t")
+	# top centre, CS2-style: kills | round clock | score, team-colour strips on the side boxes
 	var top := HBoxContainer.new()
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_theme_constant_override("separation", 3)
+	top.add_theme_constant_override("separation", 2)
 	top.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	top.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	top.offset_top = 10
+	top.offset_top = 8
 	_ui.add_child(top)
-	_top_kills = _top_box(top, "KILLS", FEED_PLAYER)
-	var mid := _pc(top, 0.82)
+	_top_kills = _top_box(top, "KILLS", ct)
+	var mid := _pc(top, _f("ui_alpha") + 0.1)
 	var mv := VBoxContainer.new()
-	mv.add_theme_constant_override("separation", -4)
+	mv.add_theme_constant_override("separation", -6)
 	mid.add_child(mv)
-	_top_time = _lab(mv, 30, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
-	_top_time.custom_minimum_size.x = 120
+	_top_time = _lab(mv, 34, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
+	_top_time.custom_minimum_size.x = 150
 	_top_mode = _lab(mv, 13, GREY, HORIZONTAL_ALIGNMENT_CENTER)
-	_top_score = _top_box(top, "SCORE", FEED_BOT)
-	# left stats panel
-	var panel := _pc(_ui, 0.5)
-	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT)
-	panel.offset_left = 14
-	panel.offset_top = -120
-	panel.custom_minimum_size = Vector2(210, 0)
+	_top_score = _top_box(top, "SCORE", tt)
+	# stats panel top left, where CS2 keeps the radar (the range has none)
+	var panel := _fade_panel(_ui, _f("ui_alpha"), tt)
+	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	panel.offset_left = 0
+	panel.offset_top = 24
+	panel.custom_minimum_size = Vector2(_f("ui_panel_w"), 0)
 	var pv := VBoxContainer.new()
-	pv.add_theme_constant_override("separation", 1)
+	pv.add_theme_constant_override("separation", 2)
 	panel.add_child(pv)
-	_panel_title = _lab(pv, 13, FEED_BOT)
-	var sep := HSeparator.new()
-	sep.add_theme_constant_override("separation", 6)
-	pv.add_child(sep)
+	_panel_title = _lab(pv, 15, tt)
+	var line := ColorRect.new()
+	line.color = Color(1, 1, 1, 0.14)
+	line.custom_minimum_size = Vector2(0, 1)
+	pv.add_child(line)
 	for i in 9:
 		var hb := HBoxContainer.new()
 		pv.add_child(hb)
-		var nl := _lab(hb, 13, GREY)
+		var nl := _lab(hb, 14, GREY)
 		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var vl := _lab(hb, 14, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
+		var vl := _lab(hb, 17, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
 		_rows.append([hb, nl, vl])
 	# kill feed, top right like CS2
 	_feed = VBoxContainer.new()
 	_feed.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_feed.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	_feed.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_feed.offset_top = 14
-	_feed.offset_right = -16
-	_feed.add_theme_constant_override("separation", 3)
+	_feed.offset_top = 70
+	_feed.offset_right = -20
+	_feed.add_theme_constant_override("separation", 4)
 	_ui.add_child(_feed)
-	_big = _lab(_ui, 120, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
+	_big = _lab(_ui, 150, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
 	_big.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	_big.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_big.grow_vertical = Control.GROW_DIRECTION_BOTH
-	_big.offset_top = -170
-	_big.add_theme_constant_override("outline_size", 10)
-	_warn = _lab(_ui, 22, Color(1, 0.35, 0.3), HORIZONTAL_ALIGNMENT_CENTER, "GET BEHIND THE YELLOW LINE: shots from here don't count")
+	_big.offset_top = -230
+	_warn = _lab(_ui, 22, Color(1, 0.35, 0.3), HORIZONTAL_ALIGNMENT_CENTER, "GET BEHIND THE YELLOW LINE: SHOTS FROM HERE DON'T COUNT")
 	_warn.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	_warn.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_warn.offset_top = 60
-	_hint = _lab(_ui, 14, GREY, HORIZONTAL_ALIGNMENT_CENTER, "[M] next mode    [B] buy menu    [Esc] pause / leave")
-	_hint.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	_hint.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_hint.offset_top = -34
-	_summary = _pc(_ui, 0.86)
+	_warn.offset_top = 80
+	# key hints, bottom centre above the CS2 bottom bar
+	var hints := HBoxContainer.new()
+	hints.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hints.add_theme_constant_override("separation", 22)
+	hints.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	hints.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	hints.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	hints.offset_bottom = -int(_f("ui_hint_bottom"))
+	_ui.add_child(hints)
+	for h in [["M", "NEXT MODE"], ["B", "BUY MENU"], ["ESC", "PAUSE / LEAVE"]]:
+		var hb := HBoxContainer.new()
+		hb.add_theme_constant_override("separation", 7)
+		hints.add_child(hb)
+		var cap := PanelContainer.new()
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0, 0, 0, 0.45)
+		sb.border_color = Color(1, 1, 1, 0.45)
+		sb.set_border_width_all(1)
+		sb.content_margin_left = 6
+		sb.content_margin_right = 6
+		sb.content_margin_bottom = 1
+		cap.add_theme_stylebox_override("panel", sb)
+		hb.add_child(cap)
+		_lab(cap, 12, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, h[0])
+		var hl := _lab(hb, 13, GREY, HORIZONTAL_ALIGNMENT_LEFT, h[1])
+		hl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_hint = hints
+	# round summary
+	_summary = _pc(_ui, 0.82, tt)
 	_summary.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	_summary.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_summary.grow_vertical = Control.GROW_DIRECTION_BOTH
-	_summary.custom_minimum_size = Vector2(380, 0)
+	_summary.custom_minimum_size = Vector2(460, 0)
 	var sv := VBoxContainer.new()
+	sv.add_theme_constant_override("separation", 6)
 	_summary.add_child(sv)
-	_sum_title = _lab(sv, 26, FEED_BOT, HORIZONTAL_ALIGNMENT_CENTER)
-	_sum_body = _lab(sv, 18)
+	_sum_title = _lab(sv, 28, tt, HORIZONTAL_ALIGNMENT_CENTER)
+	_sum_grid = GridContainer.new()
+	_sum_grid.columns = 2
+	_sum_grid.add_theme_constant_override("h_separation", 40)
+	sv.add_child(_sum_grid)
+	_sum_body = _lab(sv, 16, GREY, HORIZONTAL_ALIGNMENT_CENTER)
 	_summary.visible = false
 	_ui.visible = false
+	get_viewport().size_changed.connect(_layout_ui)
+	_layout_ui()
+
+## The layer is drawn at ref_height and scaled to the window, so every pixel above is a 1080p pixel.
+func _layout_ui() -> void:
+	var vp := get_viewport().get_visible_rect().size
+	var s := vp.y / float(Sheets.values("hud")["ref_height"])
+	_layer.scale = Vector2(s, s)
+	_ui.position = Vector2.ZERO
+	_ui.size = vp / s
 
 func _top_box(parent: Node, cap: String, col: Color) -> Label:
-	var p := _pc(parent, 0.7)
+	var p := _pc(parent, _f("ui_alpha"), col)
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", -4)
+	v.add_theme_constant_override("separation", -6)
 	p.add_child(v)
-	var l := _lab(v, 26, col, HORIZONTAL_ALIGNMENT_CENTER)
-	l.custom_minimum_size.x = 76
+	var l := _lab(v, 30, col, HORIZONTAL_ALIGNMENT_CENTER)
+	l.custom_minimum_size.x = 92
 	_lab(v, 12, GREY, HORIZONTAL_ALIGNMENT_CENTER, cap)
 	return l
 
@@ -501,7 +731,7 @@ func _stats() -> Array:
 			out.append(["Shots / hits", "%d / %d" % [_shots, _hits]])
 			out.append(["Avg time to kill", "%.0f ms" % _avg_ttk_ms() if _kills > 0 else "-"])
 			out.append(["Best time to kill", "%.0f ms" % _best_ttk_ms() if _kills > 0 else "-"])
-			out.append(["Time per kill", "%.2f s" % (_elapsed() / _kills) if _kills > 0 else "-"])
+			out.append(["Kills / min", "%.1f" % (60.0 * _kills / maxf(_elapsed(), 1.0))])
 			out.append(["Damage", str(int(_damage))])
 		"flick":
 			out.append(["Orbs hit", str(_hits)])
@@ -613,6 +843,7 @@ func _start_round() -> void:
 	_flick_sum = 0.0
 	_flick_n = 0
 	_on_target = 0.0
+	_last_kill_shot = -1
 	_used.clear()
 	for it in _feed_items:
 		(it[0] as Node).queue_free()
@@ -630,6 +861,11 @@ func _go() -> void:
 	_state = "round"
 	_left = _f("round_s")
 	_spawned_at = _clock
+	_last_shot_at = _clock
+	_last_kill_at = _clock
+	for t in _targets:
+		if t is Bot:
+			(t as Bot).up_at = _clock
 
 func _end_round() -> void:
 	_state = "summary"
@@ -647,37 +883,50 @@ func _end_round() -> void:
 	else:
 		line = "best with the %s: %d" % [_weapon_name(key.get_slice("|", 1)), int(_best.get(key, 0))]
 	_sum_title.text = "%s  ·  SCORE %d" % [_mode_label(), score]
-	var body: PackedStringArray = []
+	for c in _sum_grid.get_children():
+		c.queue_free()
 	for r in _stats():
-		body.append("%-20s %s" % [String(r[0]), String(r[1])])
-	body.append("")
-	body.append(line)
-	body.append("next round in %d s" % int(_f("summary_s")))
-	_sum_body.text = "\n".join(body)
+		_lab(_sum_grid, 15, GREY, HORIZONTAL_ALIGNMENT_LEFT, String(r[0]).to_upper())
+		_lab(_sum_grid, 18, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT, String(r[1]))
+	_sum_body.text = ("%s\nnext round in %d s" % [line, int(_f("summary_s"))]).to_upper()
 	_summary.visible = true
 	_clear()
 
+## The best file, else the temp copy a save left behind if it was killed before the rename. A file that will
+## not parse is kept beside it as .bad (never silently replaced by an empty table).
 func _load_best() -> Dictionary:
 	var p := String(V["best_file"])
-	if FileAccess.file_exists(p):
-		var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(p))
-		if d is Dictionary:
-			return d
+	for f in [p, p + ".tmp"]:
+		if not FileAccess.file_exists(f):
+			continue
+		var j := JSON.new()
+		if j.parse(FileAccess.get_file_as_string(f)) == OK and j.data is Dictionary:
+			return j.data
+		DirAccess.rename_absolute(f, f + ".bad")
+		push_warning("aim lobby: %s did not parse, kept as %s.bad" % [f, f])
 	return {}
 
+## Written whole to a temp file, then renamed over the old one, so a crash mid-write never loses the bests.
 func _save_best() -> void:
-	var f := FileAccess.open(String(V["best_file"]), FileAccess.WRITE)
+	var p := String(V["best_file"])
+	var f := FileAccess.open(p + ".tmp", FileAccess.WRITE)
 	if f == null:
 		main.hud.message("could not save the best score: %s" % error_string(FileAccess.get_open_error()), 3.0)
 		return
 	f.store_string(JSON.stringify(_best))
+	f.flush()
 	f.close()
+	var err := DirAccess.rename_absolute(p + ".tmp", p)
+	if err != OK:
+		main.hud.message("could not save the best score: %s" % error_string(err), 3.0)
 
 ## Weapons calls this once per trigger pull, hit or miss, before that pull's hits.
 func on_shot_fired() -> void:
 	if not (active and _state == "round"):
 		return
 	_shots += 1
+	_shot_gap = _clock - _last_shot_at
+	_last_shot_at = _clock
 	_shot_frame = Engine.get_process_frames()
 	_shot_ok = _behind_line()
 	if main.weapons:
@@ -697,7 +946,8 @@ func register_hit(unit: Node3D, dmg: float, head: bool, _at: Vector3, group: Str
 			_flick_n += 1
 			_spawn_mode()
 		"track":
-			_count(head)
+			if _count(head):
+				_on_target += minf(_shot_gap, _track_credit_cap())
 			(unit as Bot).kick = _f("bot_flinch") * 0.5
 		"bots":
 			var b := unit as Bot
@@ -706,8 +956,6 @@ func register_hit(unit: Node3D, dmg: float, head: bool, _at: Vector3, group: Str
 			_count(head)
 			var d := dmg if head else dmg * _f("hitgroup_" + group)  # Weapons already applied the weapon's headshot multiplier
 			d = minf(d, b.hp)
-			if b.first_hit < 0.0:
-				b.first_hit = _clock
 			b.hp -= d
 			_damage += d
 			b.kick = _f("bot_flinch")
@@ -715,17 +963,30 @@ func register_hit(unit: Node3D, dmg: float, head: bool, _at: Vector3, group: Str
 				_kill(b, head)
 
 ## One hit per shot at most (a shotgun through two bots is still one shot that hit), so accuracy stays <= 100%.
-func _count(head: bool) -> void:
+## True when this is the shot's first hit.
+func _count(head: bool) -> bool:
 	if _hit_shot == _shots:
 		if head and not _head_shot:
 			_heads += 1
 			_head_shot = true
-		return
+		return false
 	_hit_shot = _shots
 	_head_shot = head
 	_hits += 1
 	if head:
 		_heads += 1
+	return true
+
+## Track credits each hitting shot with the time since the shot before it, at most one cycle of the held gun
+## (and track_credit_max_s): holding the trigger without firing, or firing and missing, earns nothing.
+func _track_credit_cap() -> float:
+	var cap := _f("track_credit_max_s")
+	var w: Node = main.weapons
+	if w and w.rows.has(String(w.held())):
+		var cyc := float(w.stat(String(w.held()), "cycletime"))
+		if cyc > 0.0:
+			cap = minf(cap, cyc)
+	return cap
 
 func _kill(b: Bot, head: bool) -> void:
 	b.alive = false
@@ -733,8 +994,12 @@ func _kill(b: Bot, head: bool) -> void:
 	_kills += 1
 	if head:
 		_hs_kills += 1
-	_ttk.append(_clock - b.first_hit)
-	b.first_hit = -1.0
+	# time to kill: from the later of this bot standing up and the previous kill; a second kill by the same
+	# shot (penetration, pellets) belongs to that shot's engagement and adds no time
+	if _last_kill_shot != _shots:
+		_ttk.append(_clock - maxf(b.up_at, _last_kill_at))
+	_last_kill_at = _clock
+	_last_kill_shot = _shots
 	_set_live(b, false)
 	_feed_add(b.tag, head)
 
@@ -759,21 +1024,27 @@ func _tick_bots(dt: float) -> void:
 				b.alive = true
 				b.hp = b.hp_max
 				b.kick = 0.0
+				b.up_at = _clock
 				fall = 0.0
 				_set_live(b, true)
 		b.pose.rotation.x = -(b.kick + fall * PI * 0.5)
 
 func _feed_add(victim: String, head: bool) -> void:
-	var p := _pc(_feed, 0.72, Color(0.85, 0.12, 0.1))
+	var p := _pc(_feed, 0.6)
+	var sb: StyleBoxFlat = p.get_theme_stylebox("panel")
+	sb.border_color = _col("ui_feed_border")  # CS2 outlines the local player's own kills
+	sb.set_border_width_all(2)
+	sb.content_margin_top = 3
+	sb.content_margin_bottom = 4
 	p.size_flags_horizontal = Control.SIZE_SHRINK_END
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 10)
 	p.add_child(hb)
-	_lab(hb, 15, FEED_PLAYER, HORIZONTAL_ALIGNMENT_LEFT, "You")
+	_lab(hb, 15, _col("ui_ct"), HORIZONTAL_ALIGNMENT_LEFT, "You")
 	_lab(hb, 15, Color(0.9, 0.9, 0.9), HORIZONTAL_ALIGNMENT_LEFT, _weapon_name(String(main.weapons.held()) if main.weapons else "").to_upper())
 	if head:
 		_lab(hb, 15, Color(1, 0.85, 0.4), HORIZONTAL_ALIGNMENT_LEFT, "HS")
-	_lab(hb, 15, FEED_BOT, HORIZONTAL_ALIGNMENT_LEFT, victim)
+	_lab(hb, 15, _col("ui_t"), HORIZONTAL_ALIGNMENT_LEFT, victim)
 	_feed_items.append([p, _clock + _f("killfeed_s")])
 	while _feed_items.size() > int(_f("killfeed_n")):
 		(_feed_items.pop_front()[0] as Node).queue_free()
@@ -854,7 +1125,9 @@ func _spawn_bots() -> void:
 
 # --- humanoid bots ---
 
-## A sheet part or prop in the bot frame (metres): [transform, mesh, collision shape or null].
+## A sheet part or prop in the bot frame (metres): [transform, mesh, collision shape or null, mesh scale].
+## sphere: b, when b.y is not zero, scales the mesh per axis (a zero axis stays 1; the hitbox stays the sphere).
+## rbox: a box hitbox drawn as a rounded pill of the same size (torso, pelvis, boots).
 func _shape_of(r: Dictionary) -> Array:
 	var a := _a3(r["a"]) * H
 	var b := _a3(r["b"]) * H
@@ -863,23 +1136,30 @@ func _shape_of(r: Dictionary) -> Array:
 		"sphere":
 			var ss := SphereShape3D.new()
 			ss.radius = rad
-			var sm := _sphere(rad)
-			var st := float(r["b"][1])
-			if st > 0.0:
-				sm.height = rad * 2.0 * st  # stretched mesh, round hitbox
-			return [Transform3D(Basis(), a), sm, ss]
-		"box":
-			var bm := BoxMesh.new()
-			bm.size = b
+			var k := _a3(r["b"])
+			var sc := Vector3.ONE
+			if k.y > 0.0:
+				sc = Vector3(k.x if k.x > 0.0 else 1.0, k.y, k.z if k.z > 0.0 else 1.0)
+			return [Transform3D(Basis(), a), _sphere(rad), ss, sc]
+		"box", "rbox":
 			var bs := BoxShape3D.new()
 			bs.size = b
-			return [Transform3D(Basis(), a), bm, bs]
+			if String(r["shape"]) == "rbox":
+				var pill := CapsuleMesh.new()
+				pill.radius = 0.5
+				pill.height = 1.35
+				pill.radial_segments = 24
+				pill.rings = 6
+				return [Transform3D(Basis(), a), pill, bs, Vector3(b.x * 1.04, b.y / 1.35, b.z * 1.04)]
+			var bm := BoxMesh.new()
+			bm.size = b
+			return [Transform3D(Basis(), a), bm, bs, Vector3.ONE]
 		"cylinder":
 			var cm := CylinderMesh.new()
 			cm.top_radius = rad
 			cm.bottom_radius = rad
 			cm.height = b.y
-			return [Transform3D(Basis(), a), cm, null]
+			return [Transform3D(Basis(), a), cm, null, Vector3.ONE]
 	# capsule from a to b
 	var d := b - a
 	var y := d.normalized() if d.length() > 0.0001 else Vector3.UP
@@ -890,7 +1170,7 @@ func _shape_of(r: Dictionary) -> Array:
 	var cs := CapsuleShape3D.new()
 	cs.radius = rad
 	cs.height = mesh.height
-	return [Transform3D(Basis(x, y, x.cross(y)), (a + b) * 0.5), mesh, cs]
+	return [Transform3D(Basis(x, y, x.cross(y)), (a + b) * 0.5), mesh, cs, Vector3.ONE]
 
 func _cloth_tex(normal: bool) -> NoiseTexture2D:
 	var n := FastNoiseLite.new()
@@ -931,8 +1211,8 @@ func _slot_mat(outfit: int, slot: String) -> Material:
 			m.uv1_world_triplanar = false
 			m.uv1_scale = Vector3.ONE * 2.0
 			m.albedo_color = _c(o["metal"])
-		"skin", "eyes", "hair":
-			m = _flat(_c(o[slot]), 0.0, 0.75 if slot == "skin" else 0.9)
+		"skin", "eyes", "hair", "gloves", "boots":
+			m = _flat(_c(o[slot]), 0.0, 0.75 if slot in ["skin", "gloves"] else 0.9)
 		_:
 			m = _flat(_c(o[slot]), 0.0, 0.95)
 			if not _mats.has("cloth"):
@@ -963,12 +1243,13 @@ func _bot(at: Vector3, yaw_deg: float, outfit: int, tag: String) -> Bot:
 	for r in S["parts"]:
 		var s := _shape_of(r)
 		var tb := _target(b, s[2], s[1], _slot_mat(outfit, String(r["slot"])), s[0], String(r["group"]) == "head", String(r["group"]), b.pose)
+		(tb.get_child(0) as MeshInstance3D).scale = s[3]
 		b.bodies.append(tb)
 		by_id[String(r["id"])] = tb
 	var head_gear := String(o["head"])
 	for r in S["props"]:
 		var when := String(r["when"])
-		if not (when == "always" or (when == "face" and head_gear != "wrap") or when == head_gear or when == String(o["chest"])):
+		if not (when == "always" or (when == "face" and bool(o["face"])) or when == head_gear or when == String(o["chest"])):
 			continue
 		var on: Node3D = by_id.get(String(r["on"]))
 		if on == null:
@@ -977,7 +1258,7 @@ func _bot(at: Vector3, yaw_deg: float, outfit: int, tag: String) -> Bot:
 		var mi := MeshInstance3D.new()
 		mi.mesh = s[1]
 		mi.material_override = _slot_mat(outfit, String(r["slot"]))
-		mi.transform = on.transform.affine_inverse() * (s[0] as Transform3D)
+		mi.transform = on.transform.affine_inverse() * (s[0] as Transform3D).scaled_local(s[3])
 		on.add_child(mi)
 	return b
 
@@ -997,14 +1278,6 @@ func _physics_process(dt: float) -> void:
 		x = clampf(x, -half, half)
 		_dir = -signf(x)
 	t.position.x = center.x + x
-	# time on target: the crosshair on the bot with the trigger held, from behind the line
-	if Input.is_action_pressed("surf_attack") and _behind_line():
-		var cam: Camera3D = main.player.cam
-		var q := PhysicsRayQueryParameters3D.create(cam.global_position, cam.global_position - cam.global_basis.z * 200.0)
-		q.exclude = [main.player.get_rid()]
-		var r := cam.get_world_3d().direct_space_state.intersect_ray(q)
-		if r.get("collider") is AimTarget and (r["collider"] as AimTarget).unit == t:
-			_on_target += dt
 
 # --- --lobbytest: the scoring rules, checked headless ---
 
@@ -1054,7 +1327,7 @@ func _selftest() -> void:
 	on_shot_fired()
 	ok = _check("misses cost points", _score() == 2 * 100 + 50 - 3 * 10, _score()) and ok
 	var p: SurfPlayer = main.player
-	p.global_position.z = center.z + _f("firing_line_z") - 2.0
+	p.global_position = to_global(Vector3(0, 0.05, _f("firing_line_z") - 2.0))
 	on_shot_fired()
 	_part(b2, "head").hit(400.0, true, Vector3.ZERO)
 	ok = _check("shot from past the line ignored", _kills == 2 and b2.alive, _stats_line()) and ok
@@ -1079,5 +1352,52 @@ func _selftest() -> void:
 	var took := (Time.get_ticks_msec() - t0) / 1000.0
 	ok = _check("round starts after the countdown", _state == "round" and absf(took - _f("countdown_s")) < 0.5, "%.2f s" % took) and ok
 	ok = _check("test run wrote no best file", FileAccess.file_exists(String(V["best_file"])) == had_best, had_best) and ok
+	# track: time on target comes only from shots that hit, at most one capped gap per shot
+	_quick = true
+	mode = "track"
+	_start_round()
+	for i in 4:
+		await get_tree().process_frame
+	var tb := _targets[0] as Bot
+	ok = _check("track: no shots, no time", _on_target == 0.0, _on_target) and ok
+	_part(tb, "chest").hit(30.0, false, Vector3.ZERO)
+	ok = _check("track: hit without a shot earns nothing", _on_target == 0.0 and _hits == 0, _on_target) and ok
+	on_shot_fired()
+	_part(tb, "chest").hit(30.0, false, Vector3.ZERO)
+	_part(tb, "head").hit(30.0, true, Vector3.ZERO)
+	var one := _on_target
+	ok = _check("track: one shot credits one capped gap", one > 0.0 and one <= _track_credit_cap() + 0.0001 and _hits == 1, "%.3f s" % one) and ok
+	on_shot_fired()
+	ok = _check("track: a miss earns nothing", _on_target == one and _hits == 1, _on_target) and ok
+	on_shot_fired()
+	_part(tb, "chest").hit(30.0, false, Vector3.ZERO)
+	ok = _check("track: same-frame shot after a shot earns ~0", _on_target - one < 0.0001, _on_target - one) and ok
+	# bots: one shot that kills two bots adds one time-to-kill, not a zero
+	mode = "bots"
+	_start_round()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	on_shot_fired()
+	_part(_targets[0] as Bot, "head").hit(400.0, true, Vector3.ZERO)
+	_part(_targets[1] as Bot, "head").hit(400.0, true, Vector3.ZERO)
+	ok = _check("double kill by one shot: one hit, two kills, one ttk > 0", _kills == 2 and _hits == 1 and _ttk.size() == 1 and _ttk[0] > 0.0, _ttk) and ok
+	# best file: whole-file save through a temp file; an unparsable file is set aside, not silently lost
+	var keep := String(V["best_file"])
+	var keep_best := _best
+	V["best_file"] = "user://aim_best_selftest.json"
+	_best = {"bots|ak47": 1234}
+	_save_best()
+	var back := _load_best()
+	ok = _check("best file round trip, no temp left", int(back.get("bots|ak47", 0)) == 1234 and not FileAccess.file_exists(String(V["best_file"]) + ".tmp"), back) and ok
+	var bf := FileAccess.open(String(V["best_file"]), FileAccess.WRITE)
+	bf.store_string("{\"bots|ak47\": 12")
+	bf.close()
+	back = _load_best()
+	ok = _check("torn best file set aside as .bad", back.is_empty() and FileAccess.file_exists(String(V["best_file"]) + ".bad"), back) and ok
+	for f in ["", ".tmp", ".bad"]:
+		if FileAccess.file_exists(String(V["best_file"]) + f):
+			DirAccess.remove_absolute(String(V["best_file"]) + f)
+	V["best_file"] = keep
+	_best = keep_best
 	print("LTEST ", "ALL PASS" if ok else "FAILED")
 	get_tree().quit(0 if ok else 1)

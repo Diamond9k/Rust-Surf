@@ -234,7 +234,7 @@
     }
   ],
   "terrain": {
-    "_doc": "Ground built by Backdrop.gd in course coordinates: the site levels, the launch pad pit (found at load time from the placed meshes, so it follows the player's Rust version) and hills outside site_rect. layers name materials.json rows: open ground, dirt (slopes, patches, pit floor), site concrete (patches inside site_rect).",
+    "_doc": "Ground built by Backdrop.gd in course coordinates: the site levels, the launch pad pit (found at load time from the placed meshes, so it follows the player's Rust version) and hills outside site_rect. layers name materials.json rows: open ground, dirt (slopes, patches, pit floor), site concrete (patches inside site_rect). blend_materials: Rust material names on placed meshes (mounds, slopes, tower footings, pit banks) that are drawn with the terrain shader so they merge into the ground instead of standing out as smooth blobs (Rust blends them with its terrain; how exactly is unverified).",
     "layers": [
       "terrain",
       "dirt",
@@ -291,9 +291,308 @@
         0.8
       ],
       "tint_period": 260,
-      "_doc": "terrain shader uniforms. site_shade darkens the site concrete patches (pale patches read as snow); tint_a/tint_b: olive and khaki colour patches over the open ground every ~tint_period metres (a look, unverified against Rust's biome colours)",
-      "site_shade": 0.8
+      "_doc": "terrain shader uniforms. site_shade darkens the site concrete patches (pale patches read as snow); tint_a/tint_b: olive and khaki colour patches over the open ground every ~tint_period metres (a look, unverified against Rust's biome colours); scrub_*: dry scrub blobs on the open ground (one per scrub_cell metres with probability scrub_density, patchy by noise, colour is an albedo multiplier); stone_*: small pale loose stones the same way. A look standing in for ground scatter we have no meshes for (unverified against Rust's arid biome)",
+      "site_shade": 0.8,
+      "scrub_cell": 4.0,
+      "scrub_density": 0.32,
+      "scrub_color": [
+        0.42,
+        0.42,
+        0.3
+      ],
+      "stone_cell": 1.3,
+      "stone_density": 0.22,
+      "stone_color": [
+        1.18,
+        1.14,
+        1.06
+      ]
     },
-    "tuned": "2026-10-09 world_r1_3 renders: pit edges, slope, far ridgeline and ground tints checked by eye; hill heights and tints are a look, not Rust's terrain (unverified)"
+    "tuned": "2026-10-09 world_r2_4..7 renders: props, roads, ground scatter and blended mounds checked by eye in start/ramp1/valley2/site_overview/floor/sun; world_r1_3: pit edges, slope, far ridgeline. Hill heights, tints, scatter and roads are a look, not Rust's terrain (unverified)",
+    "props": {
+      "_doc": "Course scenery: extra copies of meshes prep already extracts for the real Launch Site (rust/mesh), set where the fixed views look so the land round the course reads as an industrial site. Our arrangement, not Rust's layout (the real placements are scene_launch_site). pos is course [x, z]; the prop stands on the ground level at x plus dy (dy copies the real placements' offsets: warehouses 0.3, awnings 0.2, floodlights and vents -0.1); awnings share their warehouse's origin, turned 180 deg as in the real placements.",
+      "columns": [
+        "mesh",
+        "pos",
+        "yaw",
+        "dy",
+        "scale"
+      ],
+      "rows": [
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            215,
+            128
+          ],
+          "yaw": 90,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_awning_LOD0",
+          "pos": [
+            215,
+            128
+          ],
+          "yaw": 270,
+          "dy": 0.2,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            255,
+            128
+          ],
+          "yaw": 90,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_awning_LOD0",
+          "pos": [
+            255,
+            128
+          ],
+          "yaw": 270,
+          "dy": 0.2,
+          "scale": 1.0
+        },
+        {
+          "mesh": "range_outbuilding_a_LOD0",
+          "pos": [
+            190,
+            132
+          ],
+          "yaw": 90,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "floodlights_A_LOD0",
+          "pos": [
+            292,
+            122
+          ],
+          "yaw": 200,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            288,
+            96
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            298,
+            96
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            308,
+            96
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "launch_site_ground_pipes_LOD0",
+          "pos": [
+            250,
+            146
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            420,
+            88
+          ],
+          "yaw": 0,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_awning_LOD0",
+          "pos": [
+            420,
+            88
+          ],
+          "yaw": 180,
+          "dy": 0.2,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            445,
+            88
+          ],
+          "yaw": 0,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "floodlights_A_LOD0",
+          "pos": [
+            330,
+            74
+          ],
+          "yaw": 30,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "floodlights_A_LOD0",
+          "pos": [
+            445,
+            -58
+          ],
+          "yaw": -40,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "launch_site_ground_pipes_LOD0",
+          "pos": [
+            400,
+            -110
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            455,
+            -138
+          ],
+          "yaw": 0,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "range_outbuilding_b_LOD0",
+          "pos": [
+            360,
+            60
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            165,
+            -125
+          ],
+          "yaw": 90,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_awning_LOD0",
+          "pos": [
+            165,
+            -125
+          ],
+          "yaw": 270,
+          "dy": 0.2,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            215,
+            -112
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            226,
+            -112
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "range_outbuilding_a_LOD0",
+          "pos": [
+            198,
+            -140
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
+        }
+      ],
+      "tuned": "2026-10-09 world_r2 renders, by eye"
+    },
+    "roads": {
+      "_doc": "Roads painted into the terrain shader: segments are course [x0, z0, x1, z1] (max 8), width in metres, surfaced with the materials.json row named in material and crumbling into a darker shoulder. Our layout, linking the props; not Rust's road network (unverified).",
+      "material": "pad",
+      "width": 8,
+      "segments": [
+        [
+          200,
+          -62,
+          480,
+          -62
+        ],
+        [
+          470,
+          -150,
+          470,
+          150
+        ],
+        [
+          180,
+          108,
+          470,
+          108
+        ],
+        [
+          200,
+          -62,
+          200,
+          -150
+        ],
+        [
+          300,
+          -62,
+          300,
+          108
+        ]
+      ],
+      "tuned": "2026-10-09 world_r2 renders, by eye"
+    },
+    "blend_materials": [
+      "terrain_blend",
+      "land_slide_blend"
+    ]
   }
 }

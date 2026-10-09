@@ -50,6 +50,20 @@ class Parse(unittest.TestCase):
         root = items_game.parse("\ufeff" + fixture_text().replace("\n", "\r\n"))
         self.assertEqual(root, self.root)
 
+    def test_whole_file_check(self):
+        d = tempfile.mkdtemp()
+        try:
+            text = fixture_text()
+            for name, body, want in (("full", text, True), ("half", text[:len(text) // 2], False),
+                                     ("no_close", text.rstrip()[:-1], False), ("in_string", text[:text.index("Fires in") + 5], False),
+                                     ("empty", "", False), ("comment", "// nothing\n", False)):
+                p = os.path.join(d, name + ".txt")
+                with open(p, "w", encoding="utf-8") as f:
+                    f.write(body)
+                self.assertEqual(items_game.whole(p), want, name)
+        finally:
+            shutil.rmtree(d)
+
     def test_unterminated_input_does_not_raise(self):
         items_game.parse('"items_game" { "items" { "7" { "name" "weapon_ak47"')
         items_game.parse('"a" "b" [$WIN32')

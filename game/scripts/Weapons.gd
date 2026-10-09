@@ -23,6 +23,10 @@ const COL := {"damage": "damage", "cycletime": "cycletime", "cycletime alt": "cy
 const ALT_KEYS := ["spread", "inaccuracy stand", "inaccuracy crouch", "inaccuracy move", "inaccuracy jump", "inaccuracy fire",
 	"recoil angle", "recoil angle variance", "recoil magnitude", "recoil magnitude variance", "cycletime", "max player speed"]
 
+## KeyValues escapes and the platform defines conditionals test (prep/items_game.py reads the file the same way).
+const KV_ESC := {"n": "\n", "t": "\t", "\\": "\\", "\"": "\""}
+const KV_DEFINES := ["$WIN32", "$WIN64", "$WINDOWS", "$PC"]
+
 var main: Node
 var rows := {}           # id -> weapons.json row, every weapon
 var ready_ids := {}      # id -> true when its model and idle clip are in the data folder
@@ -58,6 +62,7 @@ var _fov_tween: Tween
 var _burst_left := 0
 var _burst_at := 0.0
 var _fan := false
+var _cock := -1.0        # R8 primary: when the hammer pull started, -1 when not pulling
 var _posed := false      # --wpose: a render holds its scope while the camera is frozen
 var _voices: Array = []
 var _voice := 0
@@ -236,12 +241,19 @@ func switch_to(s: String) -> bool:
 	if current != "":
 		last = current
 	current = s
-	_reload_until = 0.0
-	_shell_next = 0.0
-	_toggle_until = 0.0
+	_deploy_reset()
 	_next_fire = _now() + maxf(vm.clip_length("draw"), 0.3)
 	_hud()
 	return true
+
+## CS's Deploy: a drawn weapon starts with no fire inaccuracy, a fresh recoil index and no reload or toggle.
+func _deploy_reset() -> void:
+	_inaccuracy = 0.0
+	_recoil_index = 0.0
+	_reload_until = 0.0
+	_shell_next = 0.0
+	_toggle_until = 0.0
+	_cock = -1.0
 
 ## Wall-clock seconds: shots keep their exact cycletime between frames, like CS2's sub-tick input.
 func _now() -> float:
@@ -292,9 +304,26 @@ func _process(dt: float) -> void:
 	if Input.is_action_just_pressed("surf_attack2"):
 		_attack2(id)
 	_fan = alt_kind(id) == "revolver" and Input.is_action_pressed("surf_attack2") and not Input.is_action_pressed("surf_attack")
+	if alt_kind(id) == "revolver" and not _fan:
+		if hammer(Input.is_action_pressed("surf_attack"), t):
+			fire()
+		return
 	var auto := stat(id, "is full auto") > 0.5
 	if Input.is_action_just_pressed("surf_attack") or (auto and Input.is_action_pressed("surf_attack")) or _fan:
 		fire()
+
+## R8 primary: holding attack pulls the hammer once the gun is ready and the round goes off revolver_cock
+## seconds later; letting go first cancels it. Held on, it pulls again after each shot. True when it fires.
+func hammer(held_down: bool, t: float) -> bool:
+	if not held_down or t < _next_fire or _reload_until > 0.0 or t < _toggle_until:
+		_cock = -1.0
+		return false
+	if _cock < 0.0:
+		_cock = t
+	if t - _cock < float(X["revolver_cock"]):
+		return false
+	_cock = -1.0
+	return true
 
 ## attack2 on a gun: scope level, silencer on/off, burst/semi, or (revolver) fan fire while held.
 func _attack2(id: String) -> void:
@@ -353,8 +382,7 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 		_next_fire = t + cyc
 	else:
 		_burst_left = 0
-		# holding the trigger keeps the exact cycletime instead of drifting a frame per shot
-		_next_fire = _next_fire + cyc if t - _next_fire < cyc else t + cyc
+		_next_fire = cadence(_next_fire, t, cyc, get_process_delta_time())
 	a[0] = int(a[0]) - 1
 	_last_shot = t
 	var vm: Viewmodel = main.viewmodel
@@ -368,25 +396,19 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 	var inacc := _inacc(id) * float(X["inaccuracy_to_rad"])
 	var spr := mstat(id, "spread") * float(X["inaccuracy_to_rad"])
 	var reach := stat(id, "range") * u
-	var per_target := {}  # unit -> [damage, head, point, collider]: pellets and parts land as one hit per target
+	var hits: Array = []  # [part, damage, head, point] per pellet per body, in firing order
+	# CS FX_FireBullets: one inaccuracy ring for the whole shot, then a spread ring per pellet; each ring is a
+	# random angle and a uniform (centre-weighted) radius
+	var t0 := _rng.randf() * TAU
+	var r0 := _rng.randf() * inacc
 	for i in int(stat(id, "bullets")):
-		# CS: an inaccuracy ring and a spread ring, each a random angle and a uniform (centre-weighted) radius
-		var t0 := _rng.randf() * TAU
-		var r0 := _rng.randf() * inacc
 		var t1 := _rng.randf() * TAU
 		var r1 := _rng.randf() * spr
 		var off := Vector2(cos(t0) * r0 + cos(t1) * r1, sin(t0) * r0 + sin(t1) * r1)
 		var dir := (-eye.z + eye.x * off.x + eye.y * off.y).normalized()
-		_trace(id, cam.global_position, dir, reach, stat(id, "damage"), per_target)
-	var hit_any := false
-	var head_any := false
-	for key in per_target:
-		var e: Array = per_target[key]
-		if is_instance_valid(e[3]):
-			(e[3] as Object).hit(float(e[0]), bool(e[1]), e[2])
-			hit_any = true
-			head_any = head_any or bool(e[1])
-	if hit_any and main.hud.has_method("hitmarker"):
+		_trace(id, cam.global_position, dir, reach, stat(id, "damage"), hits)
+	var head_any := _deliver(hits)
+	if hits.size() > 0 and main.hud.has_method("hitmarker"):
 		main.hud.hitmarker(head_any)
 	_inaccuracy += mstat(id, "inaccuracy fire")
 	_recoil(id)
@@ -398,6 +420,12 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 		_burst_left = 0
 	_hud()
 
+## The next allowed shot. A shot later than its slot by less than one frame keeps the slot (held fire stays
+## on the exact cycletime instead of drifting a frame per shot); any later shot starts a new cycle, so
+## clicking can never beat the cycletime by more than a frame (and never by more than half a cycle).
+static func cadence(next: float, t: float, cyc: float, frame: float) -> float:
+	return next + cyc if t - next < minf(frame, cyc * 0.5) else t + cyc
+
 ## Eye angles plus aim punch x recoil_scale: where CS2 sends the bullets (the camera shows less of it).
 func _eye_basis() -> Basis:
 	var p: SurfPlayer = main.player
@@ -405,9 +433,21 @@ func _eye_basis() -> Basis:
 	var pitch := deg_to_rad(clampf(p.pitch + _aim.x * k, -89.0, 89.0))
 	return p.global_basis * Basis.from_euler(Vector3(pitch, deg_to_rad(_aim.y * k), 0.0))
 
-## One bullet: hits along the ray, through up to pen_hits surfaces. Damage falls off with range and loses
-## CS's penetration toll per surface (a chunk, a weapon term and thickness squared over 24).
-func _trace(id: String, from: Vector3, dir: Vector3, reach: float, dmg: float, per_target: Dictionary) -> void:
+## Each pellet's hit lands on the part it struck, like CS's one TakeDamage per bullet: the target applies that
+## part's hitgroup, so a blast across legs, chest and head scales every pellet by its own group. True when
+## any pellet was a headshot.
+func _deliver(hits: Array) -> bool:
+	var head_any := false
+	for e in hits:
+		if is_instance_valid(e[0]):
+			(e[0] as Object).hit(float(e[1]), bool(e[2]), e[3])
+			head_any = head_any or bool(e[2])
+	return head_any
+
+## One bullet: hits along the ray, through up to pen_hits surfaces (one hit per target per bullet). Damage
+## falls off with range and loses CS's penetration toll per surface (a chunk, a weapon term and thickness
+## squared over 24).
+func _trace(id: String, from: Vector3, dir: Vector3, reach: float, dmg: float, hits: Array) -> void:
 	var space: PhysicsDirectSpaceState3D = main.player.get_world_3d().direct_space_state
 	var ex: Array[RID] = [main.player.get_rid()]
 	var start := from
@@ -432,9 +472,7 @@ func _trace(id: String, from: Vector3, dir: Vector3, reach: float, dmg: float, p
 			if not seen.has(key):
 				seen[key] = true
 				var d := dmg * (stat(id, "headshot multiplier") if head else 1.0)
-				d = _armored(key, d, head, id)
-				var e: Array = per_target.get(key, [0.0, false, pos, col])
-				per_target[key] = [float(e[0]) + d, bool(e[1]) or head, e[2], e[3]]
+				hits.append([col, _armored(key, d, head, id), head, pos])
 		else:
 			_decal(pos, r["normal"])
 		if power <= 0.0:
@@ -613,7 +651,8 @@ func _set_zoom(level: int) -> void:
 		return
 	var id := held()
 	if _zoom == 0:
-		_base_fov = p.cam.fov
+		if not (_fov_tween and _fov_tween.is_running()):
+			_base_fov = p.cam.fov  # an unscope still easing out keeps the fov it is easing back to
 		_base_sens = p.input.sensitivity
 	var fov := _base_fov
 	if level > 0:
@@ -648,25 +687,10 @@ func _knife(stab: bool) -> void:
 	var dir := -_eye_basis().z
 	var reach := float(X["knife_stab_range" if stab else "knife_slash_range"]) * u
 	var space: PhysicsDirectSpaceState3D = main.player.get_world_3d().direct_space_state
-	var q := PhysicsRayQueryParameters3D.create(cam.global_position, cam.global_position + dir * reach)
-	q.exclude = [main.player.get_rid()]
-	var r: Dictionary = space.intersect_ray(q)
+	var ex: Array[RID] = [main.player.get_rid()]
+	var r := knife_target(space, cam.global_position, dir, reach, ex)
 	var col: Object = r.get("collider")
 	var at: Vector3 = r.get("position", cam.global_position + dir * reach)
-	if col == null or not col.has_method("hit"):
-		var hull := PhysicsShapeQueryParameters3D.new()
-		var sph := SphereShape3D.new()
-		sph.radius = float(X["knife_hull"]) * u
-		hull.shape = sph
-		hull.transform = Transform3D(Basis.IDENTITY, cam.global_position + dir * reach)
-		hull.exclude = [main.player.get_rid()]
-		var best := INF
-		for h in space.intersect_shape(hull, 16):
-			var c: Object = h["collider"]
-			if c and c.has_method("hit") and (c as Node3D).global_position.distance_to(cam.global_position) < best:
-				best = (c as Node3D).global_position.distance_to(cam.global_position)
-				col = c
-				at = (c as Node3D).global_position
 	if main.lobby and main.lobby.has_method("on_shot_fired"):
 		main.lobby.on_shot_fired()
 	main.viewmodel.kick("stab" if stab else "slash")
@@ -687,6 +711,39 @@ func _knife(stab: bool) -> void:
 	_next_fire = t + float(X["knife_stab_hit" if stab else "knife_slash_hit"])
 	if main.hud.has_method("hitmarker"):
 		main.hud.hitmarker(head)
+
+## What a swing meets: the first thing on the ray to the knife's reach (a wall stops it), else the hull's pick.
+func knife_target(space: PhysicsDirectSpaceState3D, from: Vector3, dir: Vector3, reach: float, ex: Array[RID]) -> Dictionary:
+	var q := PhysicsRayQueryParameters3D.create(from, from + dir * reach)
+	q.exclude = ex
+	var r: Dictionary = space.intersect_ray(q)
+	return knife_hull(space, from, from + dir * reach, ex) if r.is_empty() else r
+
+## CS's knife hull: only when the ray reached nothing, the nearest hittable body within knife_hull of the end
+## of the reach that the eye can see (a wall between keeps it safe, like CS's hull trace from the eye).
+func knife_hull(space: PhysicsDirectSpaceState3D, from: Vector3, end: Vector3, ex: Array[RID]) -> Dictionary:
+	var hull := PhysicsShapeQueryParameters3D.new()
+	var sph := SphereShape3D.new()
+	sph.radius = float(X["knife_hull"]) * u
+	hull.shape = sph
+	hull.transform = Transform3D(Basis.IDENTITY, end)
+	hull.exclude = ex
+	var best := INF
+	var out := {}
+	for h in space.intersect_shape(hull, 16):
+		var c: Object = h["collider"]
+		if c == null or not c.has_method("hit"):
+			continue
+		var at := (c as Node3D).global_position
+		var q := PhysicsRayQueryParameters3D.create(from, at)
+		q.exclude = ex
+		var seen: Dictionary = space.intersect_ray(q)
+		if not seen.is_empty() and not (seen["collider"] as Object).has_method("hit"):
+			continue  # a wall between the eye and the body
+		if at.distance_to(from) < best:
+			best = at.distance_to(from)
+			out = {"collider": c, "position": at}
+	return out
 
 ## CS's backstab test: the flat line from the attacker to the target agrees with the target's facing.
 func backstab(unit: Node3D, from: Vector3) -> bool:
@@ -870,41 +927,102 @@ func _pose(arg: String) -> void:
 		_set_zoom(int(parts[1]))
 	_hud()
 
-## --wtest: the gun model's own checks, printed as WTEST lines next to the lobby hit test.
+## --wtest: the gun model's own checks. Each prints a WTEST PASS or FAIL line; any failure ends the run with
+## exit code 1 so a build can gate on it. Missing CS2 stats are fine: every check also holds on class defaults.
+var _fails := 0
+var _checks := 0
+
+func _check(what: String, ok: bool, detail: String) -> void:
+	_checks += 1
+	if not ok:
+		_fails += 1
+	print("WTEST %s %s %s" % ["PASS" if ok else "FAIL", what, detail])
+
+## --wtest's stand-in for an aim lobby part: one hittable body that records the hits it takes.
+class TestPart extends StaticBody3D:
+	var unit: Object
+	var group := "chest"
+	var is_head := false
+	var armor := 0.0
+	var got: Array = []
+
+	func hit(dmg: float, head: bool, _at: Vector3) -> void:
+		got.append([dmg, head, group])
+
+func _test_box(body: StaticBody3D, size: Vector3, at: Vector3) -> StaticBody3D:
+	var cs := CollisionShape3D.new()
+	var bx := BoxShape3D.new()
+	bx.size = size
+	cs.shape = bx
+	body.add_child(cs)
+	main.add_child(body)
+	body.global_position = at
+	return body
+
 func _selftest() -> void:
 	var p: SurfPlayer = main.player
+	# recoil pattern: seeded, the same on every build, different per weapon
 	var a := pattern("cs2_ak47", 0)
 	var b := pattern("cs2_ak47", 0)
 	_tables.clear()
 	var c := pattern("cs2_ak47", 0)
-	print("WTEST pattern ak47 seed=%s len=%d same=%s first=%s" % [str(int(stat("cs2_ak47", "recoil seed"))) if _has("cs2_ak47", "recoil seed") else "hash", a.size(), a == b and a == c, str(a.slice(0, 4))])
-	print("WTEST pattern m4a4!=ak47 %s" % (pattern("cs2_m4a4", 0) != a))
+	_check("pattern_seeded", a.size() == int(X["pattern_length"]) and a == b and a == c, "ak47 seed=%s first=%s" % [str(int(stat("cs2_ak47", "recoil seed"))) if _has("cs2_ak47", "recoil seed") else "hash", str(a.slice(0, 3))])
+	_check("pattern_per_weapon", pattern("cs2_m4a4", 0) != a, "m4a4 != ak47")
 	var rs := SourceRandom.new()
 	rs.set_seed(1)
-	print("WTEST source_random seed1 %d %d %d" % [rs.next(), rs.next(), rs.next()])
-	# a 10-shot AK spray at 0.1 s: bullets climb, the camera shows recoil_scale x tracking of it, then it settles
+	var r3 := [rs.next(), rs.next(), rs.next()]
+	_check("source_random", r3 == [893351816, 197493099, 1624379149], "seed 1 -> %s (ran1 reference 893351816 197493099 1624379149)" % str(r3))
+	# a 10-shot AK spray at 0.1 s: the bullets climb, then the punch settles back to zero
 	_aim = Vector2.ZERO
 	_aim_vel = Vector2.ZERO
 	_view = Vector2.ZERO
 	_recoil_index = 0.0
 	var climb: Array = []
 	for i in 10:
-		climb.append("%.1f/%.1f" % [_aim.x * float(X["recoil_scale"]), _aim.y * float(X["recoil_scale"])])
+		climb.append(_aim.x * float(X["recoil_scale"]))
 		_recoil("cs2_ak47")
 		_last_shot = 1000.0
 		for j in 6:
 			_decay("cs2_ak47", 1.0 / 60.0, _last_shot)
 	for j in 120:
 		_decay("cs2_ak47", 1.0 / 60.0, _last_shot)
-	print("WTEST spray ak47 bullet pitch/yaw deg=%s rest=%.3f" % [str(climb), _aim.length()])
-	# cones: standing still vs after three shots (fallback rifle class when stats are absent)
+	_check("spray_climbs_and_settles", float(climb[9]) > float(climb[2]) and float(climb[2]) > 0.0 and _aim.length() < 0.05, "bullet pitch deg shot3=%.2f shot10=%.2f rest=%.3f" % [climb[2], climb[9], _aim.length()])
 	_inaccuracy = 0.0
 	var still := _spread("cs2_ak47")
 	_inaccuracy = mstat("cs2_ak47", "inaccuracy fire") * 3.0
 	var fired := _spread("cs2_ak47")
-	_inaccuracy = 0.0
-	print("WTEST cone ak47 still=%.2f after3=%.2f grounded=%s" % [still, fired, p.grounded])
-	# scope: AWP to level 1 and 2 and back, fov and sensitivity restored
+	_deploy_reset()
+	_recoil_index = 7.0
+	_inaccuracy = 30.0
+	_deploy_reset()
+	_check("cone_and_deploy", fired > still and _inaccuracy == 0.0 and _recoil_index == 0.0, "ak47 still=%.2f after3=%.2f, a draw resets the penalty and recoil index" % [still, fired])
+	# cadence: a held trigger keeps the exact cycletime; clicking never beats it
+	for wid in ["cs2_ak47", "cs2_deagle"]:
+		var cyc := stat(wid, "cycletime")
+		var frame := 1.0 / 60.0
+		var nf := 0.0
+		var shots := 0
+		var t := 0.0
+		while t < 3.0:
+			if t >= nf:
+				nf = cadence(nf, t, cyc, frame)
+				shots += 1
+			t += frame
+		var want := 3.0 / cyc
+		var fast := 1.0 / 240.0
+		nf = 0.0
+		var prev := -10.0
+		var gap := INF
+		t = 0.0
+		while t < 3.0:  # spam clicks every frame at 240 fps
+			if t >= nf:
+				nf = cadence(nf, t, cyc, fast)
+				gap = minf(gap, t - prev)
+				prev = t
+			t += fast
+		var late := cadence(1.0, 1.0 + cyc * 0.95, cyc, frame)  # a click just short of a whole cycle late
+		_check("cadence_" + wid, absf(float(shots) - want) <= maxf(1.0, want * 0.02) and gap >= cyc - fast - 0.0001 and late >= 1.0 + cyc * 1.95 - 0.0001, "cyc=%.3f held 3 s=%d rounds (want %.1f), spam min gap=%.4f, late click next=%.3f" % [cyc, shots, want, gap, late])
+	# scope: AWP levels 1, 2, off; a fast re-scope inside the zoom tween still returns to the real fov
 	var fov0 := p.cam.fov
 	var sens0: float = p.input.sensitivity
 	var keep_slot: String = slots["primary"]
@@ -914,24 +1032,39 @@ func _selftest() -> void:
 	var unscoped := _spread("cs2_awp")
 	_attack2("cs2_awp")
 	_speed("cs2_awp")
-	var s1 := "lvl=%d sens=%.3f mode=%d cone=%.2f (unscoped %.2f) speed=%d" % [_zoom, p.input.sensitivity, _mode("cs2_awp"), _spread("cs2_awp"), unscoped, roundi(float(main.player.M["max_ground_speed"]) / u)]
+	var lvl1 := _zoom
+	var cone1 := _spread("cs2_awp")
+	var spd1 := roundi(float(main.player.M["max_ground_speed"]) / u)
+	var sens1: float = p.input.sensitivity
 	_attack2("cs2_awp")
-	var s2 := _zoom
+	var lvl2 := _zoom
 	_attack2("cs2_awp")
+	_attack2("cs2_awp")  # straight back in while the unscope is still easing out
+	_attack2("cs2_awp")
+	_attack2("cs2_awp")
+	await get_tree().create_timer(maxf(stat("cs2_awp", "zoom time 1"), 0.01) + 0.15).timeout
 	_speed("cs2_awp")
-	print("WTEST scope awp %s lvl2=%d off=%d fov_back=%s sens_back=%s overlay=%s speed=%d" % [s1, s2, _zoom, is_equal_approx(_base_fov, fov0), is_equal_approx(p.input.sensitivity, sens0), _scope_layer.visible, roundi(float(main.player.M["max_ground_speed"]) / u)])
-	print("WTEST alt kinds glock=%s famas=%s m4a1s=%s usp=%s aug=%s nova=%s r8=%s ak=%s" % [alt_kind("cs2_glock"), alt_kind("cs2_famas"), alt_kind("cs2_m4a1_silencer"), alt_kind("cs2_usp_silencer"), alt_kind("cs2_aug"), alt_kind("cs2_nova"), alt_kind("cs2_revolver"), alt_kind("cs2_ak47")])
-	print("WTEST silenced at spawn m4a1s=%s usp=%s mode=%d" % [_alt_on["cs2_m4a1_silencer"], _alt_on["cs2_usp_silencer"], _mode("cs2_m4a1_silencer")])
+	_check("scope_awp", lvl1 == 1 and lvl2 == 2 and _zoom == 0 and cone1 < unscoped and sens1 < sens0 and not _scope_layer.visible, "lvl1 cone %.2f (unscoped %.2f) sens %.3f speed %d, lvl2=%d, off=%d overlay=%s" % [cone1, unscoped, sens1, spd1, lvl2, _zoom, _scope_layer.visible])
+	_check("scope_fov_restored", is_equal_approx(p.cam.fov, fov0) and is_equal_approx(p.input.sensitivity, sens0), "fov %.3f -> %.3f after a fast re-scope, sens %.3f -> %.3f" % [fov0, p.cam.fov, sens0, p.input.sensitivity])
+	var kinds := [alt_kind("cs2_awp"), alt_kind("cs2_m4a1_silencer"), alt_kind("cs2_usp_silencer"), alt_kind("cs2_glock"), alt_kind("cs2_famas"), alt_kind("cs2_revolver"), alt_kind("cs2_ak47"), alt_kind("knife")]
+	_check("alt_kinds", kinds == ["scope", "silencer", "silencer", "burst", "burst", "revolver", "none", "stab"], "awp m4a1s usp glock famas r8 ak knife = %s" % str(kinds))
+	_check("silenced_at_spawn", _alt_on["cs2_m4a1_silencer"] and _alt_on["cs2_usp_silencer"] and _mode("cs2_m4a1_silencer") == 1, "m4a1s=%s usp=%s" % [_alt_on["cs2_m4a1_silencer"], _alt_on["cs2_usp_silencer"]])
+	# R8 primary: the hammer pull delays the round, letting go cancels it
+	slots["secondary"] = "cs2_revolver"
+	current = "secondary"
+	_next_fire = 0.0
+	var ck := float(X["revolver_cock"])
+	var h := [hammer(true, 10.0), hammer(true, 10.0 + ck * 0.9), hammer(true, 10.0 + ck + 0.001), hammer(true, 20.0), hammer(false, 20.0 + ck * 0.5), hammer(true, 20.0 + ck * 0.6), hammer(true, 20.0 + ck * 1.5)]
+	_check("r8_hammer", h == [false, false, true, false, false, false, false], "pull, early, after %.2f s, re-pull, let go, re-pull, still short = %s" % [ck, str(h)])
 	# burst: one pull of the Glock in burst mode fires burst_shots rounds
 	slots["secondary"] = "cs2_glock"
-	current = "secondary"
 	_alt_on["cs2_glock"] = true
 	ammo["cs2_glock"] = [20, 0]
 	_next_fire = 0.0
 	_shoot("cs2_glock", _now(), false)
 	while _burst_left > 0:
 		_shoot("cs2_glock", _burst_at, true)
-	print("WTEST burst glock rounds=%d" % (20 - int(ammo["cs2_glock"][0])))
+	_check("burst_glock", 20 - int(ammo["cs2_glock"][0]) == int(X["burst_shots"]), "rounds=%d" % (20 - int(ammo["cs2_glock"][0])))
 	_alt_on["cs2_glock"] = false
 	# shotgun: shell by shell, one per shell_each, fire breaks it off
 	slots["primary"] = "cs2_nova"
@@ -939,42 +1072,96 @@ func _selftest() -> void:
 	ammo["cs2_nova"] = [2, 10]
 	_next_fire = 0.0
 	reload()
-	var t0 := _now()
-	_reload_tick(t0 + float(X["shell_start"]) + 0.001)
+	_reload_tick(_now() + float(X["shell_start"]) + 0.001)
 	var after1: int = ammo["cs2_nova"][0]
 	_reload_tick(_shell_next + 0.001)
 	var after2: int = ammo["cs2_nova"][0]
 	_shoot("cs2_nova", _now(), false)
-	print("WTEST shells nova 2 -> %d -> %d, fire breaks off=%s clip=%d reserve=%d" % [after1, after2, _shell_next == 0.0, ammo["cs2_nova"][0], ammo["cs2_nova"][1]])
-	# penetration: two 8-unit walls 1 m apart far below the map, one bullet through both
-	var walls: Array = []
+	_check("shells_nova", after1 == 3 and after2 == 4 and _shell_next == 0.0 and int(ammo["cs2_nova"][0]) == 3 and int(ammo["cs2_nova"][1]) == 8, "2 -> %d -> %d, fire breaks off=%s, clip=%d reserve=%d" % [after1, after2, _shell_next == 0.0, ammo["cs2_nova"][0], ammo["cs2_nova"][1]])
+	# bodies far below the map: two 8-unit walls, a knife wall with a part behind it, a bot of two parts
+	var made: Array = []
 	for z in [0.0, -1.0]:
-		var sb := StaticBody3D.new()
-		var cs := CollisionShape3D.new()
-		var bx := BoxShape3D.new()
-		bx.size = Vector3(4, 4, 8 * u)
-		cs.shape = bx
-		sb.add_child(cs)
-		main.add_child(sb)
-		sb.global_position = Vector3(0, -900, z)
-		walls.append(sb)
+		made.append(_test_box(StaticBody3D.new(), Vector3(4, 4, 8 * u), Vector3(0, -900, z)))
+	var kwall := _test_box(StaticBody3D.new(), Vector3(2, 2, 2 * u), Vector3(0, -1000, -0.4))
+	var kpart := _test_box(TestPart.new(), Vector3(0.4, 0.4, 0.2), Vector3(0, -1000, -0.75))
+	var hpart := _test_box(TestPart.new(), Vector3(0.3, 0.3, 0.3), Vector3(0.1, -1050, -0.95))
+	var bot := Node3D.new()
+	main.add_child(bot)
+	var leg := _test_box(TestPart.new(), Vector3(0.3, 0.3, 4 * u), Vector3(0, -1100, -3)) as TestPart
+	var chest := _test_box(TestPart.new(), Vector3(0.3, 0.3, 0.3), Vector3(1, -1100, -3)) as TestPart
+	leg.group = "legs"
+	for tp in [leg, chest]:
+		(tp as TestPart).unit = bot
+	made += [kwall, kpart, hpart, bot, leg, chest]
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	var space: PhysicsDirectSpaceState3D = main.player.get_world_3d().direct_space_state
 	var ex: Array[RID] = [main.player.get_rid()]
-	var e1 := _exit(space, walls[0], Vector3(0, -900, 4 * u), Vector3(0, 0, -1), ex)
+	var e1 := _exit(space, made[0], Vector3(0, -900, 4 * u), Vector3(0, 0, -1), ex)
 	var thick := (e1["position"] as Vector3).distance_to(Vector3(0, -900, 4 * u)) / u if not e1.is_empty() else -1.0
 	var n0 := _decals.size()
-	_trace("cs2_ak47", Vector3(0, -900, 3), Vector3(0, 0, -1), 50.0, stat("cs2_ak47", "damage"), {})
-	print("WTEST penetration exit_units=%.1f surfaces_marked=%d" % [thick, _decals.size() - n0])
-	for w in walls:
+	_trace("cs2_ak47", Vector3(0, -900, 3), Vector3(0, 0, -1), 50.0, stat("cs2_ak47", "damage"), [])
+	_check("penetration", absf(thick - 8.0) < 1.0 and _decals.size() - n0 == 4, "exit_units=%.1f surfaces_marked=%d" % [thick, _decals.size() - n0])
+	# knife: a wall in front stops the swing; the hull finds a body only when the ray reached nothing and the eye sees it
+	var kreach := float(X["knife_slash_range"]) * u
+	var through := knife_target(space, Vector3(0, -1000, 0), Vector3(0, 0, -1), kreach, ex)
+	var hull_hit := knife_target(space, Vector3(0, -1050, 0), Vector3(0, 0, -1), kreach, ex)
+	var tp_wall: Object = through.get("collider")
+	_check("knife_wall", tp_wall == kwall and not tp_wall.has_method("hit") and hull_hit.get("collider") == hpart, "through a wall -> %s, hull past the reach -> %s" % [tp_wall, hull_hit.get("collider")])
+	# shotgun pellets: each lands on its own part with its own hitgroup; one bullet hits a target once
+	var hits: Array = []
+	for at in [Vector3(0, -1100, 0), Vector3(1, -1100, 0), Vector3(1, -1100, 0)]:
+		_trace("cs2_nova", at, Vector3(0, 0, -1), 10.0, 26.0, hits)
+	var line_hits: Array = []
+	var chest_behind := _test_box(TestPart.new(), Vector3(0.3, 0.3, 0.3), Vector3(0, -1100, -3.6)) as TestPart
+	chest_behind.unit = bot
+	made.append(chest_behind)
+	await get_tree().physics_frame
+	_trace("cs2_ak47", Vector3(0, -1100, 0), Vector3(0, 0, -1), 10.0, 36.0, line_hits)
+	_deliver(hits)
+	_check("pellets_per_part", leg.got.size() == 1 and chest.got.size() == 2 and String(leg.got[0][2]) == "legs" and String(chest.got[0][2]) == "chest" and line_hits.size() == 1, "legs got %d, chest got %d, a bullet through leg into chest of one bot hit %d time(s)" % [leg.got.size(), chest.got.size(), line_hits.size()])
+	# armor: CS's ratio split
+	var armored := TestPart.new()
+	armored.armor = 100.0
+	var dealt := _armored(armored, 36.0, false, "cs2_ak47")
+	var want_h := 36.0 * stat("cs2_ak47", "armor ratio") * float(X["armor_ratio_scale"])
+	_check("armor", is_equal_approx(dealt, want_h) and is_equal_approx(armored.armor, 100.0 - (36.0 - want_h) * float(X["armor_bonus"])), "36 -> %.2f health, armor %.2f" % [dealt, armored.armor])
+	armored.free()
+	for w in made:
 		(w as Node).queue_free()
 	# backstab: behind a +Z-facing target vs in front of it
 	var dummy := Node3D.new()
 	main.add_child(dummy)
 	dummy.global_position = Vector3(0, -900, 0)
-	print("WTEST backstab behind=%s front=%s" % [backstab(dummy, Vector3(0, -900, -1)), backstab(dummy, Vector3(0, -900, 1))])
+	_check("backstab", backstab(dummy, Vector3(0, -900, -1)) and not backstab(dummy, Vector3(0, -900, 1)), "behind / front")
 	dummy.queue_free()
+	# viewmodel: every mesh of the rig sits nearer the eye than any wall the hull lets the player touch
+	var vm: Viewmodel = main.viewmodel
+	var far := 0.0
+	var body_bone := RegEx.create_from_string("^(head|neck|spine|pelvis|leg|foot|ankle|toe|clavicle|root|wpnPivot)")  # body bones the arms mesh binds but never draws
+	var inv := p.cam.global_transform.affine_inverse()
+	for mi in vm._all(vm, "MeshInstance3D"):
+		var m3 := mi as MeshInstance3D
+		var sk3 := m3.get_node_or_null(m3.skeleton) as Skeleton3D
+		if m3.skin and sk3:  # a skinned mesh: the posed bones it draws (its own aabb is the bind pose)
+			for bi in m3.skin.get_bind_count():
+				var bone := m3.skin.get_bind_bone(bi)
+				if bone < 0:
+					bone = sk3.find_bone(m3.skin.get_bind_name(bi))
+				if bone >= 0 and not body_bone.search(sk3.get_bone_name(bone)):
+					var v := inv * sk3.global_transform * sk3.get_bone_global_pose(bone).origin
+					far = maxf(far, v.length())
+		else:
+			var bx := m3.get_aabb()
+			for k in 8:
+				far = maxf(far, (inv * m3.global_transform * bx.get_endpoint(k)).length())
+	var wall := float(p.M["hull_width"]) * 0.5
+	_check("viewmodel_inside_hull", far > 0.0 and far < wall and p.cam.near < far, "rig reaches %.3f m from the eye, nearest wall %.3f m, near plane %.4f m" % [far, wall, p.cam.near])
+	# items_game reader: platform conditionals and escapes as prep reads them
+	_ig = '"x" { "a" "1" [$X360] "a" "2" [$WIN32] "b" "say \\"hi\\"" "c" "3" [!$WIN32] "blk" [$X360] { "z" "9" } "d" [$WIN32||$OSX] { "y" "8" } }'
+	var kv := _kv(_ig.find("{"))
+	_ig = ""
+	_check("items_game_reader", kv.get("a") == "2" and kv.get("b") == 'say "hi"' and not kv.has("c") and not kv.has("blk") and kv.get("d", {}).get("y") == "8", str(kv))
 	slots["primary"] = keep_slot
 	slots["secondary"] = _first_ready(["cs2_usp_silencer", "cs2_glock", "cs2_deagle"], "pistol")
 	current = keep_cur
@@ -982,11 +1169,14 @@ func _selftest() -> void:
 	_aim = Vector2.ZERO
 	_aim_vel = Vector2.ZERO
 	_view = Vector2.ZERO
-	_recoil_index = 0.0
+	_deploy_reset()
 	_last_shot = -10.0
 	_next_fire = 0.0
 	_speed(held())
 	_hud()
+	print("WTEST weapons checks=%d failed=%d" % [_checks, _fails])
+	if _fails > 0:
+		get_tree().quit(1)
 
 ## Just the prefab chain of one items_game entry: its "prefab" parents first, its own attributes on top.
 func _ig_chain(name: String, seen: Dictionary) -> Dictionary:
@@ -1002,6 +1192,8 @@ func _ig_chain(name: String, seen: Dictionary) -> Dictionary:
 		for k in at:
 			if not (at[k] is Dictionary):
 				out[k] = at[k]
+			elif at[k].has("value") and not (at[k]["value"] is Dictionary):
+				out[k] = at[k]["value"]  # block form: "damage" { "attribute_class" .. "value" "36" }
 	return out
 
 ## The block of a key in items_game's prefabs section (the first "key" followed by "{").
@@ -1019,13 +1211,17 @@ func _ig_block(name: String) -> Dictionary:
 		i = _ig.find(needle, j)
 	return {}
 
-## KeyValues block starting at the "{" at index i: nested dicts, "//" comments and [$PLATFORM] tags skipped.
+## KeyValues block starting at the "{" at index i, read the way prep/items_game.py reads it: nested dicts,
+## "//" comments skipped, escapes decoded, and [$PLATFORM] conditionals evaluated for Windows (a false one
+## after a value drops that value, after a key it drops the block).
 func _kv(i: int) -> Dictionary:
 	var root := {}
 	var stack: Array = []
 	var cur := root
 	var key := ""
 	var has_key := false
+	var undo: Array = []  # [block, key, had it, old value] of the last key/value, for a trailing conditional
+	var skip := false     # the next block sits behind a false conditional
 	var n := _ig.length()
 	i += 1
 	while i < n:
@@ -1037,41 +1233,79 @@ func _kv(i: int) -> Dictionary:
 			i = n if e < 0 else e
 		elif ch == "[":
 			var e := _ig.find("]", i)
-			i = n if e < 0 else e + 1
+			e = n if e < 0 else e
+			var cond := _ig.substr(i + 1, e - i - 1)
+			i = e + 1
+			if has_key:
+				skip = not kv_cond(cond)
+			elif not undo.is_empty():
+				if not kv_cond(cond):
+					var blk: Dictionary = undo[0]
+					if undo[2]:
+						blk[undo[1]] = undo[3]
+					else:
+						blk.erase(undo[1])
+				undo = []
 		elif ch == "{":
-			var child: Dictionary = cur.get(key, {}) if cur.get(key) is Dictionary else {}
-			cur[key] = child
+			var child := {}
+			if not skip:
+				child = cur.get(key) if cur.get(key) is Dictionary else {}
+				cur[key] = child
 			stack.append(cur)
 			cur = child
 			has_key = false
+			undo = []
+			skip = false
 			i += 1
 		elif ch == "}":
 			if stack.is_empty():
 				return root
 			cur = stack.pop_back()
 			has_key = false
+			undo = []
+			skip = false
 			i += 1
 		else:
 			var tok := ""
 			if ch == "\"":
-				var e := _ig.find("\"", i + 1)
-				if e < 0:
-					return root
-				tok = _ig.substr(i + 1, e - i - 1)
-				i = e + 1
+				var j := i + 1
+				while j < n and _ig[j] != "\"":
+					if _ig[j] == "\\" and j + 1 < n:
+						tok += String(KV_ESC.get(_ig[j + 1], "\\" + _ig[j + 1]))
+						j += 2
+					else:
+						tok += _ig[j]
+						j += 1
+				i = j + 1
 			else:
 				var e := i
-				while e < n and not " \t\r\n{}\"".contains(_ig[e]):
+				while e < n and not " \t\r\n{}\"[".contains(_ig[e]):
 					e += 1
 				tok = _ig.substr(i, e - i)
 				i = e
 			if not has_key:
 				key = tok
 				has_key = true
+				undo = []
 			else:
+				undo = [cur, key, cur.has(key), cur.get(key)]
 				cur[key] = tok
 				has_key = false
+				skip = false
 	return root
+
+## A KeyValues conditional ($WIN32, !$X360, $WIN32||$OSX, $WINDOWS&&!$X360) on the Windows build.
+static func kv_cond(expr: String) -> bool:
+	for alt in expr.split("||"):
+		var ok := true
+		for t in alt.split("&&"):
+			var tt := t.strip_edges()
+			var neg := tt.begins_with("!")
+			if (KV_DEFINES.has(tt.trim_prefix("!").strip_edges().to_upper())) == neg:
+				ok = false
+		if ok:
+			return true
+	return false
 
 ## Source's uniform random stream (vstdlib random.cpp, Numerical Recipes ran1): a weapon's recoil seed gives
 ## the same variances on every run and every machine.

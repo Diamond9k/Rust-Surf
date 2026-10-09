@@ -1,8 +1,9 @@
 """RustSurf prep: run once by Melty before the first start.
 Reads every content.json row from the Rust and CS2 installs of the player into --out.
 usage: prep.py --rust <Rust dir> --cs2 <CS2 dir> --out <data dir> --tools <dir> --version <v>
-Writes done-<version>.txt only when every content.json row and every weapons.json weapon is in place;
-otherwise exits 1 with the reasons on screen, in prep.log and in prep_status.json (the game shows them)."""
+Writes done-<version>.txt only when every content.json row and every weapons.json weapon is in place, each
+file checked whole, and every weapon has its damage and fire rate from the player's CS2 files; otherwise
+exits 1 with the reasons on screen, in prep.log and in prep_status.json (the game shows them)."""
 import os, sys, json, glob, argparse, time, traceback
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -45,7 +46,7 @@ def rust_step(a):
         files = material_files(m, tex_dir, "", 2048)
         for slot, suffix in (("albedo", "MainTex"), ("normal", "BumpMap")):
             want = os.path.join(out, r["out"].replace("{MainTex,BumpMap}", suffix))
-            if slot in files and not os.path.exists(want):
+            if slot in files and not prep_cs2.file_ok(want):
                 os.replace(os.path.join(tex_dir, files[slot]), want)
         LOG("texture row %s ok" % r["id"])
     # audio rows
@@ -84,25 +85,42 @@ def content_missing(out):
     return miss
 
 
+def scene_missing(out):
+    """Launch Site pieces the placements file names but that are not whole: each mesh glb (with a mesh and
+    every texture it names) and each material texture. Empty when there is no placements file yet."""
+    p = os.path.join(out, "rust", "launch_site_placements.json")
+    if not prep_cs2.file_ok(p):
+        return []
+    with open(p, encoding="utf-8") as f:
+        sc = json.load(f)
+    miss = sorted({m for m in (x["mesh"] for x in sc.get("placements", []))
+                   if not prep_cs2.glb_ok(os.path.join(out, "rust", "mesh", m + ".glb"), "meshes")})
+    for slots in sc.get("materials", {}).values():
+        miss += sorted(fn for fn in slots.values() if not prep_cs2.png_ok(os.path.join(out, "rust", "tex", fn)))
+    return miss
+
+
 def finish(a, problems, warnings, log):
     """done-<version>.txt only when nothing essential is missing; prep_status.json either way, which the
     game shows on its error panel (Main._report), so a broken install never looks like a working one."""
-    status = {"version": a.version, "ok": not problems, "problems": problems, "warnings": warnings,
-              "player": ["Prep: " + p for p in problems] + ["Prep warning: " + w for w in warnings]}
-    with open(os.path.join(a.out, "prep_status.json"), "w", encoding="utf-8") as f:
-        json.dump(status, f, indent=1)
-    done = os.path.join(a.out, "done-%s.txt" % a.version)
+    player = ["Prep: " + p for p in problems] + ["Prep warning: " + w for w in warnings]
     if problems:
-        if os.path.exists(done):
-            os.remove(done)
+        player.append("Prep: setup is not done, so Melty runs it again on the next start; details in data/prep.log")
+    status = {"version": a.version, "ok": not problems, "problems": problems, "warnings": warnings, "player": player}
+    done = os.path.join(a.out, "done-%s.txt" % a.version)
+    if problems and os.path.exists(done):
+        os.remove(done)  # first, so no crash below can leave a stale done file next to a failed run
+    prep_cs2.write_json(os.path.join(a.out, "prep_status.json"), status)
+    if problems:
         log("")
         log("RUST SURF SETUP DID NOT FINISH (%d problem(s)); Melty runs it again on the next start:" % len(problems))
         for p in problems:
             log("  - " + p)
         log("Details: " + os.path.join(a.out, "prep.log"))
         return 1
-    with open(done, "w", encoding="utf-8") as f:
+    with open(done + ".tmp", "w", encoding="utf-8") as f:
         f.write("ok %s warnings=%s\n" % (a.version, warnings))
+    os.replace(done + ".tmp", done)
     log("RUST SURF SETUP OK (%s)%s" % (a.version, "; warnings: " + "; ".join(warnings) if warnings else ""))
     return 0
 
@@ -142,6 +160,10 @@ def main(argv=None, steps=None, runner=None):
             if missing:
                 both("content rows missing: " + ", ".join(missing))
                 problems.append("content not extracted: " + prep_cs2.short(missing))
+            sm = scene_missing(a.out)
+            if sm:
+                both("Launch Site pieces not whole: " + ", ".join(sm))
+                problems.append("%d Launch Site mesh(es)/texture(s) did not extract whole: %s (verify Rust's files in Steam)" % (len(sm), prep_cs2.short(sm)))
             both("done in %.0fs" % (time.time() - t))
         except Exception as e:
             both(traceback.format_exc())

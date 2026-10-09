@@ -3,7 +3,7 @@ import os, sys, shutil, stat, tempfile, unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE)); sys.path.insert(0, HERE)
 import prep_cs2
-from fakevrf import FakeVRF, glb_bytes, wav_bytes
+from fakevrf import FakeVRF, glb_bytes, wav_bytes, png_bytes
 
 prep_cs2.LOG = lambda s: None
 CFG = {"vrf_batch_files": 3, "vrf_batch_chars": 10000, "vrf_retries": 2, "vrf_timeout_s": 5}
@@ -37,6 +37,7 @@ class Helpers(Tmp):
         self.assertEqual(prep_cs2.outputs("m/x.vmdl_c"), ["m/x.glb"])
         self.assertEqual(prep_cs2.outputs("a/x.vnmclip_c"), ["a/x.glb"])
         self.assertEqual(prep_cs2.outputs("scripts/items/items_game.txt"), ["scripts/items/items_game.txt"])
+        self.assertEqual(prep_cs2.outputs("scripts/weapons.vdata_c"), ["scripts/weapons.vdata", "scripts/weapons.vdata_c"])
 
     def test_file_ok(self):
         self.assertTrue(prep_cs2.file_ok(self.put("a.glb", glb_bytes())))
@@ -47,8 +48,46 @@ class Helpers(Tmp):
         self.assertTrue(prep_cs2.file_ok(self.put("a.mp3", b"\xff\xfb\x90\xc4\0\0")))
         self.assertTrue(prep_cs2.file_ok(self.put("b.mp3", b"ID3\x04\0")))
         self.assertFalse(prep_cs2.file_ok(self.put("c.mp3", b"<html>")))
-        self.assertTrue(prep_cs2.file_ok(self.put("a.txt", b"x")))
+        self.assertTrue(prep_cs2.file_ok(self.put("a.txt", b'"a" { "b" "c" }')))
+        self.assertFalse(prep_cs2.file_ok(self.put("b.txt", b'"a" { "b" "c"')))       # cut before its closing brace
+        self.assertFalse(prep_cs2.file_ok(self.put("c.txt", b'"a" { "b" "c }')))      # cut inside a string
+        self.assertTrue(prep_cs2.file_ok(self.put("a.vdata", b'<!-- kv3 -->\n{ a = 1 }')))
+        self.assertFalse(prep_cs2.file_ok(self.put("b.vdata", b'<!-- kv3 -->\n{ a = { b = 1 }')))
         self.assertFalse(prep_cs2.file_ok(os.path.join(self.d, "nope.glb")))
+
+    def test_glb_deep_check(self):
+        self.assertTrue(prep_cs2.glb_ok(self.put("m.glb", glb_bytes("mesh")), "meshes"))
+        self.assertFalse(prep_cs2.glb_ok(self.put("n.glb", glb_bytes("none")), "meshes"))       # a model with no mesh
+        self.assertTrue(prep_cs2.glb_ok(self.put("c.glb", glb_bytes("clip")), "animations"))
+        self.assertFalse(prep_cs2.glb_ok(self.put("d.glb", glb_bytes("mesh")), "animations"))  # a clip with no animation
+        g = glb_bytes("mesh")
+        self.assertFalse(prep_cs2.glb_ok(self.put("j.glb", g[:20] + b"x" + g[21:])))          # JSON chunk does not parse
+        short_bin = g.replace(b'"byteLength": 64', b'"byteLength": 99')
+        self.assertFalse(prep_cs2.glb_ok(self.put("b.glb", short_bin)))                       # BIN shorter than buffer 0
+        self.assertFalse(prep_cs2.glb_ok(self.put("t.glb", glb_bytes("mesh", ["t_color.png"])), "meshes"))  # texture missing
+        self.put("t_color.png", png_bytes())
+        self.assertTrue(prep_cs2.glb_ok(os.path.join(self.d, "t.glb"), "meshes"))
+        bad = bytearray(png_bytes())
+        bad[30] ^= 0xFF
+        self.put("t_color.png", bytes(bad))                                                   # garbled: a chunk CRC fails
+        self.assertFalse(prep_cs2.glb_ok(os.path.join(self.d, "t.glb"), "meshes"))
+
+    def test_png_check(self):
+        self.assertTrue(prep_cs2.png_ok(self.put("a.png", png_bytes())))
+        self.assertFalse(prep_cs2.png_ok(self.put("b.png", png_bytes()[:-12])))  # no IEND
+        self.assertFalse(prep_cs2.png_ok(self.put("c.png", png_bytes() + b"x")))  # bytes after IEND
+        self.assertFalse(prep_cs2.png_ok(self.put("d.png", b"GIF89a")))
+
+    def test_real_vrf_output_passes(self):
+        """VRF 20 exports of the arms, knife and knife clips from a real CS2 install, when this machine has them."""
+        data = os.environ.get("RS_DATA", "")
+        cs2 = os.path.join(data, "cs2")
+        if not os.path.isdir(cs2):
+            self.skipTest("set RS_DATA to an extracted data folder")
+        rows = [r for r in prep_cs2.sheet("content")["rows"] if r["game"] == "cs2" and r["kind"] in ("model", "animation")]
+        self.assertGreater(len(rows), 0)
+        for r in rows:
+            self.assertTrue(prep_cs2.present(cs2, r["source"].split(" ")[0]), r["id"])
 
     def test_batches_cap_count_and_chars(self):
         b = list(prep_cs2.batches(["x" * 10] * 7, 3, 10000))

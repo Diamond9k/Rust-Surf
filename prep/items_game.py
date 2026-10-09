@@ -20,8 +20,9 @@ def cond_true(expr):
     return any(all(term(t) for t in alt.split("&&")) for alt in expr.split("||"))
 
 
-def tokens(text):
-    """("{",) ("}",) ("s", string) ("c", conditional) from KeyValues text."""
+def tokens(text, strict=False):
+    """("{",) ("}",) ("s", string) ("c", conditional) from KeyValues text. strict: an unterminated string
+    or conditional raises ValueError instead of running to the end of the text."""
     i, n = 0, len(text)
     while i < n:
         c = text[i]
@@ -41,10 +42,14 @@ def tokens(text):
                     buf.append(ESCAPES.get(text[j + 1], "\\" + text[j + 1])); j += 2
                 else:
                     buf.append(text[j]); j += 1
+            if strict and j >= n:
+                raise ValueError("unterminated string")
             yield ("s", "".join(buf))
             i = j + 1
         elif c == "[":
             j = text.find("]", i)
+            if strict and j < 0:
+                raise ValueError("unterminated conditional")
             j = n if j < 0 else j
             yield ("c", text[i + 1:j])
             i = j + 1
@@ -96,6 +101,26 @@ def parse(text):
 
 
 _NONE = object()
+
+
+def whole(path):
+    """True when the file is complete KeyValues text: at least one block, every brace and string closed
+    (an export cut short parses into a partial tree, so prep_cs2.file_ok asks this first)."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            text = f.read()
+        depth, blocks = 0, 0
+        for t in tokens(text, strict=True):
+            if t[0] == "{":
+                depth += 1
+                blocks += 1
+            elif t[0] == "}":
+                depth -= 1
+                if depth < 0:
+                    return False
+        return depth == 0 and blocks > 0
+    except (OSError, ValueError):
+        return False
 
 
 def _attrs(block):

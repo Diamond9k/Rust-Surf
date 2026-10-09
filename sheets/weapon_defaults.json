@@ -446,6 +446,13 @@
    "verified": "unverified threshold"
   },
   {
+   "id": "revolver_cock",
+   "value": 0.2,
+   "used_in": "R8 Revolver primary: seconds attack is held (hammer pull) before the round fires; letting go cancels",
+   "source": "mashup estimate of CS2's R8 hammer delay (round 1 critics: about 0.2 s)",
+   "verified": "unverified: CS2 value not checked"
+  },
+  {
    "id": "zoom_sensitivity_ratio",
    "value": 1.0,
    "used_in": "scoped mouse sensitivity = sensitivity x ratio x zoom fov / 90",
@@ -496,10 +503,10 @@
   },
   {
    "id": "pen_chunk",
-   "value": 0.15,
+   "value": 0.16,
    "used_in": "share of current damage lost on every penetration",
-   "source": "CS:GO HandleBulletPenetration",
-   "verified": "unverified for CS2"
+   "source": "CS:GO HandleBulletPenetration flDamLostPercent 0.16 (0.05 for grates and glass, not modelled)",
+   "verified": "unverified: from memory of the CS:GO SDK, not checked against a file; CS2 not checked"
   },
   {
    "id": "pen_mod_world",
@@ -647,6 +654,13 @@
    "used_in": "shot sound volume",
    "source": "mashup",
    "verified": "mashup choice, matches earlier builds"
+  },
+  {
+   "id": "viewmodel_shrink",
+   "value": 0.15,
+   "used_in": "Viewmodel.gd: the rig is drawn this many times smaller and closer (same projection) and the camera near plane scales with it, so walls never cut the arms or gun",
+   "source": "mashup: stands in for CS2's separate viewmodel pass",
+   "verified": "mashup choice; checked 2026-10-09: start/sun renders unchanged, --wtest viewmodel_inside_hull keeps the drawn rig nearer than the player hull lets a wall come"
   }
  ]
 }

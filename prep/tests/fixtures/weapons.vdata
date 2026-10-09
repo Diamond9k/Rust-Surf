@@ -1,0 +1,54 @@
+<!-- kv3 encoding:text:version{e21c7f3c-8a33-41c5-9977-a76d3a32aa0d} format:generic:version{7412167c-06e9-4698-aff2-e63eb59037e7} -->
+// Synthetic weapons.vdata for prep/tests. Written by hand, not copied from CS2: the layout (entries keyed by
+// weapon name, [primary, alt] pairs, a _base entry, typed resource values) is a guess at what VRF writes for
+// a decompiled CS2 .vdata_c and is unverified. The numbers are test values, not CS2 facts.
+{
+	generic_data_type = "CCSWeaponBaseVData"
+	/* a block comment
+	   spanning lines { not a block } */
+	weapon_rifle_base =
+	{
+		_class = "CCSWeaponBaseVData"
+		m_bIsFullAuto = true
+		m_flHeadshotMultiplier = 4.0
+		m_flPenetration = 2.0
+		m_nNumBullets = 1
+	}
+	weapon_ak47 =
+	{
+		_class = "CCSWeaponBaseVData"
+		_base = "weapon_rifle_base"
+		m_szModel_AG2 = resource_name:"weapons/models/ak47/weapon_rif_ak47_ag2.vmdl"
+		m_sSilencedSound = soundevent:""
+		m_nDamage = 36
+		m_iMaxClip1 = 30
+		m_flCycleTime =
+		[
+			0.1,
+			0.1,
+		]
+		m_flMaxSpeed = { m_flValues = [ 215.0, 215.0 ] }
+		m_flSpread = [ 0.6, 0.6 ]
+		m_flInaccuracyFire = [ 7.8, 7.8 ]
+		m_flRecoilMagnitude = [ 30.0, 30.0 ]
+		m_nRecoilSeed = 223
+		m_flRangeModifier = 0.98
+		m_szDescription = """A line with "quotes"
+and a second line"""
+		m_vecMuzzle = [ 1.5e-1, -2, 3 ]
+		m_blob = #[ 00 01 02 ]
+		m_pNull = null
+	}
+	weapon_glock =
+	{
+		_class = "CCSWeaponBaseVData"
+		m_bIsFullAuto = false
+		m_nDamage = 30
+		m_flCycleTime = [ 0.15, 0.5 ]
+		m_iMaxClip1 = 20
+	}
+	m_nested =
+	{
+		weapon_taser = { m_nDamage = 500 m_flCycleTime = 0.15 }
+	}
+}

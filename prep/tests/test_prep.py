@@ -5,26 +5,34 @@ import os, sys, io, json, glob, shutil, tempfile, unittest, contextlib
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE)); sys.path.insert(0, HERE)
 import prep, prep_cs2
-from fakevrf import FakeVRF, glb_bytes, wav_bytes
+from fakevrf import FakeVRF, glb_bytes, wav_bytes, png_bytes
 
 WEAPONS = prep_cs2.weapon_rows(prep_cs2.sheet("weapons"))
+VDATA = prep_cs2.settings()["weapons_vdata"]
+FULL = '"damage" "30" "cycletime" "0.1" "primary clip size" "30" "spread" "0.6" "inaccuracy fire" "7" "recoil magnitude" "30" "max player speed" "215"'
 
 
 def items_game_for(rows, skip=()):
     """An items_game.txt naming every sheet weapon through a two-level prefab chain."""
-    pre = "".join('"%s_prefab" { "prefab" "rifle" "attributes" { "damage" "30" "cycletime" "0.1" } }\n' % w["item"] for w in rows)
+    pre = "".join('"%s_prefab" { "prefab" "rifle" "attributes" { %s } }\n' % (w["item"], FULL) for w in rows)
     items = "".join('"%d" { "name" "%s" "prefab" "%s_prefab" }\n' % (i, w["item"], w["item"]) for i, w in enumerate(rows) if w["item"] not in skip)
     return '"items_game" { "prefabs" { "rifle" { "attributes" { "is full auto" "1" } }\n%s }\n"items" {\n%s } }\n' % (pre, items)
 
 
 def fake_rust(a):
-    """Stands in for rust_step (UnityPy is not in the test environment): writes every rust row's output."""
+    """Stands in for rust_step (UnityPy is not in the test environment): writes every rust row's output,
+    and a placements file naming one mesh (whose glb names a texture) and one material."""
     for r in prep.rows(game="rust"):
         for p in prep_cs2.expand(r["out"].split(" ")[0]):
             p = os.path.join(a.out, p.replace("*", "fake"))
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "wb") as f:
-                f.write(glb_bytes() if p.endswith(".glb") else wav_bytes() if p.endswith(".wav") else b"x")
+                f.write(glb_bytes("mesh", ["../tex/fake_albedo.png"]) if p.endswith(".glb") else wav_bytes() if p.endswith(".wav")
+                        else png_bytes() if p.endswith(".png") else b"x")
+    with open(os.path.join(a.out, "rust", "tex", "fake_albedo.png"), "wb") as f:
+        f.write(png_bytes())
+    prep_cs2.write_json(os.path.join(a.out, "rust", "launch_site_placements.json"),
+                        {"prefab": "x", "placements": [{"mesh": "fake", "pos": [0, 0, 0]}], "materials": {"fake": {"albedo": "fake_albedo.png"}}})
 
 
 class Prep(unittest.TestCase):
@@ -91,7 +99,7 @@ class Prep(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertTrue(self.done())
         asked = {f for files, _ in v2.calls for f in files}
-        self.assertEqual(asked, {w["clips"]["idle"]})
+        self.assertEqual(asked, {w["clips"]["idle"], prep_cs2.ITEMS_GAME, VDATA})  # the stats files are always fresh
 
     def test_items_game_missing_blocks_done(self):
         code, out = self.main(FakeVRF(items_game_for(WEAPONS), bad=[prep_cs2.ITEMS_GAME]))
@@ -101,13 +109,48 @@ class Prep(unittest.TestCase):
     def test_weapon_not_in_items_game_blocks_done(self):
         code, out = self.main(FakeVRF(items_game_for(WEAPONS, skip=["weapon_awp"]).replace('"weapon_awp_prefab"', '"x_prefab"')))
         self.assertEqual(code, 1)
-        self.assertTrue(any("no item for: weapon_awp" in p for p in self.status()["problems"]), self.status())
+        self.assertTrue(any("no weapon entry for weapon_awp" in p for p in self.status()["problems"]), self.status())
 
-    def test_thin_stats_warn_but_finish(self):
-        ig = items_game_for(WEAPONS).replace('"weapon_deagle_prefab" { "prefab" "rifle" "attributes" { "damage" "30" "cycletime" "0.1" } }', '"weapon_deagle_prefab" { }')
-        code, out = self.main(FakeVRF(ig))
+    def thin(self):
+        return items_game_for(WEAPONS).replace('"weapon_deagle_prefab" { "prefab" "rifle" "attributes" { %s } }' % FULL, '"weapon_deagle_prefab" { }')
+
+    def test_missing_damage_blocks_done(self):
+        """No damage/cycletime for a gun is a problem, not a quiet fall back to class averages."""
+        code, out = self.main(FakeVRF(self.thin()))
+        self.assertEqual(code, 1, out)
+        self.assertFalse(self.done())
+        p = self.status()["problems"]
+        self.assertTrue(any("weapon_deagle (damage/cycletime)" in x and "guessed numbers" in x for x in p), p)
+
+    def test_vdata_fills_what_items_game_lacks(self):
+        vd = '<!-- kv3 encoding:text:version{e21c7f3c} format:generic:version{7412167c} -->\n{ weapon_deagle = { m_nDamage = 53 m_flCycleTime = [ 0.225, 0.225 ] } }'
+        code, out = self.main(FakeVRF(self.thin(), vdata=vd))
         self.assertEqual(code, 0, out)
-        self.assertTrue(any("weapon_deagle" in w for w in self.status()["warnings"]))
+        with open(os.path.join(self.out, "cs2", "weapon_stats.json"), encoding="utf-8") as f:
+            st = json.load(f)
+        self.assertEqual((st["weapon_deagle"]["damage"], st["weapon_deagle"]["cycletime"], st["weapon_deagle"]["cycletime alt"]), ("53", "0.225", "0.225"))
+        self.assertEqual(st["weapon_deagle"]["_source"], "weapons.vdata")  # its items_game entry had no attributes
+        self.assertEqual(st["weapon_ak47"]["damage"], "30")  # items_game.txt wins where it has the value
+        self.assertEqual(st["weapon_ak47"]["_source"], "items_game.txt")
+        self.assertTrue(any("weapon_deagle" in w for w in self.status()["warnings"]))  # clip/spread still class averages
+
+    def test_stale_items_game_is_replaced(self):
+        """A CS2 update: an earlier export is never reused for the stats."""
+        self.main(FakeVRF(items_game_for(WEAPONS)))
+        code, out = self.main(FakeVRF(self.thin()))
+        self.assertEqual(code, 1, out)
+
+    def test_cut_items_game_is_not_read(self):
+        ig = items_game_for(WEAPONS)
+        code, out = self.main(FakeVRF(ig[:len(ig) // 2], bad=()))
+        self.assertEqual(code, 1, out)
+        self.assertTrue(any("did not export or is damaged" in p for p in self.status()["problems"]), self.status())
+
+    def test_broken_texture_blocks_done(self):
+        w = WEAPONS[2]
+        code, out = self.main(FakeVRF(items_game_for(WEAPONS), badtex=[w["model"]]))
+        self.assertEqual(code, 1, out)
+        self.assertTrue(any(w["id"] + " (model)" in p for p in self.status()["problems"]), self.status())
 
     def test_rust_content_missing_blocks_done(self):
         def half_rust(a):
@@ -116,6 +159,25 @@ class Prep(unittest.TestCase):
         code, out = self.main(FakeVRF(items_game_for(WEAPONS)), steps=(prep.cs2_step, half_rust))
         self.assertEqual(code, 1)
         self.assertTrue(any("scene_launch_site" in p for p in self.status()["problems"]))
+
+    def test_broken_scene_piece_blocks_done(self):
+        def cut_texture(a):
+            fake_rust(a)
+            p = os.path.join(a.out, "rust", "tex", "fake_albedo.png")
+            with open(p, "r+b") as f:
+                f.seek(20)
+                f.write(b"garbled")  # same size, a chunk CRC no longer matches
+        code, out = self.main(FakeVRF(items_game_for(WEAPONS)), steps=(prep.cs2_step, cut_texture))
+        self.assertEqual(code, 1, out)
+        p = self.status()["problems"]
+        self.assertTrue(any("Launch Site mesh(es)/texture(s) did not extract whole: fake, fake_albedo.png" in x for x in p), p)
+
+    def test_local_data_folder_scene_is_whole(self):
+        """The real local prep output, when this machine has one (never in the repo)."""
+        data = os.environ.get("RS_DATA", "")
+        if not os.path.isdir(os.path.join(data, "rust")):
+            self.skipTest("set RS_DATA to an extracted data folder")
+        self.assertEqual(prep.scene_missing(data), [])
 
     def test_no_rust_install_says_so(self):
         code, out = self.main(FakeVRF(items_game_for(WEAPONS)), steps=(prep.cs2_step, prep.rust_step))

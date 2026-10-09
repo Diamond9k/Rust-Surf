@@ -117,6 +117,6 @@ def extract_scene(env, out_dir, max_tex):
             write_mesh_glb(obj.read(), mats, materials, mesh_dir, name)
         except Exception as e:
             LOG("  mesh %s failed: %r" % (name, e))
-    json.dump({"prefab": PREFAB, "placements": placements, "materials": materials},
-              open(os.path.join(out_dir, "rust", "launch_site_placements.json"), "w"))
+    from prep_cs2 import write_json
+    write_json(os.path.join(out_dir, "rust", "launch_site_placements.json"), {"prefab": PREFAB, "placements": placements, "materials": materials})
     return len(placements)

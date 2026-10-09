@@ -10,6 +10,7 @@ var content: Content
 var meshes := {}
 var mats := {}
 var placed := 0
+var props := 0
 var nodes: Array[MeshInstance3D] = []
 var T: Dictionary
 var terrain: MeshInstance3D
@@ -21,6 +22,7 @@ var _z0: float
 var _nx: int
 var _nz: int
 var _pit := PackedByteArray()
+var _tmat: ShaderMaterial
 
 func build(c: Content, offset: Vector3, yaw_deg: float) -> void:
 	content = c
@@ -49,6 +51,23 @@ func build(c: Content, offset: Vector3, yaw_deg: float) -> void:
 			placed += 1
 	_pit_mask()
 	_terrain()
+	_props()
+
+## course.json terrain.props: extra copies of the extracted Launch Site meshes set around the course as
+## scenery (our arrangement, not Rust's layout), standing on the ground level at their x.
+func _props() -> void:
+	for p in T["props"]["rows"]:
+		var mesh := _mesh(p["mesh"])
+		if mesh == null:
+			continue
+		var at: Array = p["pos"]
+		var mi := MeshInstance3D.new()
+		mi.mesh = mesh
+		mi.top_level = true
+		add_child(mi)
+		var sc := float(p["scale"])
+		mi.global_transform = Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(float(p["yaw"])), 0)).scaled(Vector3.ONE * sc), Vector3(at[0], level(at[0]) + float(p["dy"]), at[1]))
+		props += 1
 
 func _mesh(name: String) -> Mesh:
 	if meshes.has(name):
@@ -112,6 +131,8 @@ func _fix(m: Material) -> Material:
 	if not (m is BaseMaterial3D):
 		return m
 	var key := m.resource_name
+	if key in T["blend_materials"]:
+		return _ground_material()  # Rust blends these into the terrain; here they take the ground shader
 	if key != "" and mats.has(key):
 		return mats[key]
 	var b := (m as BaseMaterial3D).duplicate() as BaseMaterial3D
@@ -317,9 +338,14 @@ func _terrain() -> void:
 	terrain.name = "terrain"
 	terrain.mesh = mesh
 	terrain.top_level = true  # built in course coordinates, not the prefab's
-	terrain.material_override = _terrain_material()
+	terrain.material_override = _ground_material()
 	add_child(terrain)
 	terrain.global_transform = Transform3D.IDENTITY
+
+func _ground_material() -> ShaderMaterial:
+	if _tmat == null:
+		_tmat = _terrain_material()
+	return _tmat
 
 func _terrain_material() -> ShaderMaterial:
 	var sm := ShaderMaterial.new()
@@ -346,6 +372,18 @@ func _terrain_material() -> ShaderMaterial:
 		var v: Variant = sd[k]
 		sm.set_shader_parameter(k, Vector3(v[0], v[1], v[2]) if v is Array else float(v))
 	sm.set_shader_parameter("pit_y", float(T["pit_floor_y"]))
+	var rd: Dictionary = T["roads"]
+	var road_mat: Dictionary = rows[rd["material"]]
+	sm.set_shader_parameter("tex_road", content.texture(road_mat["albedo"], "MainTex"))
+	sm.set_shader_parameter("nrm_road", content.texture(road_mat["normal"], "BumpMap"))
+	sm.set_shader_parameter("road_scale", float(road_mat["uv_scale"]))
+	sm.set_shader_parameter("road_width", float(rd["width"]))
+	var segs := PackedVector4Array()
+	for a in rd["segments"]:
+		segs.append(Vector4(a[0], a[1], a[2], a[3]))
+	sm.set_shader_parameter("road_count", mini(segs.size(), 8))
+	segs.resize(8)
+	sm.set_shader_parameter("roads", segs)
 	sm.set_shader_parameter("roughness_val", float(rows[layers[0]]["roughness"]))
 	return sm
 
@@ -374,6 +412,18 @@ uniform float far_start = 60.0;
 uniform float far_scale = 4.0;
 uniform float pit_y = -36.0;
 uniform float roughness_val = 0.95;
+uniform sampler2D tex_road : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D nrm_road : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float road_scale = 6.0;
+uniform float road_width = 8.0;
+uniform int road_count = 0;
+uniform vec4 roads[8];
+uniform float scrub_cell = 4.0;
+uniform float scrub_density = 0.3;
+uniform vec3 scrub_color = vec3(0.3, 0.32, 0.2);
+uniform float stone_cell = 1.3;
+uniform float stone_density = 0.25;
+uniform vec3 stone_color = vec3(1.15, 1.1, 1.0);
 varying vec3 wpos;
 varying vec3 wn;
 
@@ -386,6 +436,27 @@ float fbm(vec2 p) {
 	float s = 0.0; float a = 0.5;
 	for (int i = 0; i < 4; i++) { s += a * vnoise(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; }
 	return s / 0.9375;
+}
+// scattered blobs (dry scrub, loose stones): at most one per grid cell, with probability dens, kept
+// inside its own cell so one lookup is enough; fades to the average cover once a cell is a few pixels
+float scatter(vec2 p, float cell, float dens, float seed) {
+	vec2 q = p / cell;
+	vec2 g = floor(q);
+	float best = 0.0;
+	if (hash(g + seed) < dens) {
+		vec2 o = vec2(0.3) + 0.4 * vec2(hash(g * 1.7 + seed + 3.1), hash(g * 2.3 + seed + 7.7));
+		float r = mix(0.14, 0.28, hash(g + seed + 11.0));
+		float d = length(q - g - o) / r + (vnoise(q * 9.0 + g) - 0.5) * 0.5;
+		best = 1.0 - smoothstep(0.75, 1.0, d);
+	}
+	float px = length(fwidth(q));
+	return mix(best, dens * 0.12, smoothstep(0.05, 0.3, px));
+}
+float seg_dist(vec2 p, vec4 s) {
+	vec2 a = s.xy; vec2 b = s.zw;
+	vec2 ab = b - a;
+	float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
+	return length(p - a - ab * t);
 }
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -424,6 +495,23 @@ void fragment() {
 	c *= mix(1.0 - macro_strength, 1.0 + macro_strength * 0.6, tint);
 	vec3 tn = mix(tint_a, tint_b, smoothstep(0.3, 0.7, fbm(p / tint_period + vec2(19.0, 41.0))));
 	c *= mix(tn, vec3(1.0), site);  // open ground only: olive and brown patches; the site concrete stays grey
+	float opn = (1.0 - site) * (1.0 - low);
+	float scrub = scatter(p, scrub_cell, scrub_density * smoothstep(0.25, 0.6, fbm(p / 70.0 + vec2(5.0, 2.0))), 1.0) * opn * (1.0 - slope * 2.0);
+	c = mix(c, c * scrub_color, clamp(scrub, 0.0, 1.0));
+	float stone = scatter(p, stone_cell, stone_density, 23.0) * opn;
+	c = mix(c, c * stone_color, stone);
+	float rd = 1.0e9;
+	for (int i = 0; i < road_count; i++) {
+		rd = min(rd, seg_dist(p, roads[i]));
+	}
+	rd += (fbm(p / 3.0 + vec2(9.0, 4.0)) - 0.5) * 1.6;
+	float road = (1.0 - smoothstep(road_width * 0.5 - 0.6, road_width * 0.5 + 0.4, rd)) * (1.0 - low);
+	float shoulder = (1.0 - smoothstep(road_width * 0.5, road_width * 0.5 + 3.0, rd)) * (1.0 - road) * (1.0 - low);
+	vec2 ruv = p / road_scale;
+	vec3 rc = texture(tex_road, ruv).rgb * mix(0.85, 1.1, fbm(p / 17.0 + vec2(2.0, 8.0)));
+	c = mix(c, c * 0.82, shoulder);
+	c = mix(c, rc, road);
+	nm = mix(nm, texture(nrm_road, ruv).rgb, road);
 	ALBEDO = c;
 	NORMAL_MAP = nm;
 	ROUGHNESS = roughness_val;
@@ -431,16 +519,16 @@ void fragment() {
 "
 
 ## The sky for Main._lighting: lighting.json gradient, a sun disc with a halo where the sun light comes
-## from, and a static cloud layer (nothing moves, so the sky light probe renders once).
+## from, a warm horizon band under the sun, and a static cloud layer (nothing moves, so the sky light probe renders once).
 static func sky_material(L: Dictionary) -> ShaderMaterial:
 	var sm := ShaderMaterial.new()
 	var sh := Shader.new()
 	sh.code = SKY_SHADER
 	sm.shader = sh
-	for k in ["sky_top", "sky_horizon", "ground_horizon", "ground_bottom", "cloud_color", "cloud_shade"]:
+	for k in ["sky_top", "sky_horizon", "ground_horizon", "ground_bottom", "cloud_color", "cloud_shade", "sun_warm"]:
 		var a: Array = L[k]
 		sm.set_shader_parameter(k, Color(a[0], a[1], a[2]))
-	for k in ["sun_disc_deg", "sun_halo_deg", "sun_halo", "sun_disc_energy", "cloud_cover", "cloud_scale", "cloud_height_fade"]:
+	for k in ["sun_disc_deg", "sun_halo_deg", "sun_halo", "sun_disc_energy", "cloud_cover", "cloud_scale", "cloud_height_fade", "sun_warm_width"]:
 		sm.set_shader_parameter(k, float(L[k]))
 	return sm
 
@@ -458,6 +546,8 @@ uniform float sun_disc_energy = 12.0;
 uniform float cloud_cover = 0.45;
 uniform float cloud_scale = 1.4;
 uniform float cloud_height_fade = 0.08;
+uniform vec3 sun_warm : source_color;
+uniform float sun_warm_width = 4.0;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vnoise(vec2 p) {
@@ -486,6 +576,11 @@ void sky() {
 		sun_col = LIGHT0_COLOR * LIGHT0_ENERGY;
 		float halo = pow(clamp(1.0 - a / sun_halo_deg, 0.0, 1.0), 3.0) * sun_halo + exp(-a / (sun_halo_deg * 2.0)) * sun_halo * 0.12;
 		col += sun_col * halo * step(0.0, h + 0.05);
+		// forward scattering: a warm band along the horizon under the sun, widest near the ground
+		vec2 dh = normalize(d.xz + vec2(1e-5));
+		vec2 sh = normalize(LIGHT0_DIRECTION.xz + vec2(1e-5));
+		float az = pow(max(dot(dh, sh), 0.0), sun_warm_width);
+		col += sun_warm * az * pow(1.0 - clamp(abs(h), 0.0, 1.0), 5.0);
 		sun = 1.0 - smoothstep(sun_disc_deg * 0.85, sun_disc_deg, a);
 	}
 	if (h > 0.0) {

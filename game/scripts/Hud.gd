@@ -1,10 +1,8 @@
 ## systems.hud: CS2-style HUD: health/armor bottom-left, ammo bottom-right, surf timer top centre, speed,
-## messages, hit marker and the player's CS2 crosshair (static or dynamic from Weapons spread). Every size
-## is hud.json pixels at ref_height, scaled by the window height.
+## messages, cl_showfps, an optional hit marker (off by default: CS2 has none) and the player's CS2 crosshair
+## (static or dynamic from Weapons spread). Every size is hud.json pixels at ref_height, scaled by the window height.
 class_name Hud
 extends CanvasLayer
-
-const COLORS := [Color(1, 0, 0), Color(0, 1, 0), Color(1, 1, 0), Color(0, 0, 1), Color(0, 1, 1)]
 
 var speed_label: Label
 var timer_label: Label
@@ -17,6 +15,8 @@ var reserve_label: Label
 var hp_label: Label
 var armor_label: Label
 var crosshair: Control
+var fps_label: Label
+var hit_marker := false  # Settings 'hit_marker'; CS2 gives no hit marker, so it starts off
 var convars := {}
 var font: Font
 var H := {}
@@ -61,6 +61,8 @@ func setup(cv: Dictionary, cs2_dir: String = "") -> void:
 	pb_label.modulate = Color(0.78, 0.8, 0.84)
 	msg_label = _label(root, H["font_msg"], HORIZONTAL_ALIGNMENT_CENTER)
 	err_label = _label(root, 15, HORIZONTAL_ALIGNMENT_LEFT)
+	fps_label = _label(root, H["font_fps"], HORIZONTAL_ALIGNMENT_LEFT)
+	fps_label.visible = false
 	err_label.modulate = Color(1, 0.4, 0.4)
 	err_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	hp_label = _label(root, H["font_health"], HORIZONTAL_ALIGNMENT_LEFT)
@@ -112,6 +114,8 @@ func _layout() -> void:
 	var fm: float = H["font_msg"] * s
 	_place(msg_label, Vector2(0, vp.y * 0.3 - fm), Vector2(vp.x, fm * 1.4))
 	_place(err_label, Vector2(16, 12 + 70 * s), Vector2(vp.x - 32, 0))
+	var ff: float = H["font_fps"] * s
+	_place(fps_label, Vector2(8 * s, 4 * s), Vector2(300 * s, ff * 1.3))
 	_pill.anchor_left = 0.5
 	_pill.anchor_right = 0.5
 	_pill.offset_left = -80 * s
@@ -211,9 +215,18 @@ static func num(cv: Dictionary, k: String, def: float) -> float:
 	var v := str(cv.get(k, def))
 	return float(v) if v.is_valid_float() or v.is_valid_int() else def
 
-static func xh_color(cv: Dictionary) -> Color:
+## hud.json xh_colors: the cl_crosshaircolor 0-4 presets as "r,g,b|r,g,b|..." (0-255).
+static func presets(hv: Dictionary) -> Array:
+	var out: Array = []
+	for t in String(hv.get("xh_colors", "50,250,50")).split("|"):
+		var p := t.split(",")
+		out.append(Color8(int(p[0]), int(p[1]), int(p[2])))
+	return out
+
+static func xh_color(cv: Dictionary, hv: Dictionary) -> Color:
 	var i := int(num(cv, "cl_crosshaircolor", 1))
-	var c: Color = COLORS[i] if i >= 0 and i < COLORS.size() else COLORS[1]
+	var cols := presets(hv)
+	var c: Color = cols[i] if i >= 0 and i < cols.size() else cols[mini(1, cols.size() - 1)]
 	if i == 5:  # CS2 colour 5 is the player's own RGB
 		c = Color8(clampi(int(num(cv, "cl_crosshaircolor_r", 50)), 0, 255), clampi(int(num(cv, "cl_crosshaircolor_g", 250)), 0, 255), clampi(int(num(cv, "cl_crosshaircolor_b", 50)), 0, 255))
 	if on(cv, "cl_crosshairusealpha", "true"):
@@ -223,20 +236,19 @@ static func xh_color(cv: Dictionary) -> Color:
 ## The cl_crosshair* crosshair at the origin of ci for a window h px tall. spread_px is how far the
 ## dynamic styles move out (spread + inaccuracy), fire_px the firing-only part (style 5). The menu preview uses it too.
 static func draw_xh(ci: CanvasItem, cv: Dictionary, h: float, hv: Dictionary, spread_px: float, fire_px: float) -> void:
+	var m := xh_px(cv, h, hv)
 	var yres := h / float(hv["yres_base"])
 	var style := int(num(cv, "cl_crosshairstyle", 2))
-	var size := maxf(roundf(num(cv, "cl_crosshairsize", 5) * yres), 0.0)
-	var th := maxf(roundf(num(cv, "cl_crosshairthickness", 0.5) * yres), 1.0)
-	var gap := roundf((float(hv["gap_base"]) + num(cv, "cl_crosshairgap", 1)) * h / float(hv["gap_ref_height"]))
+	var size: float = m["size"]
+	var th: float = m["thickness"]
+	var gap: float = m["gap"]
 	var move := 0.0
 	if style in [0, 2, 3]:
 		move = roundf(spread_px)
 	elif style == 5:
 		move = roundf(fire_px)
-	var c := xh_color(cv)
-	var ot := 0.0
-	if on(cv, "cl_crosshair_drawoutline", "false"):
-		ot = maxf(roundf(num(cv, "cl_crosshair_outlinethickness", 1) * h / 1080.0), 1.0)
+	var c := xh_color(cv, hv)
+	var ot: float = m["outline"]
 	var arms: Array = [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1)]
 	if not on(cv, "cl_crosshair_t", "false"):
 		arms.append(Vector2(0, -1))
@@ -278,6 +290,18 @@ static func draw_xh(ci: CanvasItem, cv: Dictionary, h: float, hv: Dictionary, sp
 		if on(cv, "cl_crosshairdot", "false"):
 			ci.draw_rect(Rect2(-half, -half, th, th).grow(grow), Color(0, 0, 0, c.a) if pass_i == 0 else c)
 
+## Whole-pixel arm length, thickness (Source truncates YRES(thickness), min 1), static gap and outline
+## (screen pixels, not scaled; 0 when off) for a window h px tall.
+static func xh_px(cv: Dictionary, h: float, hv: Dictionary) -> Dictionary:
+	var yres := h / float(hv["yres_base"])
+	var ot := 0.0
+	if on(cv, "cl_crosshair_drawoutline", "false"):
+		ot = maxf(roundf(num(cv, "cl_crosshair_outlinethickness", 1)), 1.0)
+	return {"size": maxf(roundf(num(cv, "cl_crosshairsize", 5) * yres), 0.0),
+		"thickness": maxf(floorf(num(cv, "cl_crosshairthickness", 0.5) * yres), 1.0),
+		"gap": roundf((float(hv["gap_base"]) + num(cv, "cl_crosshairgap", 1)) * h / float(hv["gap_ref_height"])),
+		"outline": ot}
+
 ## Pixels a spread cone of rad radians covers on a window h px tall (Source: YRES(rad x 320 / tan(fov/2))).
 func spread_to_px(rad: float, h: float) -> float:
 	var half := deg_to_rad(float(Sheets.movement()["fov_default"])) * 0.5
@@ -297,6 +321,8 @@ func _process(delta: float) -> void:
 		return
 	if _hit > 0.0:
 		_hit = maxf(_hit - delta, 0.0)
+	if fps_label.visible:
+		fps_label.text = "%d fps" % int(Engine.get_frames_per_second())
 	var spread := 0.0
 	var fire := 0.0
 	var w: Node = get_parent().get("weapons") if get_parent() else null
@@ -341,8 +367,11 @@ func weapon(wname: String, clip: int, reserve: int, clip_max: int = -1) -> void:
 		clip_label.modulate = Color(1, 0.35, 0.3) if clip <= low else Color.WHITE
 	_deco.queue_redraw()
 
-## A hit: the white marker (head or body alike) and the hud.json hit_sound row when sounds.json has one.
+## A hit: when the player turned the hit marker on, the white marker (head or body alike) and the hud.json
+## hit_sound row when sounds.json has one. Off (the default) a hit shows and plays nothing, as in CS2.
 func hitmarker(_head: bool) -> void:
+	if not hit_marker:
+		return
 	_hit = float(H["hit_time"])
 	var snd: Node = get_parent().get("sounds") if get_parent() else null
 	if snd != null and snd.get("players") is Dictionary and (snd.players as Dictionary).has(String(H["hit_sound"])):
@@ -352,3 +381,6 @@ func hitmarker(_head: bool) -> void:
 
 func set_speed_visible(b: bool) -> void:
 	speed_label.visible = b
+
+func set_fps_visible(b: bool) -> void:
+	fps_label.visible = b

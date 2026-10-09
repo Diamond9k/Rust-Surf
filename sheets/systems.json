@@ -101,10 +101,10 @@
     {
       "id": "hud",
       "script": "game/scripts/Hud.gd",
-      "does": "CS2-style HUD scaled by window height: health/armor bottom-left (fixed 100), ammo bottom-right, surf timer top centre, speed, messages, white hit marker (+ hud.json hit_sound row when sounds.json has it), the player's cl_crosshair* crosshair with styles 0-5, T, outline, alpha, custom RGB and a dynamic gap from Weapons._spread",
+      "does": "CS2-style HUD scaled by window height: health/armor bottom-left (fixed 100), ammo bottom-right, surf timer top centre, speed, messages, cl_showfps, a white hit marker only when the player turns it on (CS2 has none; + hud.json hit_sound row when sounds.json has it), the player's cl_crosshair* crosshair with styles 0-5, T, outline, alpha, hud.json preset colours and custom RGB, thickness truncated like Source, and a dynamic gap from Weapons._spread",
       "reads": "hud.json, movement.json, content.json cfg_user_convars",
       "status": "tested",
-      "evidence": "2026-10-09: rendered at 960x540 and 1920x1080 (ui_r1 renders): HUD strips, timer and crosshair scale with height; --wtest runs clean; dynamic gap maths checked by hand against the spread cone edge (3.96 px for 5.5 mrad at 1080p)"
+      "evidence": "2026-10-09 (ui_r2): --uitest asserts thickness 0.7 -> 1 px and 1 -> 2 px at 1080p, preset 1 = 50,250,50, colour 5 custom RGB + alpha, hit marker off by default and on when set; HUD rendered at 960x540 (ui_r2_4 start/lobby); --wtest runs clean"
     },
     {
       "id": "prep",
@@ -133,10 +133,10 @@
     {
       "id": "settings",
       "script": "game/scripts/Settings.gd",
-      "does": "Esc menu like CS2 settings: tab bar (Game, Keyboard / Mouse, Audio, Video, Crosshair) over the blurred game, slider + number field or dropdown per settings.json row, input.json rebinds, live crosshair preview; values start from the player's CS2 convars; HUD hidden while open; only changes saved",
+      "does": "Esc menu like CS2: icon nav bar (settings, resume, aim lobby, restart, quit), centred tabs (Game, Keyboard / Mouse, Audio, Video, Crosshair) over the blurred game, slider + number field or dropdown per settings.json row, input.json binds with two keys per action (a rebound key leaves its old action), live crosshair preview; values start from the player's CS2 convars unrounded and unclamped; HUD hidden while open; only changes saved, atomically (temp + rename)",
       "reads": "settings.json, input.json, hud.json, sounds.json",
       "status": "tested",
-      "evidence": "2026-10-09: every tab rendered with --menu --menu-tab at 960x540 and the crosshair tab at 1920x1080 (ui_r1 renders), no clipping; parse check clean"
+      "evidence": "2026-10-09 (ui_r2): --uitest passes (sensitivity 1.125 kept, fps_max 999 kept, MOUSE1 moves from attack to reload, jump holds two keys, file saved via temp + rename, reset restores MOUSE1, every tab inside the window at 960x540 and 1920x1080, HUD hidden while open); tabs rendered at 960x540 (ui_r2_1game, ui_r2_2keys, ui_r2_2xh, ui_r2_4video) and crosshair at 1920x1080 (ui_r2_3hixh)"
     }
   ]
 }

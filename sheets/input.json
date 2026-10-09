@@ -3,6 +3,7 @@
   "_doc": "One row per game action. cs2_command is the bind looked up in the player's cs2_user_keys.vcfg, then user_keys_default.vcfg; key names use CS2's names (w, SPACE, MOUSE1, CTRL...). godot_action is the InputMap action Input.gd registers.",
   "columns": [
     "id",
+    "label",
     "cs2_command",
     "default_key",
     "godot_action",
@@ -12,62 +13,70 @@
   "rows": [
     {
       "id": "forward",
+      "label": "Move forward",
       "cs2_command": "+forward",
       "default_key": "w",
       "godot_action": "surf_forward",
       "used_in": "SurfPlayer wishdir",
-      "verified": "2026-10-08 default file"
+      "verified": "2026-10-08 default file; menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "back",
+      "label": "Move back",
       "cs2_command": "+back",
       "default_key": "s",
       "godot_action": "surf_back",
       "used_in": "SurfPlayer wishdir",
-      "verified": "2026-10-08 default file"
+      "verified": "2026-10-08 default file; menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "left",
+      "label": "Move left",
       "cs2_command": "+left",
       "default_key": "a",
       "godot_action": "surf_left",
       "used_in": "SurfPlayer wishdir",
-      "verified": "2026-10-08 default file"
+      "verified": "2026-10-08 default file; menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "right",
+      "label": "Move right",
       "cs2_command": "+right",
       "default_key": "d",
       "godot_action": "surf_right",
       "used_in": "SurfPlayer wishdir",
-      "verified": "2026-10-08 default file"
+      "verified": "2026-10-08 default file; menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "jump",
+      "label": "Jump",
       "cs2_command": "+jump",
       "default_key": "SPACE",
       "godot_action": "surf_jump",
       "used_in": "SurfPlayer.jump",
-      "verified": "2026-10-08 default file"
+      "verified": "2026-10-08 default file; menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "duck",
+      "label": "Crouch",
       "cs2_command": "+duck",
       "default_key": "CTRL",
       "godot_action": "surf_duck",
       "used_in": "SurfPlayer.duck",
-      "verified": "default file (key name to confirm in file)"
+      "verified": "default file (key name to confirm in file); menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "inspect",
+      "label": "Inspect weapon",
       "cs2_command": "+lookatweapon",
       "default_key": "f",
       "godot_action": "surf_inspect",
       "used_in": "Viewmodel inspect",
-      "verified": "2026-10-08 default file"
+      "verified": "2026-10-08 default file; menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "restart",
+      "label": "Restart run",
       "cs2_command": "(none: mashup's own)",
       "default_key": "F5",
       "godot_action": "surf_restart",
@@ -76,6 +85,7 @@
     },
     {
       "id": "checkpoint_back",
+      "label": "Back to last checkpoint",
       "cs2_command": "(none: mashup's own)",
       "default_key": "t",
       "godot_action": "surf_checkpoint",
@@ -84,78 +94,88 @@
     },
     {
       "id": "menu",
+      "label": "Menu",
       "cs2_command": "cancelselect",
       "default_key": "ESCAPE",
       "godot_action": "surf_menu",
       "used_in": "Hud menu",
-      "verified": "2026-10-08 default file"
+      "verified": "2026-10-08 default file; menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "attack",
+      "label": "Fire",
       "cs2_command": "+attack",
       "default_key": "MOUSE1",
       "godot_action": "surf_attack",
       "used_in": "Weapons.fire",
-      "verified": "CS2 default bind (unverified against user_keys_default.vcfg)"
+      "verified": "CS2 default bind (unverified against user_keys_default.vcfg); menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "attack2",
+      "label": "Alternate fire / scope",
       "cs2_command": "+attack2",
       "default_key": "MOUSE2",
       "godot_action": "surf_attack2",
       "used_in": "Weapons alt fire",
-      "verified": "CS2 default bind (unverified against user_keys_default.vcfg)"
+      "verified": "CS2 default bind (unverified against user_keys_default.vcfg); menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "reload",
+      "label": "Reload",
       "cs2_command": "+reload",
       "default_key": "r",
       "godot_action": "surf_reload",
       "used_in": "Weapons.reload",
-      "verified": "CS2 default bind (unverified against user_keys_default.vcfg)"
+      "verified": "CS2 default bind (unverified against user_keys_default.vcfg); menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "slot1",
+      "label": "Primary weapon",
       "cs2_command": "slot1",
       "default_key": "1",
       "godot_action": "surf_slot1",
       "used_in": "Weapons primary",
-      "verified": "CS2 default bind (unverified against user_keys_default.vcfg)"
+      "verified": "CS2 default bind (unverified against user_keys_default.vcfg); menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "slot2",
+      "label": "Secondary weapon",
       "cs2_command": "slot2",
       "default_key": "2",
       "godot_action": "surf_slot2",
       "used_in": "Weapons pistol",
-      "verified": "CS2 default bind (unverified against user_keys_default.vcfg)"
+      "verified": "CS2 default bind (unverified against user_keys_default.vcfg); menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "slot3",
+      "label": "Knife",
       "cs2_command": "slot3",
       "default_key": "3",
       "godot_action": "surf_slot3",
       "used_in": "Weapons knife",
-      "verified": "CS2 default bind (unverified against user_keys_default.vcfg)"
+      "verified": "CS2 default bind (unverified against user_keys_default.vcfg); menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "lastinv",
+      "label": "Last weapon used",
       "cs2_command": "lastinv",
       "default_key": "q",
       "godot_action": "surf_lastinv",
       "used_in": "Weapons last used",
-      "verified": "CS2 default bind (unverified against user_keys_default.vcfg)"
+      "verified": "CS2 default bind (unverified against user_keys_default.vcfg); menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "buymenu",
+      "label": "Buy menu",
       "cs2_command": "buymenu",
       "default_key": "b",
       "godot_action": "surf_buymenu",
       "used_in": "Inventory picker",
-      "verified": "CS2 default bind (unverified against user_keys_default.vcfg)"
+      "verified": "CS2 default bind (unverified against user_keys_default.vcfg); menu label unverified: not checked against the CS2 client"
     },
     {
       "id": "aim_lobby",
+      "label": "Aim lobby",
       "cs2_command": "(none: mashup's own)",
       "default_key": "F2",
       "godot_action": "surf_lobby",

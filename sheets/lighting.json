@@ -43,6 +43,24 @@
       "tuned": "2026-10-08 covers the course"
     },
     {
+      "id": "shadow_blur",
+      "value": 0.6,
+      "note": "directional shadow filter softness (was a constant in Main.gd)",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "shadow_bias",
+      "value": 0.05,
+      "note": "shadow depth bias (Godot default 0.1); lower keeps contact shadows attached",
+      "tuned": "2026-10-09 world_r2 renders, by eye"
+    },
+    {
+      "id": "shadow_normal_bias",
+      "value": 0.6,
+      "note": "shadow normal bias (Godot default 1.0); lower narrows the light leak where the two faces of a valley ramp meet",
+      "tuned": "2026-10-09 world_r2 renders, by eye"
+    },
+    {
       "id": "sun_angular",
       "value": 0.5,
       "note": "DirectionalLight3D angular diameter in degrees: softens shadow edges with distance (the real sun is about 0.53)",
@@ -71,6 +89,22 @@
       "value": 9,
       "note": "disc brightness, times the sun light (blooms with glow on)",
       "tuned": "2026-10-09 world_r1 renders, by eye"
+    },
+    {
+      "id": "sun_warm",
+      "value": [
+        0.3,
+        0.17,
+        0.06
+      ],
+      "note": "warm forward-scatter glow added along the horizon under the sun (dusty desert air)",
+      "tuned": "2026-10-09 world_r2 renders, by eye"
+    },
+    {
+      "id": "sun_warm_width",
+      "value": 3,
+      "note": "how tightly the warm glow hugs the sun's azimuth (higher is narrower)",
+      "tuned": "2026-10-09 world_r2 renders, by eye"
     },
     {
       "id": "cloud_color",
@@ -219,10 +253,52 @@
       "tuned": "2026-10-08"
     },
     {
+      "id": "ssao_radius",
+      "value": 1.5,
+      "note": "SSAO radius in metres (was a constant in Main.gd)",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "ssao_intensity",
+      "value": 1.6,
+      "note": "SSAO strength (was a constant in Main.gd)",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
       "id": "glow",
       "value": true,
       "note": "soft bloom on the sky and bright metal",
       "tuned": "2026-10-08"
+    },
+    {
+      "id": "glow_intensity",
+      "value": 0.4,
+      "note": "bloom strength (was a constant in Main.gd)",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "glow_threshold",
+      "value": 1.2,
+      "note": "HDR brightness where bloom starts (the sun disc and its halo pass it)",
+      "tuned": "2026-10-08 by eye"
+    },
+    {
+      "id": "shaft_density",
+      "value": 0.0018,
+      "note": "volumetric haze density for sun shafts through the towers and ramps (0 turns the volumetric pass off)",
+      "tuned": "2026-10-09 world_r2 renders, by eye"
+    },
+    {
+      "id": "shaft_forward",
+      "value": 0.6,
+      "note": "volumetric haze anisotropy: higher scatters more light toward a viewer facing the sun",
+      "tuned": "2026-10-09 world_r2 renders, by eye"
+    },
+    {
+      "id": "shaft_length",
+      "value": 160,
+      "note": "metres of volumetric haze in front of the camera",
+      "tuned": "2026-10-09 world_r2 renders, by eye"
     }
   ]
 }

@@ -1,7 +1,14 @@
 {
   "_sheet": "prep",
-  "_doc": "The numbers prep.py runs on: how it batches, retries and times out the Source2Viewer-CLI (VRF) exports from the player's CS2 VPK. Read from prep/prep.json (a copy of this sheet) on the player's PC. None of these are game facts; they are this build's choices.",
-  "columns": ["id", "value", "unit", "used_by", "note", "verified"],
+  "_doc": "The numbers and names prep.py runs on: how it batches, retries and times out the Source2Viewer-CLI (VRF) exports from the player's CS2 VPK, and where it looks for weapon stats items_game.txt does not give. Read from prep/prep.json (a copy of this sheet) on the player's PC. The rows are this build's choices; vdata_keys maps CS2 weapon vdata fields to the items_game attribute names Weapons.gd reads, every one unverified until a real CS2 weapons.vdata has been read.",
+  "columns": [
+    "id",
+    "value",
+    "unit",
+    "used_by",
+    "note",
+    "verified"
+  ],
   "rows": [
     {
       "id": "vrf_batch_files",
@@ -34,6 +41,212 @@
       "used_by": "prep_cs2.run_vrf: a VRF call that runs longer is killed and its files count as failed (then retried)",
       "note": "the 0.1.0 install exported 5 models and clips in one call well inside this; 40 weapon models per call is unmeasured",
       "verified": "build choice, unverified against a real 40-model call"
+    },
+    {
+      "id": "weapons_vdata",
+      "value": "scripts/weapons.vdata_c",
+      "unit": "VPK path",
+      "used_by": "prep_cs2.cs2_step: exported on its own after items_game.txt; read by prep/kv3.py for any stat items_game.txt does not give",
+      "note": "optional: a VPK without it is not a problem by itself, only weapons left without the stats in stats_required are",
+      "verified": "unverified: path from memory of CS2 modding notes, not seen in a VPK listing here"
+    },
+    {
+      "id": "stats_required",
+      "value": "damage,cycletime",
+      "unit": "items_game attributes",
+      "used_by": "prep_cs2.write_stats: a weapon without every one of these (from items_game.txt or weapons.vdata) stops setup, so no install runs its guns on weapon_defaults.json class averages",
+      "note": "the other attributes fall back to weapon_defaults.json and are listed as a warning in prep_status.json",
+      "verified": "build choice; tested in prep/tests/test_prep.py (missing damage blocks the done file)"
+    },
+    {
+      "id": "stats_expected",
+      "value": "primary clip size,spread,inaccuracy fire,recoil magnitude,max player speed",
+      "unit": "items_game attributes",
+      "used_by": "prep_cs2.write_stats: a weapon missing any of these still finishes setup, with a warning in prep_status.json naming it (those values come from weapon_defaults.json class averages)",
+      "note": "every gun has these in CS:GO's items_game.txt; zoom and alt keys are left out because only some guns have them",
+      "verified": "build choice; the CS:GO key names are from its items_game.txt, the CS2 file is unverified here"
+    }
+  ],
+  "vdata_keys_columns": [
+    "id",
+    "attribute",
+    "attribute_alt",
+    "verified"
+  ],
+  "vdata_keys": [
+    {
+      "id": "m_nDamage",
+      "attribute": "damage",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_flCycleTime",
+      "attribute": "cycletime",
+      "attribute_alt": "cycletime alt",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+    },
+    {
+      "id": "m_iMaxClip1",
+      "attribute": "primary clip size",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_nPrimaryReserveAmmoMax",
+      "attribute": "primary reserve ammo max",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_flHeadshotMultiplier",
+      "attribute": "headshot multiplier",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_flArmorRatio",
+      "attribute": "armor ratio",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_flPenetration",
+      "attribute": "penetration",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_flRange",
+      "attribute": "range",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_flRangeModifier",
+      "attribute": "range modifier",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_bIsFullAuto",
+      "attribute": "is full auto",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_nNumBullets",
+      "attribute": "bullets",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_flMaxSpeed",
+      "attribute": "max player speed",
+      "attribute_alt": "max player speed alt",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+    },
+    {
+      "id": "m_flSpread",
+      "attribute": "spread",
+      "attribute_alt": "spread alt",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+    },
+    {
+      "id": "m_flInaccuracyStand",
+      "attribute": "inaccuracy stand",
+      "attribute_alt": "inaccuracy stand alt",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+    },
+    {
+      "id": "m_flInaccuracyCrouch",
+      "attribute": "inaccuracy crouch",
+      "attribute_alt": "inaccuracy crouch alt",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+    },
+    {
+      "id": "m_flInaccuracyMove",
+      "attribute": "inaccuracy move",
+      "attribute_alt": "inaccuracy move alt",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+    },
+    {
+      "id": "m_flInaccuracyJump",
+      "attribute": "inaccuracy jump",
+      "attribute_alt": "inaccuracy jump alt",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+    },
+    {
+      "id": "m_flInaccuracyFire",
+      "attribute": "inaccuracy fire",
+      "attribute_alt": "inaccuracy fire alt",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+    },
+    {
+      "id": "m_flRecoilAngle",
+      "attribute": "recoil angle",
+      "attribute_alt": "recoil angle alt",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+    },
+    {
+      "id": "m_flRecoilAngleVariance",
+      "attribute": "recoil angle variance",
+      "attribute_alt": "recoil angle variance alt",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+    },
+    {
+      "id": "m_flRecoilMagnitude",
+      "attribute": "recoil magnitude",
+      "attribute_alt": "recoil magnitude alt",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+    },
+    {
+      "id": "m_flRecoilMagnitudeVariance",
+      "attribute": "recoil magnitude variance",
+      "attribute_alt": "recoil magnitude variance alt",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute; a [primary, alt] pair fills the alt attribute"
+    },
+    {
+      "id": "m_nRecoilSeed",
+      "attribute": "recoil seed",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_flRecoveryTimeStand",
+      "attribute": "recovery time stand",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_flRecoveryTimeCrouch",
+      "attribute": "recovery time crouch",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_nZoomLevels",
+      "attribute": "zoom levels",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_nZoomFOV1",
+      "attribute": "zoom fov 1",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_nZoomFOV2",
+      "attribute": "zoom fov 2",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_flZoomTime1",
+      "attribute": "zoom time 1",
+      "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
     }
   ]
 }

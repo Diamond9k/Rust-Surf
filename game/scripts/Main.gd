@@ -97,7 +97,9 @@ func _lighting() -> void:
 	sun.shadow_enabled = OS.get_environment("RS_NOSHADOW") == ""
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	sun.directional_shadow_max_distance = float(L["shadow_distance"])
-	sun.shadow_blur = 0.6
+	sun.shadow_blur = float(L["shadow_blur"])
+	sun.shadow_bias = float(L["shadow_bias"])
+	sun.shadow_normal_bias = float(L["shadow_normal_bias"])
 	sun.light_angular_distance = float(L["sun_angular"])
 	add_child(sun)
 	var env := WorldEnvironment.new()
@@ -121,11 +123,18 @@ func _lighting() -> void:
 	e.fog_aerial_perspective = float(L["fog_aerial"])
 	e.fog_sky_affect = float(L["fog_sky_affect"])
 	e.ssao_enabled = bool(L["ssao"])
-	e.ssao_radius = 1.5
-	e.ssao_intensity = 1.6
+	e.ssao_radius = float(L["ssao_radius"])
+	e.ssao_intensity = float(L["ssao_intensity"])
 	e.glow_enabled = bool(L["glow"])
-	e.glow_intensity = 0.4
-	e.glow_hdr_threshold = 1.2
+	e.glow_intensity = float(L["glow_intensity"])
+	e.glow_hdr_threshold = float(L["glow_threshold"])
+	# sun shafts: a thin volumetric haze lit (and shadowed) by the sun, scattering forward
+	e.volumetric_fog_enabled = float(L["shaft_density"]) > 0.0
+	e.volumetric_fog_density = float(L["shaft_density"])
+	e.volumetric_fog_albedo = col.call("fog_color")
+	e.volumetric_fog_anisotropy = float(L["shaft_forward"])
+	e.volumetric_fog_length = float(L["shaft_length"])
+	e.volumetric_fog_sky_affect = 0.0
 	env.environment = e
 	add_child(env)
 

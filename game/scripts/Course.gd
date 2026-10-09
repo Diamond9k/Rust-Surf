@@ -81,6 +81,10 @@ func _surface(m: Dictionary) -> Material:
 	sm.set_shader_parameter("grime", float(m["grime"]))
 	sm.set_shader_parameter("detail", float(m["detail"]))
 	sm.set_shader_parameter("roughness_val", float(m["roughness"]))
+	sm.set_shader_parameter("panel", float(m["panel"]))
+	sm.set_shader_parameter("crease_ao", float(m["crease_ao"]))
+	var tn: Array = m["tint"]
+	sm.set_shader_parameter("tint", Vector3(tn[0], tn[1], tn[2]))
 	return sm
 
 func _piece(r: Dictionary) -> Node3D:
@@ -116,13 +120,13 @@ func _ramp(r: Dictionary) -> StaticBody3D:
 			n = -n
 		var slope := (Vector3(0, b.x, b.y) - Vector3(0, a.x, a.y)).length()
 		# the top edge is the apex of a ridge and the outer rim of a valley
-		_quad(st, p0, p1, p2, p3, n, L * 2.0, slope, 0.0 if ridge else slope, slope if ridge else 0.0)
+		_quad(st, p0, p1, p2, p3, n, L * 2.0, slope, 0.0 if ridge else slope, slope if ridge else 0.0, slope)
 	if ridge:
 		var pa := Vector3(-L, H, 0); var pl := Vector3(-L, -H, -W); var pr := Vector3(-L, -H, W)
 		_tri(st, pa, pl, pr, Vector3(-1, 0, 0))
 		var dx := Vector3(2 * L, 0, 0)
 		_tri(st, pa + dx, pr + dx, pl + dx, Vector3(1, 0, 0))
-		_quad(st, Vector3(-L, -H, -W), Vector3(-L, -H, W), Vector3(L, -H, W), Vector3(L, -H, -W), Vector3.DOWN, L * 2.0, W * 2.0, -1.0, -1.0)
+		_quad(st, Vector3(-L, -H, -W), Vector3(-L, -H, W), Vector3(L, -H, W), Vector3(L, -H, -W), Vector3.DOWN, L * 2.0, W * 2.0, -1.0, -1.0, 0.0)
 	st.generate_tangents()  # normal maps need tangents; without them shaded faces go black
 	var mesh := st.commit()
 	var body := StaticBody3D.new()
@@ -138,13 +142,15 @@ func _ramp(r: Dictionary) -> StaticBody3D:
 	body.add_child(cs)
 	return body
 
-## UV in metres (the shader divides by uv_scale); UV2.x is metres from the face's top edge (top0 at
-## p0/p1, top1 at p2/p3) and UV2.y is 1 on surf faces, 0 where no grime belongs (top < 0).
-func _quad(st: SurfaceTool, p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, n: Vector3, ulen: float, vlen: float, top0: float, top1: float) -> void:
+## UV in metres (the shader divides by uv_scale); on surf faces UV2.x is metres from the face's top
+## edge (top0 at p0/p1, top1 at p2/p3) and UV2.y metres from its bottom edge (slope - top); faces with
+## no edge wear (top < 0: undersides, end caps) get UV2 (-1, -1).
+func _quad(st: SurfaceTool, p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, n: Vector3, ulen: float, vlen: float, top0: float, top1: float, slope: float) -> void:
 	var pts := [p0, p1, p2, p3]
 	var uv := [Vector2(0, 0), Vector2(ulen, 0), Vector2(ulen, vlen), Vector2(0, vlen)]
-	var face := 1.0 if top0 >= 0.0 else 0.0
-	var uv2 := [Vector2(top0, face), Vector2(top0, face), Vector2(top1, face), Vector2(top1, face)]
+	var a := Vector2(top0, slope - top0) if top0 >= 0.0 else Vector2(-1, -1)
+	var b := Vector2(top1, slope - top1) if top0 >= 0.0 else Vector2(-1, -1)
+	var uv2 := [a, a, b, b]
 	# Godot treats clockwise triangles as front faces; with culling off a back face shades with its
 	# normal flipped (dark ramp faces), so every triangle is wound to face along n.
 	var flip := (p1 - p0).cross(p2 - p0).dot(n) > 0.0
@@ -159,7 +165,7 @@ func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, n: Vector3) -> vo
 	for p in [a, b, c]:
 		st.set_normal(n)
 		st.set_uv(Vector2(p.y, p.z))
-		st.set_uv2(Vector2.ZERO)
+		st.set_uv2(Vector2(-1, -1))
 		st.add_vertex(p)
 
 func _box_body(r: Dictionary) -> StaticBody3D:
@@ -225,8 +231,9 @@ func to_checkpoint(player: SurfPlayer) -> void:
 	player.teleport(checkpoint_pos, checkpoint_yaw)
 
 ## Weathered surface: the base texture, a second (cracked, dirty) texture over part of it by noise,
-## large tint patches, dirt streaks down from a ramp's top edge with a chipped lip, and a close-up
-## detail overlay so the surface stays sharp under the player.
+## large tint patches, cast slabs with their own tone and dark joints, dirt streaks down from a ramp's
+## top edge with a chamfered, chipped lip, grime and occlusion in the crease at its foot, and a
+## close-up detail overlay so the surface stays sharp under the player.
 const SURFACE_SHADER := "shader_type spatial;
 render_mode cull_disabled;
 uniform sampler2D tex_a : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -241,6 +248,9 @@ uniform float weather = 0.3;
 uniform float grime = 0.5;
 uniform float detail = 0.3;
 uniform float roughness_val = 0.85;
+uniform float panel = 0.0;
+uniform float crease_ao = 0.0;
+uniform vec3 tint = vec3(1.0);
 varying vec3 wpos;
 varying vec3 wn;
 
@@ -267,6 +277,11 @@ void fragment() {
 	vec2 uv = m / scale_a;
 	vec3 c = texture(tex_a, uv).rgb;
 	vec3 nm = has_nrm ? texture(nrm_a, uv).rgb : vec3(0.5, 0.5, 1.0);
+	// a second, larger sampling of the same texture over half the surface by noise: no visible repeat
+	vec2 uv3 = m / (scale_a * 2.37) + vec2(0.21, 0.67);
+	float k3 = 0.6 * smoothstep(0.35, 0.65, fbm(m / (scale_a * 3.1) + vec2(8.0, 2.0)));
+	c = mix(c, texture(tex_a, uv3).rgb, k3);
+	if (has_nrm) { nm = mix(nm, texture(nrm_a, uv3).rgb, k3); }
 	float rough = roughness_val;
 	if (has_b) {
 		float w = smoothstep(1.0 - weather - 0.1, 1.0 - weather + 0.1, fbm(m / (scale_a * 2.7) + vec2(5.3, 1.7)));
@@ -277,10 +292,44 @@ void fragment() {
 	float dist = length(wpos - CAMERA_POSITION_WORLD);
 	vec3 mean = textureLod(tex_a, vec2(0.5), 12.0).rgb;
 	vec3 dt = texture(tex_a, uv * 7.31 + vec2(0.13, 0.57)).rgb;
-	c *= mix(vec3(1.0), dt / max(mean, vec3(0.04)), detail * (1.0 - smoothstep(3.0, 18.0, dist)));
-	c *= mix(0.86, 1.08, fbm(m / 23.0 + vec2(11.0, 3.0)));
-	float face = UV2.y;
-	float top = UV2.x;
+	float near = detail * (1.0 - smoothstep(3.0, 18.0, dist));
+	c *= mix(vec3(1.0), dt / max(mean, vec3(0.04)), near);
+	if (has_nrm) {
+		vec3 dn = texture(nrm_a, uv * 7.31 + vec2(0.13, 0.57)).rgb;
+		nm = vec3(nm.xy + (dn.xy - 0.5) * near * 1.2, nm.z);  // detail normal: fine grain under the player
+	}
+	c *= mix(0.8, 1.1, fbm(m / 17.0 + vec2(11.0, 3.0)));
+	c *= tint;
+	float face = world_map ? 0.0 : step(0.0, UV2.y);  // boxes have no UV2: no edge wear
+	float top = max(UV2.x, 0.0);
+	float bot = max(UV2.y, 0.0);
+	float occ = 1.0;
+	if (panel > 0.0 && face > 0.5) {
+		vec2 ps = vec2(panel * 1.6, panel);  // slabs longer along the ramp than down its slope
+		vec2 pc = m / ps;
+		pc.x += floor(pc.y) * 0.5;  // staggered rows, as cast slabs are laid, not a square grid
+		vec2 f = fract(pc);
+		c *= mix(0.9, 1.07, hash(floor(pc) + vec2(3.0, 7.0)));
+		vec2 e = min(f, 1.0 - f) * ps;
+		float d = min(e.x, e.y);
+		float w = max(0.03, fwidth(d) * 1.5);
+		float joint = (1.0 - smoothstep(w * 0.5, w, d)) * (1.0 - smoothstep(25.0, 90.0, dist));
+		c *= 1.0 - 0.24 * joint * mix(0.35, 1.0, hash(floor(pc) + vec2(13.0, 1.0)));  // some joints grouted, some dirty
+		float under = (1.0 - smoothstep(0.0, 0.9, f.y * ps.y)) * (1.0 - smoothstep(60.0, 200.0, dist));
+		c *= 1.0 - 0.12 * under * grime;
+		rough = mix(rough, 1.0, joint * 0.5);
+	}
+	if (face > 0.5) {
+		float wb = max(0.05, fwidth(top) * 1.5);
+		float bevel = 1.0 - smoothstep(0.12, 0.12 + wb, top);
+		float shade = (1.0 - smoothstep(0.2, 0.2 + wb, top)) * (1.0 - bevel);
+		c *= 1.0 + 0.2 * bevel - 0.3 * shade;
+		// the crease: wide soft occlusion plus a narrow dark gutter, which also hides the shadow-map
+		// light leak where the two faces of a valley meet
+		occ = mix(1.0 - crease_ao, 1.0, smoothstep(0.0, 3.5, bot)) * mix(1.0 - crease_ao * 1.3, 1.0, smoothstep(0.05, 0.7, bot));
+		occ = clamp(occ, 0.05, 1.0);
+		c *= mix(occ, 1.0, 0.35);
+	}
 	float streak = smoothstep(0.42, 0.8, fbm(vec2(m.x * 0.9, top * 0.07) + vec2(2.0, 9.0)));
 	float s = streak * exp(-top / 7.0) * grime * face;
 	float pool = smoothstep(0.55, 0.8, fbm(m / 6.0 + vec2(41.0, 13.0))) * grime * face * 0.5;
@@ -292,5 +341,7 @@ void fragment() {
 	ALBEDO = c;
 	NORMAL_MAP = nm;
 	ROUGHNESS = rough;
+	AO = occ;
+	AO_LIGHT_AFFECT = 1.0 - 0.5 * smoothstep(0.0, 1.0, UV2.y);
 }
 "

@@ -1,10 +1,11 @@
-## systems.settings: the Esc menu laid out like CS2's settings: a tab bar (Game, Keyboard / Mouse, Audio, Video,
-## Crosshair) over the blurred game, settings.json rows as slider + number field or dropdown, the input.json binds,
-## and a live crosshair preview. Values start from the player's CS2 convars; only changes go to user://settings.json.
+## systems.settings: the Esc menu laid out like CS2's: an icon nav bar (settings, resume, aim lobby, restart, quit),
+## the settings tabs (Game, Keyboard / Mouse, Audio, Video, Crosshair) over the blurred game, settings.json rows as
+## slider + number field or dropdown, the input.json binds (two keys per action) and a live crosshair preview.
+## Values start from the player's CS2 convars, unrounded; only changes go to user://settings.json.
 class_name Settings
 extends CanvasLayer
 
-const FILE := "user://settings.json"
+var FILE := "user://settings.json"  # --uitest points it at a scratch file
 const TABS := [["game", "Game"], ["keys", "Keyboard / Mouse"], ["audio", "Audio"], ["video", "Video"], ["crosshair", "Crosshair"]]
 const TEXT := Color(0.92, 0.93, 0.95)
 const DIM := Color(0.62, 0.64, 0.68)
@@ -23,7 +24,7 @@ void fragment() {
 			c += textureLod(screen_tex, SCREEN_UV + vec2(float(x), float(y)) * px, 3.0).rgb;
 		}
 	}
-	COLOR = vec4(mix(c / 25.0, vec3(0.035, 0.04, 0.05), 0.55), 1.0);
+	COLOR = vec4(mix(c / 25.0, vec3(0.035, 0.04, 0.05), 0.6), 1.0);
 }"""
 
 var main: Node
@@ -31,14 +32,15 @@ var is_open := false
 var vals := {}
 var rows := {}           # id -> settings.json row
 var _changed := {}
-var _binds := {}         # input.json id -> key the player bound here
+var _keys := {}          # input.json id -> [key, key] in slot order (CS2 key names, upper case)
+var _keys_set := {}      # input.json ids whose keys the player set here (saved)
 var _root: Control
 var _tab := "game"
 var _pages := {}
 var _tab_btns := {}
 var _ctl := {}           # id -> [slider or option, number field or null]
-var _bind_btns := {}     # input.json id -> Button
-var _capture := ""       # input.json id waiting for a key
+var _bind_btns := {}     # "id:slot" -> Button
+var _capture := ""       # "id:slot" waiting for a key
 var _capture_frame := -1
 var _preview: Control
 var _u := 1.0
@@ -49,13 +51,16 @@ func setup(m: Node) -> void:
 	layer = 50
 	for r in Sheets.load_sheet("settings")["rows"]:
 		rows[r["id"]] = r
+	_base_keys()
 	_load()
-	for id in _binds:
-		_bind(id, _binds[id])
+	_apply_keys()
 	_build()
 	for k in vals:
-		if (k == "display_mode" or k == "vsync") and not _changed.has(k):
-			continue  # the window follows project.godot until the player picks otherwise
+		if not _changed.has(k):
+			if k == "display_mode" or k == "vsync":
+				continue  # the window follows project.godot until the player picks otherwise
+			if String(rows[k]["convar"]).begins_with("cl_crosshair"):
+				continue  # Hud already reads the player's own convar text; rewriting it could only round it
 		_apply(k)
 	_loading = false
 	_root.visible = false
@@ -66,6 +71,8 @@ func setup(m: Node) -> void:
 		if ti >= 0 and ti + 1 < ua.size():
 			_tab = ua[ti + 1]
 		toggle()
+	if OS.get_cmdline_user_args().has("--uitest"):
+		_uitest.call_deferred()
 
 func toggle() -> void:
 	if _capture != "" or Engine.get_process_frames() == _capture_frame:
@@ -87,6 +94,7 @@ func _is_convar(r: Dictionary) -> bool:
 	return not c.contains(" ") and not c.begins_with("(")
 
 ## Start value: the player's CS2 convar, else the live system value, else the sheet default.
+## Slider values stay exactly as the player's config has them (no clamp, no step rounding).
 func _initial(r: Dictionary) -> Variant:
 	var id: String = r["id"]
 	var cv: Dictionary = main.hud.convars
@@ -94,19 +102,22 @@ func _initial(r: Dictionary) -> Variant:
 	var v: Variant = r["default"]
 	match id:
 		"sensitivity": v = main.player.input.sensitivity
+		"m_yaw": v = main.player.input.m_yaw
 		"invert_mouse": v = main.player.input.m_pitch < 0.0
 		"display_mode": v = 1 if DisplayServer.window_get_mode() >= DisplayServer.WINDOW_MODE_FULLSCREEN else 0
 		"vsync": v = 0 if DisplayServer.window_get_vsync_mode() == DisplayServer.VSYNC_DISABLED else 1
 		"msaa": v = clampi(get_viewport().msaa_3d, 0, 3)
+		"render_scale": v = get_viewport().scaling_3d_scale
 		_:
 			if id.begins_with("viewmodel_") and main.viewmodel.V.has(id):
 				v = main.viewmodel.V[id]
 			elif _is_convar(r) and cv.has(r["convar"]):
 				v = Hud.on(cv, r["convar"], "0") if kind == "toggle" else Hud.num(cv, r["convar"], float(r["default"]))
-	return _fit(r, v)
+	return float(v) if kind == "slider" else _fit(r, v)
 
-## The value as the menu holds it: sliders clamped and snapped to their step, toggles bool, choices an index.
-func _fit(r: Dictionary, v: Variant) -> Variant:
+## The value as the menu holds it: toggles bool, choices an index, sliders clamped (and snapped to the step
+## when snap is true, as the slider itself moves; a typed number keeps its digits).
+func _fit(r: Dictionary, v: Variant, snap: bool = true) -> Variant:
 	match String(r["kind"]):
 		"toggle":
 			return v if v is bool else float(v) > 0.5
@@ -115,7 +126,7 @@ func _fit(r: Dictionary, v: Variant) -> Variant:
 		"slider":
 			var st := float(r["step"])
 			var f := clampf(float(v), float(r["min"]), float(r["max"]))
-			return snappedf(f, st) if st > 0.0 else f
+			return snappedf(f, st) if snap and st > 0.0 else f
 	return v
 
 func _load() -> void:
@@ -126,6 +137,7 @@ func _load() -> void:
 		return
 	var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(FILE))
 	if not (d is Dictionary):
+		push_warning("settings: %s is not valid JSON, starting from your CS2 config" % FILE)
 		return
 	var saved: Dictionary = d.get("values", {}) if d.get("values") is Dictionary else {}
 	if not d.has("values"):  # v0.2 file: flat keys
@@ -136,22 +148,38 @@ func _load() -> void:
 			saved["volume"] = float(d["volume"]) / 100.0
 	for k in saved:
 		if vals.has(k) and (saved[k] is float or saved[k] is bool):
-			vals[k] = _fit(rows[k], saved[k])
+			vals[k] = _fit(rows[k], saved[k], false)
 			_changed[k] = true
-	if d.get("binds") is Dictionary:
-		for k in d["binds"]:
-			if d["binds"][k] is String:
-				_binds[k] = d["binds"][k]
+	if d.get("keys") is Dictionary:  # v0.2.1: id -> [key, key]
+		for id in d["keys"]:
+			if _keys.has(id) and d["keys"][id] is Array:
+				var ks: Array = []
+				for k in d["keys"][id]:
+					ks.append(String(k).to_upper())
+				_set_keys(id, ks)
+	elif d.get("binds") is Dictionary:  # v0.2: id -> one key
+		for id in d["binds"]:
+			if _keys.has(id) and d["binds"][id] is String:
+				_set_keys(id, [String(d["binds"][id]).to_upper()])
 
+## Writes a temp file and renames it over the old one, so a crash mid-write never loses the settings.
 func _save() -> void:
-	var f := FileAccess.open(FILE, FileAccess.WRITE)
-	if f == null:
-		main.hud.message("could not save settings: %s" % error_string(FileAccess.get_open_error()), 3.0)
-		return
 	var out := {}
 	for k in _changed:  # only what the player changed here, so the rest keeps following their CS2 config
 		out[k] = vals[k]
-	f.store_string(JSON.stringify({"values": out, "binds": _binds}, "\t"))
+	var keys := {}
+	for id in _keys_set:
+		keys[id] = _keys[id]
+	var tmp := FILE + ".tmp"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
+	if f == null:
+		main.hud.message("could not save settings: %s" % error_string(FileAccess.get_open_error()), 3.0)
+		return
+	f.store_string(JSON.stringify({"values": out, "keys": keys}, "\t"))
+	f.close()
+	var err := DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(FILE))
+	if err != OK:
+		main.hud.message("could not save settings: %s" % error_string(err), 3.0)
 
 func _apply(k: String) -> void:
 	var r: Dictionary = rows[k]
@@ -168,7 +196,10 @@ func _apply(k: String) -> void:
 		return
 	match k:
 		"show_speed": h.set_speed_visible(v)
+		"hit_marker": h.hit_marker = v
+		"cl_showfps": h.set_fps_visible(v)
 		"sensitivity": main.player.input.sensitivity = v
+		"m_yaw": main.player.input.m_yaw = v
 		"invert_mouse": main.player.input.m_pitch = -absf(main.player.input.m_pitch) if v else absf(main.player.input.m_pitch)
 		"volume":
 			AudioServer.set_bus_mute(0, v <= 0.0)
@@ -180,8 +211,9 @@ func _apply(k: String) -> void:
 				main.sounds._wind_db = float(main.sounds.rows["speed_wind"]["volume_db"]) + linear_to_db(maxf(v, 0.0001))
 		"display_mode": DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if v == 1 else DisplayServer.WINDOW_MODE_WINDOWED)
 		"vsync": DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if v == 1 else DisplayServer.VSYNC_DISABLED)
-		"fps_max": Engine.max_fps = int(v)
+		"fps_max": Engine.max_fps = maxi(int(v), 0)
 		"msaa": get_viewport().msaa_3d = int(v) as Viewport.MSAA
+		"render_scale": get_viewport().scaling_3d_scale = v
 
 ## sounds.json players at their row level times v (0 is silent).
 func _channel(ids: Array, v: float) -> void:
@@ -192,8 +224,8 @@ func _channel(ids: Array, v: float) -> void:
 		if p:
 			p.volume_db = float(main.sounds.rows[id]["volume_db"]) + linear_to_db(maxf(v, 0.0001))
 
-func _change(k: String, v: Variant) -> void:
-	v = _fit(rows[k], v)
+func _change(k: String, v: Variant, snap: bool = true) -> void:
+	v = _fit(rows[k], v, snap)
 	if vals[k] == v and _changed.has(k):
 		return
 	vals[k] = v
@@ -207,15 +239,57 @@ func _change(k: String, v: Variant) -> void:
 func _input_rows() -> Array:
 	return Sheets.load_sheet("input")["rows"]
 
-func _key_of(r: Dictionary) -> String:
-	if _binds.has(r["id"]):
-		return _binds[r["id"]]
-	return main.sinput.binds.get(r["cs2_command"], r["default_key"])
-
-func _bind(id: String, key: String) -> void:
+## Every key of the player's CS2 binds (defaults, then cs2_user_keys.vcfg over them, key by key), grouped per
+## input.json action; an action with no key there gets its default_key. A key belongs to one action, like CS2.
+func _base_keys() -> void:
+	var by_key := {}
+	var si: SurfInput = main.sinput
+	if main.get("paths") != null:
+		for path in [main.paths.cs2_default_keys(), main.paths.user_cfg("cs2_user_keys.vcfg")]:
+			var d: Dictionary = si._parse_vcfg(path)
+			for k in d:
+				by_key[String(k).to_upper()] = d[k]
 	for r in _input_rows():
-		if r["id"] == id:
-			main.sinput._register(r["godot_action"], key)
+		var ks: Array = []
+		var first := String(si.binds.get(r["cs2_command"], "")).to_upper()
+		if first != "" and by_key.get(first) == r["cs2_command"]:
+			ks.append(first)  # the key SurfInput registered stays the primary slot
+		for k in by_key:
+			if by_key[k] == r["cs2_command"] and not ks.has(k):
+				ks.append(k)
+		if ks.is_empty():
+			ks.append(String(r["default_key"]).to_upper())
+		_keys[r["id"]] = ks.slice(0, 2)
+	for id in _keys:  # a key named twice (a vcfg quirk) stays with the first action only
+		for k in _keys[id]:
+			for other in _keys:
+				if other != id and (_keys[other] as Array).has(k):
+					(_keys[other] as Array).erase(k)
+
+## Sets an action's keys and takes each of them off every other action (CS2 moves a key, it never doubles it).
+func _set_keys(id: String, ks: Array) -> void:
+	for k in ks:
+		for other in _keys:
+			if other != id and (_keys[other] as Array).has(k):
+				(_keys[other] as Array).erase(k)
+				_keys_set[other] = true
+	_keys[id] = ks.slice(0, 2)
+	_keys_set[id] = true
+
+## Puts _keys into the InputMap: each action gets exactly its keys (SurfInput builds each event).
+func _apply_keys() -> void:
+	var tmp := "_settings_key"
+	for r in _input_rows():
+		var action: String = r["godot_action"]
+		if not InputMap.has_action(action):
+			InputMap.add_action(action)
+		InputMap.action_erase_events(action)
+		for k in _keys.get(r["id"], []):
+			main.sinput._register(tmp, k)
+			for ev in InputMap.action_get_events(tmp):
+				InputMap.action_add_event(action, ev)
+	if InputMap.has_action(tmp):
+		InputMap.erase_action(tmp)
 
 ## CS2 key name for a pressed key or mouse button (the names cs2_user_keys.vcfg uses).
 func _key_name(ev: InputEvent) -> String:
@@ -230,7 +304,7 @@ func _key_name(ev: InputEvent) -> String:
 			return n
 	if kc >= KEY_F1 and kc <= KEY_F12:
 		return "F%d" % (kc - KEY_F1 + 1)
-	return OS.get_keycode_string(kc).to_lower()
+	return OS.get_keycode_string(kc).to_upper()
 
 func _input(ev: InputEvent) -> void:
 	if _capture == "" or not ev.is_pressed() or ev.is_echo():
@@ -238,7 +312,7 @@ func _input(ev: InputEvent) -> void:
 	if not (ev is InputEventKey or ev is InputEventMouseButton):
 		return
 	get_viewport().set_input_as_handled()
-	var id := _capture
+	var slot := _capture
 	_capture = ""
 	_capture_frame = Engine.get_process_frames()
 	if ev is InputEventKey and (ev as InputEventKey).keycode == KEY_ESCAPE:
@@ -246,20 +320,38 @@ func _input(ev: InputEvent) -> void:
 		return
 	var key := _key_name(ev)
 	if key != "":
-		_binds[id] = key
-		_bind(id, key)
-		_save()
+		_rebind(slot, key)
 	_refresh_binds()
 
+## "id:slot" gets key; "" clears the slot.
+func _rebind(slot: String, key: String) -> void:
+	var id := slot.get_slice(":", 0)
+	var i := int(slot.get_slice(":", 1))
+	var ks: Array = (_keys[id] as Array).duplicate()
+	if key != "" and ks.has(key):
+		ks.erase(key)
+	if i < ks.size():
+		if key == "":
+			ks.remove_at(i)
+		else:
+			ks[i] = key
+	elif key != "":
+		ks.append(key)
+	_set_keys(id, ks)
+	_apply_keys()
+	_save()
+
 func _refresh_binds() -> void:
-	for r in _input_rows():
-		if _bind_btns.has(r["id"]):
-			(_bind_btns[r["id"]] as Button).text = _key_of(r).to_upper()
+	for s in _bind_btns:
+		var ks: Array = _keys.get(String(s).get_slice(":", 0), [])
+		var i := int(String(s).get_slice(":", 1))
+		(_bind_btns[s] as Button).text = String(ks[i]).to_upper() if i < ks.size() else "-"
 
 func _reset_binds() -> void:
-	_binds.clear()
-	for r in _input_rows():
-		main.sinput._register(r["godot_action"], main.sinput.binds.get(r["cs2_command"], r["default_key"]))
+	_keys.clear()
+	_keys_set.clear()
+	_base_keys()
+	_apply_keys()
 	_save()
 	_refresh_binds()
 
@@ -304,10 +396,13 @@ func _theme() -> Theme:
 	t.set_stylebox("hover", "OptionButton", _sb(Color(1, 1, 1, 0.1), 2, Color(1, 1, 1, 0.25)))
 	t.set_stylebox("pressed", "OptionButton", _sb(Color(1, 1, 1, 0.14), 2, Color(1, 1, 1, 0.25)))
 	t.set_stylebox("focus", "OptionButton", StyleBoxEmpty.new())
+	t.set_icon("arrow", "OptionButton", _chevron(_px(12)))
 	t.set_stylebox("panel", "PopupMenu", _sb(Color(0.09, 0.1, 0.11, 0.98), 2, Color(1, 1, 1, 0.15)))
 	t.set_stylebox("hover", "PopupMenu", _sb(Color(1, 1, 1, 0.12)))
 	t.set_stylebox("normal", "LineEdit", _sb(Color(0, 0, 0, 0.35), 2, Color(1, 1, 1, 0.12)))
 	t.set_stylebox("focus", "LineEdit", _sb(Color(0, 0, 0, 0.5), 2, Color(1, 1, 1, 0.45)))
+	t.set_stylebox("panel", "TooltipPanel", _sb(Color(0.06, 0.065, 0.07, 0.97), 2, Color(1, 1, 1, 0.18)))
+	t.set_color("font_color", "TooltipLabel", TEXT)
 	var track := StyleBoxFlat.new()
 	track.bg_color = Color(1, 1, 1, 0.16)
 	track.content_margin_top = _px(2)
@@ -332,6 +427,20 @@ func _theme() -> Theme:
 	t.set_stylebox("grabber_highlight", "VScrollBar", sgrab)
 	t.set_stylebox("grabber_pressed", "VScrollBar", sgrab)
 	return t
+
+## A down chevron d px wide for the dropdowns, so it scales with the menu.
+func _chevron(d: int) -> ImageTexture:
+	var img := Image.create_empty(d, d, false, Image.FORMAT_RGBA8)
+	var w := maxf(d * 0.13, 1.0)
+	for x in d:
+		for y in d:
+			var u := (x + 0.5) / d
+			var v := (y + 0.5) / d
+			var line := 0.28 + 0.44 * (1.0 - absf(u - 0.5) * 2.0)  # the V, lowest in the middle
+			var dist := absf(v - line) * d
+			var a := clampf(w - dist + 0.5, 0.0, 1.0) if u > 0.12 and u < 0.88 else 0.0
+			img.set_pixel(x, y, Color(TEXT.r, TEXT.g, TEXT.b, a))
+	return ImageTexture.create_from_image(img)
 
 func _circle(d: int, c: Color) -> ImageTexture:
 	var img := Image.create_empty(d, d, false, Image.FORMAT_RGBA8)
@@ -361,49 +470,67 @@ func _build() -> void:
 	mat.shader.code = BLUR
 	blur.material = mat
 	_root.add_child(blur)
-	# top bar: tabs left, run actions right
-	var bar_h := _px(52)
-	var bar := Panel.new()
-	bar.add_theme_stylebox_override("panel", _sb(Color(0.02, 0.025, 0.03, 0.75), 0))
-	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	bar.offset_bottom = bar_h
-	_root.add_child(bar)
-	var line := ColorRect.new()
-	line.color = Color(1, 1, 1, 0.08)
-	line.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	line.offset_top = bar_h
-	line.offset_bottom = bar_h + 1
-	_root.add_child(line)
+	# nav bar: icon buttons like CS2's main menu (settings lit, resume, aim lobby, restart; quit on the right)
+	var nav_h := _px(float(main.hud.H["menu_nav"]))
+	var nav := Panel.new()
+	var nsb := _sb(Color(0.015, 0.018, 0.022, 0.92), 0)
+	nsb.border_color = Color(1, 1, 1, 0.07)
+	nsb.border_width_bottom = 1
+	nav.add_theme_stylebox_override("panel", nsb)
+	nav.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	nav.offset_bottom = nav_h
+	_root.add_child(nav)
 	var hb := HBoxContainer.new()
 	hb.set_anchors_preset(Control.PRESET_FULL_RECT)
-	hb.offset_left = _px(18)
-	hb.offset_right = -_px(18)
-	hb.add_theme_constant_override("separation", _px(4))
-	bar.add_child(hb)
-	var group := ButtonGroup.new()
-	for t in TABS:
-		var b := _flat_button(hb, String(t[1]).to_upper(), bar_h)
-		b.toggle_mode = true
-		b.button_group = group
-		var tid: String = t[0]
-		b.pressed.connect(func() -> void: _show_tab(tid))
-		_tab_btns[tid] = b
-	var sp := Control.new()
-	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hb.add_child(sp)
-	_flat_button(hb, "RESUME", bar_h).pressed.connect(toggle)
-	_flat_button(hb, "AIM LOBBY", bar_h).pressed.connect(func() -> void:
+	hb.offset_left = _px(10)
+	hb.offset_right = -_px(10)
+	hb.add_theme_constant_override("separation", _px(2))
+	nav.add_child(hb)
+	_nav_button(hb, "gear", "", "Settings", nav_h, true)
+	_nav_button(hb, "play", "RESUME", "Back to the game (Esc)", nav_h).pressed.connect(toggle)
+	var sep := ColorRect.new()
+	sep.color = Color(1, 1, 1, 0.1)
+	sep.custom_minimum_size = Vector2(1, nav_h * 0.5)
+	sep.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(sep)
+	_nav_button(hb, "target", "", "Aim lobby", nav_h).pressed.connect(func() -> void:
 		toggle()
 		main.lobby.toggle())
-	_flat_button(hb, "RESTART RUN", bar_h).pressed.connect(func() -> void:
+	_nav_button(hb, "restart", "", "Restart the run", nav_h).pressed.connect(func() -> void:
 		toggle()
 		if main.lobby.active:
 			main.lobby.toggle()  # leaving the lobby already puts you back on the start pad
 		else:
 			main.course.restart(main.player)
 			main.timer.reset())
-	_flat_button(hb, "QUIT", bar_h).pressed.connect(func() -> void: get_tree().quit())
-	# pages: one centred column under the bar
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hb.add_child(sp)
+	_nav_button(hb, "power", "", "Quit", nav_h).pressed.connect(func() -> void: get_tree().quit())
+	# settings tabs under the nav bar, centred, the open one underlined
+	var tab_h := _px(float(main.hud.H["menu_tabs"]))
+	var tb := HBoxContainer.new()
+	tb.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	tb.offset_top = nav_h
+	tb.offset_bottom = nav_h + tab_h
+	tb.alignment = BoxContainer.ALIGNMENT_CENTER
+	tb.add_theme_constant_override("separation", _px(6))
+	_root.add_child(tb)
+	var group := ButtonGroup.new()
+	for t in TABS:
+		var b := _flat_button(tb, String(t[1]).to_upper(), tab_h)
+		b.toggle_mode = true
+		b.button_group = group
+		var tid: String = t[0]
+		b.pressed.connect(func() -> void: _show_tab(tid))
+		_tab_btns[tid] = b
+	var line := ColorRect.new()
+	line.color = Color(1, 1, 1, 0.08)
+	line.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	line.offset_top = nav_h + tab_h
+	line.offset_bottom = nav_h + tab_h + 1
+	_root.add_child(line)
+	# pages: one centred column under the tabs
 	var w := minf(float(main.hud.H["menu_width"]) * _u, vp.x - _px(32))
 	var area := Control.new()
 	area.anchor_left = 0.5
@@ -411,8 +538,8 @@ func _build() -> void:
 	area.anchor_bottom = 1.0
 	area.offset_left = -w * 0.5
 	area.offset_right = w * 0.5
-	area.offset_top = bar_h + _px(22)
-	area.offset_bottom = -_px(22)
+	area.offset_top = nav_h + tab_h + _px(16)
+	area.offset_bottom = -_px(18)
 	_root.add_child(area)
 	for t in TABS:
 		var page := _page(String(t[0]), w)
@@ -420,6 +547,67 @@ func _build() -> void:
 		page.visible = false
 		area.add_child(page)
 		_pages[t[0]] = page
+
+## A nav-bar button: a drawn icon, optional text after it, a tooltip; lit is the page you are on.
+func _nav_button(parent: Control, icon: String, text: String, tip: String, h: int, lit: bool = false) -> Button:
+	var b := Button.new()
+	b.focus_mode = Control.FOCUS_NONE
+	b.tooltip_text = tip
+	b.custom_minimum_size = Vector2(h, h)
+	b.text = text
+	b.add_theme_font_size_override("font_size", _px(17))
+	b.add_theme_color_override("font_color", Color.WHITE if lit else TEXT)
+	var pad := func(c: Color, under: bool) -> StyleBoxFlat:
+		var s := StyleBoxFlat.new()
+		s.bg_color = c
+		s.content_margin_left = h * 0.86 if text != "" else 0.0
+		s.content_margin_right = _px(16) if text != "" else 0.0
+		if under:
+			s.border_color = Color.WHITE
+			s.border_width_bottom = _px(3)
+		return s
+	b.add_theme_stylebox_override("normal", pad.call(Color(1, 1, 1, 0.06) if lit else Color(0, 0, 0, 0), lit))
+	b.add_theme_stylebox_override("hover", pad.call(Color(1, 1, 1, 0.1), lit))
+	b.add_theme_stylebox_override("pressed", pad.call(Color(1, 1, 1, 0.14), lit))
+	var ic := Control.new()
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ic.custom_minimum_size = Vector2(h, h)
+	ic.size = Vector2(h, h)
+	ic.draw.connect(func() -> void:
+		var on := lit or b.is_hovered()
+		_icon(ic, icon, Vector2(h, h) * 0.5 + Vector2(h * 0.08 if text != "" else 0.0, 0), h * 0.2, Color.WHITE if on else DIM))
+	b.mouse_entered.connect(ic.queue_redraw)
+	b.mouse_exited.connect(ic.queue_redraw)
+	b.add_child(ic)
+	parent.add_child(b)
+	return b
+
+## Line icons drawn at c with radius r: gear, play, target, restart, power.
+func _icon(ci: CanvasItem, icon: String, c: Vector2, r: float, col: Color) -> void:
+	var w := maxf(r * 0.2, 1.5)
+	match icon:
+		"play":
+			ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-r * 0.6, -r * 0.8), c + Vector2(r * 0.85, 0), c + Vector2(-r * 0.6, r * 0.8)]), col)
+		"gear":
+			var pts := PackedVector2Array()
+			for i in 32:
+				var a := TAU * i / 32.0
+				var tooth := (i % 4) < 2
+				pts.append(c + Vector2(cos(a), sin(a)) * r * (1.0 if tooth else 0.74))
+			ci.draw_colored_polygon(pts, col)
+			ci.draw_circle(c, r * 0.36, Color(0.015, 0.018, 0.022))
+		"target":
+			ci.draw_arc(c, r * 0.72, 0, TAU, 32, col, w, true)
+			for d in [Vector2.RIGHT, Vector2.LEFT, Vector2.UP, Vector2.DOWN]:
+				ci.draw_line(c + d * r * 0.38, c + d * r * 1.05, col, w, true)
+			ci.draw_circle(c, w * 0.7, col)
+		"restart":
+			ci.draw_arc(c, r * 0.78, -PI * 0.35, PI * 1.45, 32, col, w, true)
+			var e := c + Vector2(cos(-PI * 0.35), sin(-PI * 0.35)) * r * 0.78
+			ci.draw_colored_polygon(PackedVector2Array([e + Vector2(-r * 0.42, -r * 0.12), e + Vector2(r * 0.18, -r * 0.4), e + Vector2(r * 0.12, r * 0.25)]), col)
+		"power":
+			ci.draw_arc(c, r * 0.8, -PI * 0.3, PI * 1.3, 32, col, w, true)
+			ci.draw_line(c + Vector2(0, -r * 1.0), c + Vector2(0, -r * 0.15), col, w, true)
 
 func _flat_button(parent: Control, text: String, h: int) -> Button:
 	var b := Button.new()
@@ -433,16 +621,16 @@ func _flat_button(parent: Control, text: String, h: int) -> Button:
 	var pad := func(c: Color, under: bool) -> StyleBoxFlat:
 		var s := StyleBoxFlat.new()
 		s.bg_color = c
-		s.content_margin_left = _px(12)
-		s.content_margin_right = _px(12)
+		s.content_margin_left = _px(14)
+		s.content_margin_right = _px(14)
 		if under:
 			s.border_color = Color.WHITE
-			s.border_width_bottom = _px(3)
+			s.border_width_bottom = _px(2)
 		return s
 	b.add_theme_stylebox_override("normal", pad.call(Color(0, 0, 0, 0), false))
-	b.add_theme_stylebox_override("hover", pad.call(Color(1, 1, 1, 0.07), false))
-	b.add_theme_stylebox_override("pressed", pad.call(Color(1, 1, 1, 0.05), true))
-	b.add_theme_stylebox_override("hover_pressed", pad.call(Color(1, 1, 1, 0.09), true))
+	b.add_theme_stylebox_override("hover", pad.call(Color(1, 1, 1, 0.06), false))
+	b.add_theme_stylebox_override("pressed", pad.call(Color(0, 0, 0, 0), true))
+	b.add_theme_stylebox_override("hover_pressed", pad.call(Color(1, 1, 1, 0.06), true))
 	parent.add_child(b)
 	return b
 
@@ -477,35 +665,54 @@ func _page(tab: String, w: float) -> Control:
 		var r: Dictionary = rows[id]
 		if r["tab"] != tab:
 			continue
+		if r["kind"] == "binds":
+			_binds_list(list)
+			continue
 		if r["section"] != section:
 			section = r["section"]
 			_header(list, section)
 			n = 0
-		if r["kind"] == "binds":
-			_binds_list(list)
-		else:
-			_row(list, r, n)
+		_row(list, r, n)
 		n += 1
 	return host
 
-func _header(parent: Control, text: String) -> void:
+## A section title with a rule under it; cols names the columns of the controls on the right (bind slots).
+func _header(parent: Control, text: String, cols: Array = []) -> void:
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", _px(10))
 	var l := Label.new()
-	l.text = text.to_upper()
-	l.add_theme_font_size_override("font_size", _px(13))
-	l.add_theme_color_override("font_color", DIM)
+	l.text = text
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.add_theme_font_size_override("font_size", _px(18))
+	l.add_theme_color_override("font_color", Color.WHITE)
+	hb.add_child(l)
+	for c in cols:
+		var cl := Label.new()
+		cl.text = String(c).to_upper()
+		cl.custom_minimum_size.x = _px(128)
+		cl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cl.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+		cl.add_theme_font_size_override("font_size", _px(12))
+		cl.add_theme_color_override("font_color", DIM)
+		hb.add_child(cl)
 	var pad := MarginContainer.new()
-	pad.add_theme_constant_override("margin_top", _px(14) if parent.get_child_count() > 0 else 0)
-	pad.add_theme_constant_override("margin_bottom", _px(6))
-	pad.add_theme_constant_override("margin_left", _px(12))
-	pad.add_child(l)
+	pad.add_theme_constant_override("margin_top", _px(18) if parent.get_child_count() > 0 else _px(2))
+	pad.add_theme_constant_override("margin_bottom", _px(8))
+	pad.add_theme_constant_override("margin_left", _px(4))
+	pad.add_theme_constant_override("margin_right", _px(10))
+	pad.add_child(hb)
 	parent.add_child(pad)
+	var rule := ColorRect.new()
+	rule.color = Color(1, 1, 1, 0.12)
+	rule.custom_minimum_size.y = 1
+	parent.add_child(rule)
 
 ## One settings line: label left, control right, alternating shade like CS2's lists.
 func _line(parent: Control, label: String, n: int) -> HBoxContainer:
 	var pc := PanelContainer.new()
 	var s := _sb(Color(1, 1, 1, 0.045) if n % 2 == 0 else Color(0, 0, 0, 0.18), 0)
-	s.content_margin_left = _px(12)
-	s.content_margin_right = _px(12)
+	s.content_margin_left = _px(14)
+	s.content_margin_right = _px(10)
 	pc.add_theme_stylebox_override("panel", s)
 	pc.custom_minimum_size.y = _px(float(main.hud.H["menu_row"]))
 	parent.add_child(pc)
@@ -516,8 +723,9 @@ func _line(parent: Control, label: String, n: int) -> HBoxContainer:
 	l.text = label
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.add_theme_color_override("font_color", Color(0.8, 0.82, 0.85))
+	l.add_theme_color_override("font_color", Color(0.82, 0.84, 0.87))
 	l.clip_text = true
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	hb.add_child(l)
 	return hb
 
@@ -541,19 +749,20 @@ func _row(parent: Control, r: Dictionary, n: int) -> void:
 		s.focus_mode = Control.FOCUS_NONE
 		right.add_child(s)
 		var f := LineEdit.new()
-		f.custom_minimum_size.x = _px(66)
+		f.custom_minimum_size.x = _px(70)
 		f.alignment = HORIZONTAL_ALIGNMENT_CENTER
 		f.text = _fmt(r, float(vals[k]))
 		f.select_all_on_focus = true
 		right.add_child(f)
 		_ctl[k] = [s, f]
 		s.value_changed.connect(func(v: float) -> void:
-			f.text = _fmt(r, v)
-			_change(k, v))
+			_change(k, v)
+			f.text = _fmt(r, float(vals[k])))
 		var commit := func(_t: String = "") -> void:
 			var t := f.text.strip_edges()
 			if t.is_valid_float() or t.is_valid_int():
-				s.value = float(_fit(r, float(t)))  # clamped and snapped, then value_changed applies it
+				_change(k, float(t), false)  # a typed number keeps its digits, only clamped to the range
+				s.set_value_no_signal(float(vals[k]))
 			f.text = _fmt(r, float(vals[k]))
 			f.release_focus()
 		f.text_submitted.connect(commit)
@@ -561,7 +770,7 @@ func _row(parent: Control, r: Dictionary, n: int) -> void:
 	else:
 		var o := OptionButton.new()
 		o.focus_mode = Control.FOCUS_NONE
-		o.custom_minimum_size.x = _px(200)
+		o.custom_minimum_size.x = _px(220)
 		for c in String(r["choices"]).split("|"):
 			o.add_item(c)
 		o.select(int(vals[k]))
@@ -570,37 +779,25 @@ func _row(parent: Control, r: Dictionary, n: int) -> void:
 		o.item_selected.connect(func(i: int) -> void:
 			_change(k, i == 1 if r["kind"] == "toggle" else i))
 
+## The value with the step's decimals, and more when the player's config has more (1.125 stays 1.125).
 func _fmt(r: Dictionary, v: float) -> String:
 	var st := float(r["step"])
-	return "%d" % int(round(v)) if st >= 1.0 else "%.2f" % v if st < 0.1 else "%.1f" % v
+	var dec := 0 if st >= 1.0 else 2 if st < 0.1 else 1
+	var s := ("%." + str(dec) + "f") % v
+	if not is_equal_approx(float(s), v):
+		s = String.num(v, 4)
+	return s
 
-## Keyboard / Mouse: every input.json row with the key it is bound to; click, then press a key to rebind.
+## Keyboard / Mouse: every input.json row with its two key slots; click a slot, then press a key (Esc cancels);
+## right-click a slot to clear it. A key taken by another action moves here, like CS2.
 func _binds_list(parent: Control) -> void:
-	var n := 0
+	var groups := {"Movement": [], "Equipment": [], "UI": [], "Rust Surf": []}
 	for r in _input_rows():
-		var label := String(r["id"]).replace("_", " ").capitalize()
-		var hb := _line(parent, label, n)
-		var cmd := Label.new()
-		cmd.text = r["cs2_command"] if not String(r["cs2_command"]).begins_with("(") else "mashup"
-		cmd.add_theme_color_override("font_color", Color(0.5, 0.52, 0.56))
-		cmd.add_theme_font_size_override("font_size", _px(13))
-		cmd.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		hb.add_child(cmd)
-		var b := Button.new()
-		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size.x = _px(150)
-		b.text = _key_of(r).to_upper()
-		b.add_theme_stylebox_override("normal", _sb(Color(0, 0, 0, 0.35), 2, Color(1, 1, 1, 0.12)))
-		b.add_theme_stylebox_override("hover", _sb(Color(1, 1, 1, 0.1), 2, Color(1, 1, 1, 0.3)))
-		b.add_theme_stylebox_override("pressed", _sb(Color(1, 1, 1, 0.16), 2, Color(1, 1, 1, 0.5)))
-		hb.add_child(b)
-		var rid: String = r["id"]
-		b.pressed.connect(func() -> void:
-			_refresh_binds()
-			_capture = rid
-			b.text = "PRESS A KEY")
-		_bind_btns[rid] = b
-		n += 1
+		var used := String(r["used_in"])
+		groups["Rust Surf" if String(r["cs2_command"]).begins_with("(") else "Movement" if used.begins_with("SurfPlayer") else "Equipment" if used.begins_with("Weapons") or used.begins_with("Viewmodel") or used.begins_with("Inventory") else "UI"].append(r)
+	for sec in groups:
+		_binds_group(parent, sec, groups[sec])
+	_refresh_binds()
 	var reset := Button.new()
 	reset.text = "RESET TO CS2 BINDS"
 	reset.focus_mode = Control.FOCUS_NONE
@@ -613,20 +810,57 @@ func _binds_list(parent: Control) -> void:
 	pad.add_child(reset)
 	parent.add_child(pad)
 
-## Crosshair tab preview: the crosshair at true screen size over light and dark ground; dynamic styles breathe.
+func _binds_group(parent: Control, sec: String, group: Array) -> void:
+	if group.is_empty():
+		return
+	_header(parent, sec, ["Key", "Alternate"])
+	var n := 0
+	for r in group:
+		var label: String = r["label"]
+		var hb := _line(parent, label, n)
+		var cmd := Label.new()
+		cmd.text = r["cs2_command"] if not String(r["cs2_command"]).begins_with("(") else ""
+		cmd.add_theme_color_override("font_color", Color(0.5, 0.52, 0.56))
+		cmd.add_theme_font_size_override("font_size", _px(13))
+		cmd.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		hb.add_child(cmd)
+		for i in 2:
+			var b := Button.new()
+			b.focus_mode = Control.FOCUS_NONE
+			b.custom_minimum_size.x = _px(128)
+			b.clip_text = true
+			b.add_theme_stylebox_override("normal", _sb(Color(0, 0, 0, 0.35), 2, Color(1, 1, 1, 0.12)))
+			b.add_theme_stylebox_override("hover", _sb(Color(1, 1, 1, 0.1), 2, Color(1, 1, 1, 0.3)))
+			b.add_theme_stylebox_override("pressed", _sb(Color(1, 1, 1, 0.16), 2, Color(1, 1, 1, 0.5)))
+			if i == 1:
+				b.add_theme_color_override("font_color", Color(0.75, 0.77, 0.8))
+			hb.add_child(b)
+			var slot := "%s:%d" % [r["id"], i]
+			b.pressed.connect(func() -> void:
+				_refresh_binds()
+				_capture = slot
+				b.text = "PRESS A KEY")
+			b.gui_input.connect(func(ev: InputEvent) -> void:
+				if _capture == "" and ev is InputEventMouseButton and ev.pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_RIGHT:
+					_rebind(slot, "")
+					_refresh_binds())
+			_bind_btns[slot] = b
+		n += 1
+
+## Crosshair tab preview: the crosshair at true screen size over sky and ground; dynamic styles breathe.
 func _preview_panel(w: float) -> Control:
 	var v := VBoxContainer.new()
 	v.custom_minimum_size.x = w
 	v.add_theme_constant_override("separation", _px(6))
 	var l := Label.new()
-	l.text = "PREVIEW"
-	l.add_theme_font_size_override("font_size", _px(13))
-	l.add_theme_color_override("font_color", DIM)
+	l.text = "Preview"
+	l.add_theme_font_size_override("font_size", _px(18))
+	l.add_theme_color_override("font_color", Color.WHITE)
 	v.add_child(l)
 	_preview = Control.new()
 	_preview.custom_minimum_size = Vector2(w, w * 0.8)
 	_preview.clip_contents = true
-	_preview.draw.connect(_draw_preview)
+	_preview.draw.connect(_draw_preview.bind(_preview))  # bound: an old preview freed by a resize draws itself only
 	v.add_child(_preview)
 	var note := Label.new()
 	note.text = "Dynamic styles open and close as if moving and firing."
@@ -637,23 +871,109 @@ func _preview_panel(w: float) -> Control:
 	v.add_child(note)
 	return v
 
-func _draw_preview() -> void:
-	var sz := _preview.size
+func _draw_preview(pv: Control) -> void:
+	var sz := pv.size
 	var sky := [Color(0.52, 0.62, 0.72), Color(0.74, 0.78, 0.8)]
-	_preview.draw_polygon(PackedVector2Array([Vector2.ZERO, Vector2(sz.x, 0), Vector2(sz.x, sz.y * 0.55), Vector2(0, sz.y * 0.55)]),
+	pv.draw_polygon(PackedVector2Array([Vector2.ZERO, Vector2(sz.x, 0), Vector2(sz.x, sz.y * 0.55), Vector2(0, sz.y * 0.55)]),
 		PackedColorArray([sky[0], sky[0], sky[1], sky[1]]))
-	_preview.draw_rect(Rect2(0, sz.y * 0.55, sz.x, sz.y * 0.45), Color(0.27, 0.25, 0.22))
-	_preview.draw_rect(Rect2(sz.x * 0.62, sz.y * 0.3, sz.x * 0.38, sz.y * 0.25), Color(0.36, 0.35, 0.33))
-	_preview.draw_rect(Rect2(Vector2.ZERO, sz), Color(1, 1, 1, 0.15), false, 1.0)
+	pv.draw_rect(Rect2(0, sz.y * 0.55, sz.x, sz.y * 0.45), Color(0.27, 0.25, 0.22))
+	pv.draw_rect(Rect2(sz.x * 0.62, sz.y * 0.3, sz.x * 0.38, sz.y * 0.25), Color(0.36, 0.35, 0.33))
+	pv.draw_rect(Rect2(Vector2.ZERO, sz), Color(1, 1, 1, 0.15), false, 1.0)
 	var h := get_viewport().get_visible_rect().size.y
 	var t := Time.get_ticks_msec() / 1000.0
 	var k := 0.5 - 0.5 * cos(t * 1.7)
 	var hud: Hud = main.hud
 	var spread := hud.spread_to_px(0.006 + 0.05 * k, h)
-	_preview.draw_set_transform((sz * 0.5).floor())
-	Hud.draw_xh(_preview, hud.convars, h, hud.H, spread, hud.spread_to_px(0.02 * k, h))
-	_preview.draw_set_transform(Vector2.ZERO)
+	pv.draw_set_transform((sz * 0.5).floor())
+	Hud.draw_xh(pv, hud.convars, h, hud.H, spread, hud.spread_to_px(0.02 * k, h))
+	pv.draw_set_transform(Vector2.ZERO)
 
 func _process(_dt: float) -> void:
 	if is_open and _tab == "crosshair" and _preview:
 		_preview.queue_redraw()
+
+# --- --uitest: asserted checks of the menu and the HUD; exits 1 on any failure ---
+
+func _uitest() -> void:
+	FILE = "user://settings_uitest.json"
+	var fails: Array = []
+	var ok := func(cond: bool, what: String) -> void:
+		print("UITEST %s %s" % ["PASS" if cond else "FAIL", what])
+		if not cond:
+			fails.append(what)
+	# a CS2 value keeps its digits: no step rounding, no clamp, shown as written
+	var sr: Dictionary = rows["sensitivity"]
+	main.player.input.sensitivity = 1.125
+	ok.call(is_equal_approx(float(_initial(sr)), 1.125) and _fmt(sr, 1.125) == "1.125", "sensitivity 1.125 stays 1.125 (%s)" % _fmt(sr, float(_initial(sr))))
+	main.hud.convars["fps_max"] = "999"
+	ok.call(int(_initial(rows["fps_max"])) == 999, "fps_max 999 is not clamped")
+	main.hud.convars.erase("fps_max")
+	ok.call(is_equal_approx(float(_fit(sr, 1.125, false)), 1.125) and is_equal_approx(float(_fit(sr, 1.125)), 1.13), "typed value keeps digits, slider snaps")
+	# a rebind moves the key: MOUSE1 on reload leaves attack
+	_rebind("reload:0", "MOUSE1")
+	var has := func(action: String, b: MouseButton) -> bool:
+		for ev in InputMap.action_get_events(action):
+			if ev is InputEventMouseButton and (ev as InputEventMouseButton).button_index == b:
+				return true
+		return false
+	ok.call(has.call("surf_reload", MOUSE_BUTTON_LEFT) and not has.call("surf_attack", MOUSE_BUTTON_LEFT) and not (_keys["attack"] as Array).has("MOUSE1"), "MOUSE1 moved from attack to reload")
+	_rebind("jump:1", "MWHEELDOWN")
+	ok.call(has.call("surf_jump", MOUSE_BUTTON_WHEEL_DOWN) and InputMap.action_get_events("surf_jump").size() == 2, "jump holds two keys")
+	# the file is written whole (temp + rename) and reads back
+	var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(FILE))
+	ok.call(d is Dictionary and d["keys"].has("reload") and d["keys"].has("attack") and not FileAccess.file_exists(FILE + ".tmp"), "settings file saved atomically with the moved keys")
+	_reset_binds()
+	ok.call(has.call("surf_attack", MOUSE_BUTTON_LEFT) and not has.call("surf_reload", MOUSE_BUTTON_LEFT), "reset puts MOUSE1 back on attack")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(FILE))
+	# crosshair pixels: thickness truncates (0.7 at 1080p is 1 px), presets are the 250/50 colours
+	var hv: Dictionary = main.hud.H
+	ok.call(float(Hud.xh_px({"cl_crosshairthickness": "0.7"}, 1080, hv)["thickness"]) == 1.0, "thickness 0.7 at 1080p draws 1 px")
+	ok.call(float(Hud.xh_px({"cl_crosshairthickness": "1"}, 1080, hv)["thickness"]) == 2.0, "thickness 1 at 1080p draws 2 px")
+	ok.call(Hud.xh_color({"cl_crosshaircolor": "1", "cl_crosshairusealpha": "0"}, hv).is_equal_approx(Color8(50, 250, 50)), "colour 1 is 50,250,50")
+	ok.call(Hud.xh_color({"cl_crosshaircolor": "5", "cl_crosshaircolor_r": "10", "cl_crosshaircolor_g": "20", "cl_crosshaircolor_b": "30", "cl_crosshairalpha": "128"}, hv).is_equal_approx(Color8(10, 20, 30, 128)), "colour 5 is the custom RGB with alpha")
+	# no hit marker unless the player turns it on
+	main.hud.hitmarker(false)
+	ok.call(main.hud._hit == 0.0, "hit marker off by default")
+	main.hud.hit_marker = true
+	main.hud.hitmarker(false)
+	ok.call(main.hud._hit > 0.0, "hit marker shows when turned on")
+	main.hud.hit_marker = false
+	main.hud._hit = 0.0
+	# every tab at 960x540 and 1920x1080: nothing past the window edge, the HUD hidden under the menu
+	for res in [Vector2i(960, 540), Vector2i(1920, 1080)]:
+		get_window().size = res
+		await get_tree().process_frame
+		_rebuild()
+		if not is_open:
+			toggle()
+		for t in TABS:
+			_show_tab(String(t[0]))
+			for i in 3:
+				await get_tree().process_frame
+			var vp := get_viewport().get_visible_rect()
+			var bad := _outside(_root, vp)
+			ok.call(bad == "", "%dx%d %s tab inside the window %s" % [vp.size.x, vp.size.y, t[0], bad])
+		ok.call(not main.hud.visible, "HUD hidden while the menu is open")
+	if is_open:
+		toggle()
+	print("UITEST %s" % ("ok" if fails.is_empty() else "FAILED %d" % fails.size()))
+	get_tree().quit(0 if fails.is_empty() else 1)
+
+## The first visible control (outside a scroll list) that runs past the window or is squeezed under its minimum size.
+func _outside(n: Node, vp: Rect2, in_scroll: bool = false) -> String:
+	for c in n.get_children():
+		if not (c is Control) or not (c as Control).is_visible_in_tree():
+			continue
+		var cc := c as Control
+		var r := cc.get_global_rect()
+		if not in_scroll and (r.position.x < vp.position.x - 1 or r.end.x > vp.end.x + 1 or r.position.y < -1 or r.end.y > vp.end.y + 1):
+			return "%s %s" % [cc.get_class(), r]
+		if r.end.x > vp.end.x + 1:
+			return "%s %s past right edge" % [cc.get_class(), r]
+		if cc is Label and (cc as Label).clip_text and (cc as Label).get_theme_font("font").get_string_size((cc as Label).text, HORIZONTAL_ALIGNMENT_LEFT, -1, (cc as Label).get_theme_font_size("font_size")).x > r.size.x + 1:
+			return "label '%s' clipped" % (cc as Label).text
+		var sub := _outside(cc, vp, in_scroll or cc is ScrollContainer)
+		if sub != "":
+			return sub
+	return ""
+

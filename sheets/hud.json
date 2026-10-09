@@ -73,6 +73,13 @@
       "verified": "design value"
     },
     {
+      "id": "font_fps",
+      "value": 14,
+      "unit": "px",
+      "note": "cl_showfps readout, top left",
+      "verified": "design value; position and size unverified: not checked against the CS2 client"
+    },
+    {
       "id": "bar_height",
       "value": 64,
       "unit": "px",
@@ -106,6 +113,13 @@
       "unit": "of clip",
       "note": "clip turns red at or under this share of a full clip (min 1)",
       "verified": "kept from Hud.gd v0.2; CS2 threshold unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "xh_colors",
+      "value": "250,50,50|50,250,50|250,250,50|50,50,250|50,250,250",
+      "unit": "r,g,b 0-255 per preset",
+      "note": "cl_crosshaircolor 0-4 (red, green, yellow, blue, cyan); 5 is the player's own cl_crosshaircolor_r/g/b",
+      "verified": "CS:GO hud_crosshair preset values as remembered by two reviewers (Gauntlet round 1); unverified: not checked against the CS2 client"
     },
     {
       "id": "yres_base",
@@ -146,7 +160,7 @@
       "id": "hit_inner",
       "value": 9,
       "unit": "px",
-      "note": "hit marker: inner end of each diagonal",
+      "note": "hit marker (off unless the player turns on Settings hit_marker; CS2 has none): inner end of each diagonal",
       "verified": "design value, unverified: not checked against the CS2 client"
     },
     {
@@ -174,7 +188,7 @@
       "id": "hit_sound",
       "value": "hitmarker",
       "unit": "sounds.json id",
-      "note": "played on every hit when sounds.json has this row; there is none yet (no CS2 hit sound in content.json), so hits are silent",
+      "note": "played with the hit marker (only when the player turned it on) if sounds.json has this row; there is none (no CS2 hit sound in content.json), so hits are silent",
       "verified": "checked: sounds.json has no 'hitmarker' row on 2026-10-09"
     },
     {
@@ -182,7 +196,21 @@
       "value": 720,
       "unit": "px",
       "note": "the Esc menu is laid out for this height and scales by height/menu_ref_height",
-      "verified": "design value; rendered at 960x540 and 1920x1080 (ui_r1 renders)"
+      "verified": "design value; rendered at 960x540 and 1920x1080 (ui_r2 renders)"
+    },
+    {
+      "id": "menu_nav",
+      "value": 54,
+      "unit": "px",
+      "note": "Esc menu icon nav bar height (settings, resume, aim lobby, restart, quit)",
+      "verified": "design value modelled on the CS2 main menu top bar; unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "menu_tabs",
+      "value": 40,
+      "unit": "px",
+      "note": "settings tab row height under the nav bar",
+      "verified": "design value; unverified: not checked against the CS2 client"
     },
     {
       "id": "menu_font",
@@ -193,9 +221,9 @@
     },
     {
       "id": "menu_row",
-      "value": 34,
+      "value": 40,
       "unit": "px",
-      "note": "menu row height",
+      "note": "menu row height (fits a number field, so slider and dropdown rows match)",
       "verified": "design value"
     },
     {

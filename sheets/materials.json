@@ -1,6 +1,6 @@
 {
   "_sheet": "materials",
-  "_doc": "One row per surface material the course and terrain use. albedo/normal/weather are content.json ids; uv_scale is metres per texture tile. Course.gd draws every textured row with one weathering shader: weather is a second texture mixed in by noise over weather_cover of the surface, grime is the strength of dirt streaks running down from a ramp's top edge (and its chipped lip), detail is the close-up detail overlay that keeps the texture sharp under the player. filter: aniso = mipmapped anisotropic (every shader material samples this way since world_r1).",
+  "_doc": "One row per surface material the course and terrain use. albedo/normal/weather are content.json ids; uv_scale is metres per texture tile. Course.gd draws every textured row with one weathering shader: weather is a second texture mixed in by noise over weather_cover of the surface, grime is the strength of dirt streaks running down from a ramp's top edge (and its chipped lip), detail is the close-up detail overlay that keeps the texture sharp under the player. filter: aniso = mipmapped anisotropic (every shader material samples this way since world_r1). panel: cast slab size in metres on ramp faces (dark joints, a tone per slab; 0 = none); tint: albedo multiplier; crease_ao: how much the foot of a ramp face (the valley crease) is darkened and occluded.",
   "columns": [
     "id",
     "albedo",
@@ -11,6 +11,9 @@
     "weather_cover",
     "grime",
     "detail",
+    "panel",
+    "tint",
+    "crease_ao",
     "filter",
     "verified"
   ],
@@ -25,6 +28,13 @@
       "weather_cover": 0.3,
       "grime": 0.5,
       "detail": 0.3,
+      "panel": 4.0,
+      "tint": [
+        0.95,
+        0.95,
+        0.97
+      ],
+      "crease_ao": 0.6,
       "filter": "aniso",
       "verified": "2026-10-08 seen in game on the start pad"
     },
@@ -38,6 +48,13 @@
       "weather_cover": 0,
       "grime": 0.45,
       "detail": 0.25,
+      "panel": 0,
+      "tint": [
+        1,
+        1,
+        1
+      ],
+      "crease_ao": 0.5,
       "filter": "aniso",
       "verified": "2026-10-08 seen in game on the start pad"
     },
@@ -51,6 +68,13 @@
       "weather_cover": 0,
       "grime": 0,
       "detail": 0,
+      "panel": 0,
+      "tint": [
+        1,
+        1,
+        1
+      ],
+      "crease_ao": 0,
       "filter": "aniso",
       "verified": "2026-10-08 seen in recorded frames (Launch Site ground)"
     },
@@ -61,11 +85,18 @@
       "uv_scale": 5.0,
       "roughness": 0.85,
       "weather": "tex_concrete_d_chute",
-      "weather_cover": 0.35,
-      "grime": 0.6,
+      "weather_cover": 0.5,
+      "grime": 0.85,
       "detail": 0.3,
+      "panel": 4.0,
+      "tint": [
+        0.74,
+        0.75,
+        0.79
+      ],
+      "crease_ao": 0.6,
       "filter": "aniso",
-      "verified": "2026-10-09 Gauntlet captures"
+      "verified": "2026-10-09 world_r2 renders: greyer tint and more cracked cover (r1 critics: flat beige, no wear)"
     },
     {
       "id": "ramp_panels",
@@ -77,6 +108,13 @@
       "weather_cover": 0,
       "grime": 0.4,
       "detail": 0.25,
+      "panel": 0,
+      "tint": [
+        1,
+        1,
+        1
+      ],
+      "crease_ao": 0.5,
       "filter": "aniso",
       "verified": "2026-10-09 Gauntlet captures"
     },
@@ -90,6 +128,13 @@
       "weather_cover": 0.15,
       "grime": 0,
       "detail": 0.45,
+      "panel": 0,
+      "tint": [
+        1,
+        1,
+        1
+      ],
+      "crease_ao": 0,
       "filter": "aniso",
       "verified": "2026-10-09 Gauntlet captures"
     },
@@ -103,6 +148,13 @@
       "weather_cover": 0,
       "grime": 0,
       "detail": 0,
+      "panel": 0,
+      "tint": [
+        1,
+        1,
+        1
+      ],
+      "crease_ao": 0,
       "filter": "aniso",
       "verified": "2026-10-09 world_r1: terrain shader mixes it with dirt and site concrete; sampled with mips (the unmipped look read as noise to the r4 critics)"
     },
@@ -116,6 +168,13 @@
       "weather_cover": 0,
       "grime": 0,
       "detail": 0,
+      "panel": 0,
+      "tint": [
+        1,
+        1,
+        1
+      ],
+      "crease_ao": 0,
       "filter": "aniso",
       "verified": "2026-10-09 world_r1 renders (terrain slopes and pit floor)"
     },
@@ -129,6 +188,13 @@
       "weather_cover": 0,
       "grime": 0,
       "detail": 0,
+      "panel": 0,
+      "tint": [
+        1,
+        1,
+        1
+      ],
+      "crease_ao": 0,
       "filter": "aniso",
       "verified": "invisible trigger volumes"
     }

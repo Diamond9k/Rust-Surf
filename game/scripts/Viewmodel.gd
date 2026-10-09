@@ -26,9 +26,12 @@ var _kick_t := 1.0
 ## plane by k = tan(fov/2) / tan(viewmodel_fov/2) (both Source fovs, horizontal at 4:3) projects it
 ## exactly as a separate viewmodel camera would, and the arms stay lit by the real sun and sky.
 ## (A SubViewport camera was tried first: Godot did not light the viewmodel layer in it.)
+## The whole rig is also drawn `shrink` times smaller and closer to the eye, with the camera's near plane
+## scaled to match: the picture is the same, but no wall the player can touch is ever in front of it.
 const LAYER := 1 << 19
 var _main_cam: Camera3D
 var world_fov := 90.0
+var shrink := 1.0
 
 ## Settings menu hook: any of viewmodel_fov / viewmodel_offset_x/y/z (CS2 units) and world_fov.
 func set_view(vals: Dictionary) -> void:
@@ -45,7 +48,7 @@ func _place() -> void:
 	var squeeze := Basis.from_scale(Vector3(k, k, 1.0))
 	var rig_basis := Basis.from_euler(Vector3(0, deg_to_rad(V["yaw"]), 0)).scaled(Vector3.ONE * V["scale"])
 	var off := Vector3(V["offset_x"] + V["viewmodel_offset_x"] * u, V["offset_y"] + V["viewmodel_offset_z"] * u, V["offset_z"] - V["viewmodel_offset_y"] * u)
-	transform = Transform3D(squeeze * rig_basis, squeeze * off)
+	transform = Transform3D(squeeze * rig_basis * shrink, squeeze * off * shrink)
 
 func setup(c: Content, cam: Camera3D, convars: Dictionary = {}) -> void:
 	content = c
@@ -56,6 +59,10 @@ func setup(c: Content, cam: Camera3D, convars: Dictionary = {}) -> void:
 	for k in ["viewmodel_fov", "viewmodel_offset_x", "viewmodel_offset_y", "viewmodel_offset_z"]:
 		if convars.has(k) and str(convars[k]).is_valid_float():
 			V[k] = float(convars[k])
+	for r in Sheets.load_sheet("weapon_defaults")["mechanics"]:
+		if r["id"] == "viewmodel_shrink":
+			shrink = clampf(float(r["value"]), 0.01, 1.0)
+	cam.near *= shrink
 	cam.add_child(self)
 	world_fov = Sheets.movement()["fov_default"]
 	_place()

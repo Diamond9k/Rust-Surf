@@ -45,14 +45,16 @@ def load_env(UnityPy, rust, bundles, node_filter=None):
 
 
 def export_texture(tex_pptr, out_png, max_size):
-    if os.path.exists(out_png):
+    from prep_cs2 import file_ok
+    if file_ok(out_png):  # whole (every PNG chunk CRC); a cut or garbled one is exported again
         return True
     try:
         tex = tex_pptr.read()
         img = tex.image
         if max(img.size) > max_size:
             img = img.resize((max_size, max_size))
-        img.save(out_png)
+        img.save(out_png + ".tmp", format="PNG")
+        os.replace(out_png + ".tmp", out_png)
         return True
     except Exception as e:
         LOG("  texture failed %s: %r" % (out_png, e))
@@ -90,21 +92,26 @@ def mesh_prims(mesh, mat_names):
 
 
 def write_mesh_glb(mesh, mat_names, materials, out_dir, name):
+    from prep_cs2 import glb_ok
     path = os.path.join(out_dir, name + ".glb")
-    if os.path.exists(path):
+    if glb_ok(path, "meshes"):
         return
-    write_glb(path, name, mesh_prims(mesh, mat_names), {m: materials[m] for m in mat_names if m in materials}, "../tex/")
+    write_glb(path + ".tmp", name, mesh_prims(mesh, mat_names), {m: materials[m] for m in mat_names if m in materials}, "../tex/")
+    os.replace(path + ".tmp", path)
 
 
 def decode_fsb(clip, vgm, out_wav):
     from UnityPy.helpers.ResourceReader import get_resource_data
-    if os.path.exists(out_wav):
+    from prep_cs2 import file_ok
+    if file_ok(out_wav):
         return True
     d = get_resource_data(clip.m_Resource.m_Source, clip.assets_file, clip.m_Resource.m_Offset, clip.m_Resource.m_Size)
     fsb = out_wav + ".fsb"
     open(fsb, "wb").write(bytes(d))
-    r = subprocess.run([vgm, "-o", out_wav, fsb], capture_output=True, text=True)
+    r = subprocess.run([vgm, "-o", out_wav + ".tmp.wav", fsb], capture_output=True, text=True)
     os.remove(fsb)
+    if r.returncode == 0:
+        os.replace(out_wav + ".tmp.wav", out_wav)
     if r.returncode != 0:
         LOG("  vgmstream failed: " + r.stderr[-300:])
     return r.returncode == 0

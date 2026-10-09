@@ -1,6 +1,6 @@
 {
   "_sheet": "aim_lobby",
-  "_doc": "The aim-train range far above the surf course. Lengths in metres, positions relative to 'center' (x right, y up, z toward the spawn; lanes run toward -z). Distances are measured from the firing line. Bot size is movement.json hull_height (72 u), so 'parts' and 'props' positions are fractions of that height in the bot's own frame (x to its left as you face it, z toward the player). A part is a hittable body in a hitgroup; a prop is a mesh riding on a part (when: always, face = any outfit but the burlap sack, wrap / can / plate / hood = that outfit gear). A sphere's 'b', when not zero, stretches its mesh by b.y in height (the hitbox stays the sphere of radius r).",
+  "_doc": "The aim-train range far above the surf course. Lengths in metres, positions in the range frame: origin at 'center', turned range_yaw about y (x right, y up, z toward the spawn; lanes run toward -z). Distances are measured from the firing line. Bot size is movement.json hull_height (72 u), so 'parts' and 'props' positions are fractions of that height in the bot's own frame (x to its left as you face it, z toward the player). A part is a hittable body in a hitgroup; a prop is a mesh riding on a part (when: always, face = outfits whose 'face' is true, otherwise the outfit's head or chest gear: wrap / can / hood / mask, plate / rig). A sphere's 'b', when b.y is not zero, scales its mesh per axis (0 = 1; the hitbox stays the sphere of radius r). An 'rbox' is a box hitbox drawn as a rounded pill of the same size. Time to kill runs from the later of the bot standing up (or the round starting) and your previous kill; a second kill by the same shot adds no time.",
   "columns": [
     "id",
     "value",
@@ -19,6 +19,12 @@
       "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
+      "id": "range_yaw",
+      "value": 180,
+      "what": "degrees the whole range is turned about 'center' (0: lanes run toward world -z); every other position in this sheet is in the turned range frame",
+      "verified": "2026-10-09 design value (Gauntlet round 2): chosen so the sheet sun (lighting.json sun_yaw -150) lights the bots' faces instead of backlighting them; rendered in lobby_r2 renders"
+    },
+    {
       "id": "arena_size",
       "value": [
         60,
@@ -32,6 +38,12 @@
       "value": 9,
       "what": "wall height above the floor",
       "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "front_wall_height",
+      "value": 3.0,
+      "what": "height of the wall behind the spawn: low, so its shadow never falls across the firing line and the near bots",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
     },
     {
       "id": "wall_thickness",
@@ -64,7 +76,7 @@
     {
       "id": "spawn_yaw",
       "value": 0,
-      "what": "degrees; 0 faces -z, down the lanes",
+      "what": "degrees in the range frame; 0 faces down the lanes",
       "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
@@ -76,7 +88,7 @@
     {
       "id": "rail_height",
       "value": 0.12,
-      "what": "height of the low concrete curb along the firing line (no railing in the way of the view)",
+      "what": "height of the low concrete curb just in front of the firing line (no railing in the way of the view)",
       "verified": "2026-10-09 design value: rendered in lobby_r1 renders and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
@@ -142,8 +154,14 @@
     {
       "id": "points_track_s",
       "value": 100,
-      "what": "track: score per second on target with the trigger held",
-      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+      "what": "track: score per second on target; each hitting shot is credited the time since the shot before it, capped by track_credit_max_s and the held gun's cycletime, so holding the trigger without firing or missing earns nothing",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "track_credit_max_s",
+      "value": 0.25,
+      "what": "track: most seconds of on-target time one hitting shot can earn (the gun's cycletime caps it lower); the sum can never exceed the time the round ran",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "points_miss",
@@ -178,8 +196,20 @@
     {
       "id": "wall_material",
       "value": "ramp_concrete",
-      "what": "materials.json id",
-      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+      "what": "materials.json id: the walls, drawn through the course weathering shader (world mapped, grime streaks from the top)",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "wall_grime",
+      "value": 0.6,
+      "what": "strength of the grime streaks running down the wall faces from the top edge (0 = clean)",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "wall_lift_m",
+      "value": 1.5,
+      "what": "height of one concrete pour: a faint line is drawn across the walls at every multiple",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
     },
     {
       "id": "trim_material",
@@ -192,6 +222,57 @@
       "value": "ramp_panels",
       "what": "materials.json id",
       "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "wainscot_material",
+      "value": "ramp_panels",
+      "what": "materials.json id: the band of green site panels along the foot of every wall",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "wainscot_height",
+      "value": 1.4,
+      "what": "height of the panel band along the foot of the walls",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "pilaster_material",
+      "value": "concrete",
+      "what": "materials.json id: wall pilasters and catwalk supports",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "pilaster_size",
+      "value": [
+        0.9,
+        0.45
+      ],
+      "what": "pilaster width and depth out of the wall",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "pilaster_step",
+      "value": 8,
+      "what": "spacing of pilasters along the side walls (front and back walls put one on every lane divider)",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "crate_frame",
+      "value": 0.08,
+      "what": "edge thickness of the metal frame on every crate",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "catwalk_rail",
+      "value": 1.0,
+      "what": "height of the rail along a catwalk's open edge",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "distance_plaque_y",
+      "value": 5.0,
+      "what": "height of the distance plaques on the side walls (above the catwalks)",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
     },
     {
       "id": "ground_material",
@@ -229,18 +310,174 @@
           2.2,
           1.0,
           1.0
+        ],
+        [
+          3,
+          18,
+          1.4,
+          1.1,
+          1.4
         ]
       ],
-      "what": "low crates: lane, distance in front of the bot spot, width, height, depth",
-      "verified": "2026-10-09 design value: rendered in lobby_r1 renders and scored headless (--lobbytest); not yet playtested on the PC"
+      "what": "low framed crates down range: lane, metres from the firing line, width, height, depth",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "crate_stacks",
+      "value": [
+        [
+          -27.4,
+          0,
+          28.6,
+          2.2,
+          1.2,
+          2.2
+        ],
+        [
+          -27.3,
+          1.2,
+          28.7,
+          1.9,
+          1.0,
+          1.9
+        ],
+        [
+          -24.9,
+          0,
+          29.6,
+          2.2,
+          1.2,
+          2.2
+        ],
+        [
+          27.2,
+          0,
+          28.4,
+          2.2,
+          1.2,
+          2.2
+        ],
+        [
+          27.4,
+          1.2,
+          28.5,
+          1.8,
+          1.0,
+          1.8
+        ],
+        [
+          -20,
+          0,
+          -30.4,
+          3.0,
+          1.4,
+          2.4
+        ],
+        [
+          -19.7,
+          1.4,
+          -30.6,
+          2.2,
+          1.2,
+          2.0
+        ],
+        [
+          -15.6,
+          0,
+          -30.6,
+          2.0,
+          1.2,
+          2.0
+        ],
+        [
+          17.5,
+          0,
+          -30.4,
+          3.0,
+          1.4,
+          2.4
+        ],
+        [
+          4.5,
+          0,
+          -30.6,
+          2.4,
+          1.2,
+          2.0
+        ],
+        [
+          4.6,
+          1.2,
+          -30.7,
+          1.8,
+          1.0,
+          1.8
+        ]
+      ],
+      "what": "stacked framed crates in the spawn corners and along the back wall: [x, base y, z] relative to center, then width, height, depth",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "catwalks",
+      "value": [
+        [
+          -1,
+          18,
+          44,
+          2.4,
+          2.8
+        ],
+        [
+          1,
+          16,
+          44,
+          2.4,
+          2.8
+        ]
+      ],
+      "what": "raised walkways along the side walls: [side -1 left / 1 right, near and far metres from the firing line, width, deck height]; a stair leads up at the near end",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
     },
     {
       "id": "bot_spots",
       "value": [
         [
+          2,
+          6,
+          4.5,
+          4,
+          0,
+          0
+        ],
+        [
+          4,
+          7,
+          -4.0,
+          1,
+          0,
+          0
+        ],
+        [
+          3,
+          4.5,
+          -2.0,
+          2,
+          0,
+          0
+        ],
+        [
+          4,
+          10,
+          -2.0,
+          0,
+          0,
+          0
+        ],
+        [
           1,
           8,
           1.5,
+          0,
           0,
           0
         ],
@@ -249,6 +486,7 @@
           19,
           -1,
           2,
+          0,
           0
         ],
         [
@@ -256,20 +494,23 @@
           31,
           0.5,
           1,
-          1.2
+          1.2,
+          0
         ],
         [
           2,
           12,
           0,
           3,
+          0,
           0
         ],
         [
           2,
           24,
           1,
-          1,
+          4,
+          0,
           0
         ],
         [
@@ -277,19 +518,14 @@
           36,
           -1,
           0,
-          2.4
-        ],
-        [
-          3,
-          7,
-          -1.5,
-          1,
+          2.4,
           0
         ],
         [
           3,
           15,
           1.5,
+          0,
           0,
           0
         ],
@@ -298,41 +534,39 @@
           27,
           0,
           2,
-          1.2
+          1.2,
+          0
         ],
         [
           3,
           40,
           0,
           3,
-          0
-        ],
-        [
-          4,
-          10,
-          -0.5,
-          2,
+          0,
           0
         ],
         [
           4,
           21,
           0,
-          3,
-          1.2
+          4,
+          1.2,
+          0
         ],
         [
           4,
           33,
           1,
           0,
+          0,
           0
         ],
         [
           5,
-          8,
+          9,
           -1,
           3,
+          0,
           0
         ],
         [
@@ -340,25 +574,52 @@
           17,
           0.5,
           1,
+          0,
           0
-        ],
-        [
-          5,
-          29,
-          -0.5,
-          2,
-          2.4
         ],
         [
           5,
           42,
           0,
           0,
+          0,
           0
+        ],
+        [
+          1,
+          24,
+          -6.8,
+          3,
+          2.8,
+          1
+        ],
+        [
+          1,
+          38,
+          -6.8,
+          4,
+          2.8,
+          1
+        ],
+        [
+          5,
+          28,
+          6.8,
+          2,
+          2.8,
+          1
+        ],
+        [
+          5,
+          40,
+          6.8,
+          1,
+          2.8,
+          1
         ]
       ],
-      "what": "where bots stand: [lane, metres from the firing line, sideways offset m, outfit index, standing height m (0 = floor, else a crate of that height under the bot, like aim_botz's raised spots)]",
-      "verified": "2026-10-09 design value: rendered in lobby_r1 renders and scored headless (--lobbytest); not yet playtested on the PC"
+      "what": "where bots stand: [lane, metres from the firing line, sideways offset m, outfit index, standing height m, on a catwalk 0/1]; a raised spot that is not on a catwalk gets a crate of that height under the bot, like aim_botz's raised spots",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "bot_crate",
@@ -541,6 +802,16 @@
       "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
+      "id": "color_lamp",
+      "value": [
+        1.0,
+        0.93,
+        0.78
+      ],
+      "what": "wall lamp glow",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
       "id": "cloth_noise",
       "value": [
         0.72,
@@ -548,6 +819,54 @@
       ],
       "what": "cloth weave brightness range (procedural texture, multiplied by the outfit colour)",
       "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "ui_ct",
+      "value": [
+        0.6,
+        0.73,
+        0.94
+      ],
+      "what": "HUD blue: kills box strip and number, kill feed name (chosen by eye to read like CS2's CT blue; not taken from CS2 files)",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "ui_t",
+      "value": [
+        0.92,
+        0.75,
+        0.38
+      ],
+      "what": "HUD gold: score box, stats panel accent and the summary (chosen by eye to read like CS2's T gold; not taken from CS2 files)",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "ui_feed_border",
+      "value": [
+        0.82,
+        0.12,
+        0.1
+      ],
+      "what": "kill-feed outline on your own kills (CS2 outlines the local player's kills in red; the exact colour is chosen by eye)",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "ui_alpha",
+      "value": 0.55,
+      "what": "HUD panel background opacity",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "ui_panel_w",
+      "value": 300,
+      "what": "stats panel width, px at hud.json ref_height (the lobby HUD scales with the window height)",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "ui_hint_bottom",
+      "value": 96,
+      "what": "key hints' distance from the bottom edge, px at ref_height (clear of the ammo and health bar)",
+      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
     }
   ],
   "modes": [
@@ -574,7 +893,8 @@
     "a",
     "b",
     "r",
-    "slot"
+    "slot",
+    "verified"
   ],
   "parts": [
     {
@@ -587,13 +907,13 @@
         0.01
       ],
       "b": [
-        1,
+        0.86,
         1.12,
-        1
+        0.95
       ],
-      "r": 0.068,
+      "r": 0.064,
       "slot": "skin",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model; the round hitbox is about 2 cm wider than the drawn head on each side"
     },
     {
       "id": "neck",
@@ -616,7 +936,7 @@
     {
       "id": "chest",
       "group": "chest",
-      "shape": "box",
+      "shape": "rbox",
       "a": [
         0,
         0.725,
@@ -629,12 +949,12 @@
       ],
       "r": 0,
       "slot": "shirt",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
     },
     {
       "id": "stomach",
       "group": "stomach",
-      "shape": "box",
+      "shape": "rbox",
       "a": [
         0,
         0.565,
@@ -647,12 +967,12 @@
       ],
       "r": 0,
       "slot": "shirt",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
     },
     {
       "id": "pelvis",
       "group": "stomach",
-      "shape": "box",
+      "shape": "rbox",
       "a": [
         0,
         0.48,
@@ -665,7 +985,7 @@
       ],
       "r": 0,
       "slot": "pants",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
     },
     {
       "id": "arm_upper_r",
@@ -718,7 +1038,7 @@
         0
       ],
       "r": 0.03,
-      "slot": "skin",
+      "slot": "gloves",
       "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
     },
     {
@@ -772,7 +1092,7 @@
         0
       ],
       "r": 0.03,
-      "slot": "skin",
+      "slot": "gloves",
       "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
     },
     {
@@ -814,7 +1134,7 @@
     {
       "id": "foot_r",
       "group": "legs",
-      "shape": "box",
+      "shape": "rbox",
       "a": [
         0.068,
         0.026,
@@ -827,7 +1147,7 @@
       ],
       "r": 0,
       "slot": "boots",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
     },
     {
       "id": "thigh_l",
@@ -868,7 +1188,7 @@
     {
       "id": "foot_l",
       "group": "legs",
-      "shape": "box",
+      "shape": "rbox",
       "a": [
         -0.068,
         0.026,
@@ -881,7 +1201,7 @@
       ],
       "r": 0,
       "slot": "boots",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
     }
   ],
   "props": [
@@ -990,14 +1310,14 @@
         -0.012
       ],
       "b": [
-        0,
-        0,
-        0
+        0.9,
+        0.95,
+        0.97
       ],
       "r": 0.064,
       "slot": "hair",
       "when": "face",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
     },
     {
       "id": "sack",
@@ -1009,14 +1329,14 @@
         0.008
       ],
       "b": [
-        1,
+        0.92,
         1.12,
         1
       ],
-      "r": 0.073,
+      "r": 0.07,
       "slot": "shirt",
       "when": "wrap",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
     },
     {
       "id": "sack_tie",
@@ -1194,7 +1514,7 @@
       "on": "head",
       "shape": "sphere",
       "a": [
-        0.066,
+        0.058,
         0.925,
         0.0
       ],
@@ -1206,14 +1526,14 @@
       "r": 0.014,
       "slot": "skin",
       "when": "face",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
     },
     {
       "id": "ear_l",
       "on": "head",
       "shape": "sphere",
       "a": [
-        -0.066,
+        -0.058,
         0.925,
         0.0
       ],
@@ -1225,7 +1545,7 @@
       "r": 0.014,
       "slot": "skin",
       "when": "face",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
     },
     {
       "id": "nose",
@@ -1275,14 +1595,14 @@
         -0.016
       ],
       "b": [
-        1,
+        0.92,
         1.15,
         1
       ],
       "r": 0.08,
       "slot": "shirt",
       "when": "hood",
-      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
     },
     {
       "id": "hood_hang",
@@ -1340,6 +1660,253 @@
       "slot": "eyes",
       "when": "wrap",
       "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "vest",
+      "on": "chest",
+      "shape": "rbox",
+      "a": [
+        0,
+        0.715,
+        0
+      ],
+      "b": [
+        0.258,
+        0.24,
+        0.152
+      ],
+      "r": 0,
+      "slot": "rig",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "vest_collar",
+      "on": "chest",
+      "shape": "box",
+      "a": [
+        0,
+        0.825,
+        -0.004
+      ],
+      "b": [
+        0.13,
+        0.025,
+        0.14
+      ],
+      "r": 0,
+      "slot": "rig",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "pouch_l",
+      "on": "stomach",
+      "shape": "box",
+      "a": [
+        -0.062,
+        0.6,
+        0.075
+      ],
+      "b": [
+        0.05,
+        0.075,
+        0.034
+      ],
+      "r": 0,
+      "slot": "rig",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "pouch_c",
+      "on": "stomach",
+      "shape": "box",
+      "a": [
+        0,
+        0.6,
+        0.075
+      ],
+      "b": [
+        0.05,
+        0.075,
+        0.034
+      ],
+      "r": 0,
+      "slot": "rig",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "pouch_r",
+      "on": "stomach",
+      "shape": "box",
+      "a": [
+        0.062,
+        0.6,
+        0.075
+      ],
+      "b": [
+        0.05,
+        0.075,
+        0.034
+      ],
+      "r": 0,
+      "slot": "rig",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "radio",
+      "on": "chest",
+      "shape": "box",
+      "a": [
+        -0.085,
+        0.79,
+        0.075
+      ],
+      "b": [
+        0.035,
+        0.055,
+        0.024
+      ],
+      "r": 0,
+      "slot": "boots",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "knee_r",
+      "on": "shin_r",
+      "shape": "sphere",
+      "a": [
+        0.068,
+        0.268,
+        0.042
+      ],
+      "b": [
+        1,
+        1.25,
+        1
+      ],
+      "r": 0.034,
+      "slot": "rig",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "knee_l",
+      "on": "shin_l",
+      "shape": "sphere",
+      "a": [
+        -0.068,
+        0.268,
+        0.042
+      ],
+      "b": [
+        1,
+        1.25,
+        1
+      ],
+      "r": 0.034,
+      "slot": "rig",
+      "when": "rig",
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "mask_hood",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0,
+        0.932,
+        -0.008
+      ],
+      "b": [
+        0.92,
+        1.14,
+        1
+      ],
+      "r": 0.079,
+      "slot": "shirt",
+      "when": "mask",
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios (head about 1/8 of height, about 0.2 m wide), rendered in lobby_r2 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "visor",
+      "on": "head",
+      "shape": "box",
+      "a": [
+        0,
+        0.94,
+        0.07
+      ],
+      "b": [
+        0.105,
+        0.042,
+        0.03
+      ],
+      "r": 0,
+      "slot": "eyes",
+      "when": "mask",
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "filter",
+      "on": "head",
+      "shape": "cylinder",
+      "a": [
+        0,
+        0.885,
+        0.078
+      ],
+      "b": [
+        0,
+        0.04,
+        0
+      ],
+      "r": 0.024,
+      "slot": "boots",
+      "when": "mask",
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "cuff_r",
+      "on": "arm_lower_r",
+      "shape": "capsule",
+      "a": [
+        0.075,
+        0.664,
+        0.18
+      ],
+      "b": [
+        0.07,
+        0.666,
+        0.198
+      ],
+      "r": 0.036,
+      "slot": "gloves",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "cuff_l",
+      "on": "arm_lower_l",
+      "shape": "capsule",
+      "a": [
+        -0.035,
+        0.687,
+        0.28
+      ],
+      "b": [
+        -0.03,
+        0.69,
+        0.297
+      ],
+      "r": 0.036,
+      "slot": "gloves",
+      "when": "always",
+      "verified": "2026-10-09 design value (Gauntlet round 2): proportions from standard human ratios, rendered in lobby_r2 renders; not a CS2 or Rust model"
     }
   ],
   "outfits": [
@@ -1359,6 +1926,16 @@
         0.2,
         0.14,
         0.09
+      ],
+      "gloves": [
+        0.36,
+        0.28,
+        0.18
+      ],
+      "rig": [
+        0.3,
+        0.26,
+        0.18
       ],
       "skin": [
         0.8,
@@ -1382,7 +1959,8 @@
       ],
       "head": "wrap",
       "chest": "none",
-      "verified": "2026-10-09 design value: colours chosen to read like Rust's burlap, hide, road-sign and hoodie clothing; not taken from Rust files"
+      "face": false,
+      "verified": "2026-10-09 design value (Gauntlet round 2): colours chosen by eye to read like Rust clothing (burlap, hide, road sign, hoodie, scientist suit); not taken from Rust files"
     },
     {
       "id": "hide",
@@ -1400,6 +1978,16 @@
         0.16,
         0.11,
         0.07
+      ],
+      "gloves": [
+        0.24,
+        0.16,
+        0.1
+      ],
+      "rig": [
+        0.28,
+        0.2,
+        0.13
       ],
       "skin": [
         0.62,
@@ -1422,8 +2010,9 @@
         1
       ],
       "head": "none",
-      "chest": "none",
-      "verified": "2026-10-09 design value: colours chosen to read like Rust's burlap, hide, road-sign and hoodie clothing; not taken from Rust files"
+      "chest": "rig",
+      "face": true,
+      "verified": "2026-10-09 design value (Gauntlet round 2): colours chosen by eye to read like Rust clothing (burlap, hide, road sign, hoodie, scientist suit); not taken from Rust files"
     },
     {
       "id": "roadsign",
@@ -1441,6 +2030,16 @@
         0.14,
         0.12,
         0.1
+      ],
+      "gloves": [
+        0.14,
+        0.13,
+        0.12
+      ],
+      "rig": [
+        0.25,
+        0.25,
+        0.22
       ],
       "skin": [
         0.78,
@@ -1464,7 +2063,8 @@
       ],
       "head": "can",
       "chest": "plate",
-      "verified": "2026-10-09 design value: colours chosen to read like Rust's burlap, hide, road-sign and hoodie clothing; not taken from Rust files"
+      "face": true,
+      "verified": "2026-10-09 design value (Gauntlet round 2): colours chosen by eye to read like Rust clothing (burlap, hide, road sign, hoodie, scientist suit); not taken from Rust files"
     },
     {
       "id": "hoodie",
@@ -1482,6 +2082,16 @@
         0.12,
         0.1,
         0.08
+      ],
+      "gloves": [
+        0.1,
+        0.1,
+        0.1
+      ],
+      "rig": [
+        0.22,
+        0.24,
+        0.2
       ],
       "skin": [
         0.45,
@@ -1504,8 +2114,61 @@
         1
       ],
       "head": "hood",
-      "chest": "none",
-      "verified": "2026-10-09 design value: colours chosen to read like Rust's burlap, hide, road-sign and hoodie clothing; not taken from Rust files"
+      "chest": "rig",
+      "face": true,
+      "verified": "2026-10-09 design value (Gauntlet round 2): colours chosen by eye to read like Rust clothing (burlap, hide, road sign, hoodie, scientist suit); not taken from Rust files"
+    },
+    {
+      "id": "scientist",
+      "shirt": [
+        0.24,
+        0.4,
+        0.5
+      ],
+      "pants": [
+        0.22,
+        0.36,
+        0.45
+      ],
+      "boots": [
+        0.1,
+        0.1,
+        0.1
+      ],
+      "gloves": [
+        0.08,
+        0.08,
+        0.09
+      ],
+      "rig": [
+        0.16,
+        0.18,
+        0.2
+      ],
+      "skin": [
+        0.72,
+        0.53,
+        0.41
+      ],
+      "hair": [
+        0.1,
+        0.08,
+        0.06
+      ],
+      "eyes": [
+        0.04,
+        0.05,
+        0.06
+      ],
+      "metal": [
+        1,
+        1,
+        1
+      ],
+      "head": "mask",
+      "chest": "rig",
+      "face": false,
+      "verified": "2026-10-09 design value (Gauntlet round 2): colours chosen by eye to read like Rust clothing (burlap, hide, road sign, hoodie, scientist suit); not taken from Rust files"
     }
   ]
 }
