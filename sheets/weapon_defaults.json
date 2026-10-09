@@ -1,6 +1,6 @@
 {
  "_sheet": "weapon_defaults",
- "_doc": "rows: fallback stats per weapon class, used only for a value the player's items_game.txt (prep -> cs2/weapon_stats.json, plus the raw cs2/scripts/items/items_game.txt for keys prep does not list) does not give. Every value is unverified and loses to the real file. mechanics: the constants of the gun model around those stats (recoil punch, spread, penetration, armor, knife, scope, reload, viewmodel kicks). Most are CS:GO SDK defaults that CS2 may have changed, so each says so.",
+ "_doc": "rows: fallback stats per weapon class, used only for a value the player's items_game.txt (prep -> cs2/weapon_stats.json, plus the raw cs2/scripts/items/items_game.txt for keys prep does not list) does not give. Every value is unverified and loses to the real file. mechanics: the constants of the gun model around those stats (recoil punch, spread, penetration, armor, knife, scope, reload, viewmodel kicks). Most are CS:GO SDK defaults that CS2 may have changed, so each says so. reference: a few stats every CS2 player knows; --wtest stats_reference compares each against the value resolved from the player's files (only where the files gave one), so a CS2 update that moved or renamed a stat key shows up as a FAIL instead of a silent class average.",
  "columns": [
   "id",
   "damage",
@@ -914,6 +914,138 @@
    "used_in": "Viewmodel.gd dry-fire twitch of an empty gun: [seconds, x, y, z m, pitch, yaw, roll deg]",
    "source": "mashup tuning",
    "verified": "unverified: mashup tuning, not a CS2 value"
+  },
+  {
+   "id": "burst_messages",
+   "value": [
+    "Switched to Burst-Fire Mode",
+    "Switched to Automatic",
+    "Switched to Semi-Automatic"
+   ],
+   "used_in": "HUD line when attack2 toggles burst: burst on, back to a full-auto base gun (FAMAS), back to a semi-auto base gun (Glock-18)",
+   "source": "CS:GO localization Cstrike_TitlesTXT_Switch_To_BurstFire / _FullAuto / _SemiAuto (from memory)",
+   "verified": "unverified: the CS2 strings were not read"
+  },
+  {
+   "id": "fire_catchup_max",
+   "value": 4,
+   "used_in": "held automatic fire: most rounds one frame may fire, each at its own slot time, when the frame is longer than the cycletime (a hitch or low fps keeps the real rate of fire)",
+   "source": "mashup stand-in for CS2 sub-tick input",
+   "verified": "mashup choice, not a CS2 value"
+  },
+  {
+   "id": "zoom_time_none",
+   "value": 0.05,
+   "used_in": "fov ease in seconds when no weapon is held (a scope dropped on a weapon switch)",
+   "source": "matches earlier builds",
+   "verified": "mashup choice, not a CS2 value"
+  },
+  {
+   "id": "pen_exit_skips",
+   "value": 3,
+   "used_in": "penetration exit search: other bodies met looking back (an overlapping part of the same bot) skipped per step before the step is given up",
+   "source": "mashup: Godot has no point-contents test like CS TraceToExit",
+   "verified": "mashup choice; --wtest pen_overlapping_parts checks a bullet passes a head sphere into an overlapping neck"
+  },
+  {
+   "id": "air_crouch_cone",
+   "value": 1,
+   "used_in": "1: a ducked player in the air keeps the crouch base cone (CS reads FL_DUCKING, set in a crouch-jump); 0: the air always uses the stand base",
+   "source": "CS:GO GetInaccuracy duck flag test (from memory of the SDK)",
+   "verified": "unverified: whether CS2 uses the crouch base in the air was not checked"
+  }
+ ],
+ "reference_columns": [
+  "id",
+  "weapon",
+  "key",
+  "value",
+  "verified"
+ ],
+ "reference": [
+  {
+   "id": "cs2_ak47:damage",
+   "weapon": "cs2_ak47",
+   "key": "damage",
+   "value": 36,
+   "verified": "unverified: well-known CS2 value from memory, not read from a CS2 file here"
+  },
+  {
+   "id": "cs2_ak47:cycletime",
+   "weapon": "cs2_ak47",
+   "key": "cycletime",
+   "value": 0.1,
+   "verified": "unverified: well-known CS2 value from memory, not read from a CS2 file here"
+  },
+  {
+   "id": "cs2_ak47:primary clip size",
+   "weapon": "cs2_ak47",
+   "key": "primary clip size",
+   "value": 30,
+   "verified": "unverified: well-known CS2 value from memory, not read from a CS2 file here"
+  },
+  {
+   "id": "cs2_m4a4:damage",
+   "weapon": "cs2_m4a4",
+   "key": "damage",
+   "value": 33,
+   "verified": "unverified: well-known CS2 value from memory, not read from a CS2 file here"
+  },
+  {
+   "id": "cs2_awp:damage",
+   "weapon": "cs2_awp",
+   "key": "damage",
+   "value": 115,
+   "verified": "unverified: well-known CS2 value from memory, not read from a CS2 file here"
+  },
+  {
+   "id": "cs2_awp:primary clip size",
+   "weapon": "cs2_awp",
+   "key": "primary clip size",
+   "value": 5,
+   "verified": "unverified: well-known CS2 value from memory, not read from a CS2 file here"
+  },
+  {
+   "id": "cs2_deagle:damage",
+   "weapon": "cs2_deagle",
+   "key": "damage",
+   "value": 53,
+   "verified": "unverified: well-known CS2 value from memory, not read from a CS2 file here"
+  },
+  {
+   "id": "cs2_deagle:primary clip size",
+   "weapon": "cs2_deagle",
+   "key": "primary clip size",
+   "value": 7,
+   "verified": "unverified: well-known CS2 value from memory, not read from a CS2 file here"
+  },
+  {
+   "id": "cs2_glock:damage",
+   "weapon": "cs2_glock",
+   "key": "damage",
+   "value": 30,
+   "verified": "unverified: well-known CS2 value from memory, not read from a CS2 file here"
+  },
+  {
+   "id": "cs2_glock:primary clip size",
+   "weapon": "cs2_glock",
+   "key": "primary clip size",
+   "value": 20,
+   "verified": "unverified: well-known CS2 value from memory, not read from a CS2 file here"
+  },
+  {
+   "id": "cs2_usp_silencer:damage",
+   "weapon": "cs2_usp_silencer",
+   "key": "damage",
+   "value": 35,
+   "verified": "unverified: well-known CS2 value from memory, not read from a CS2 file here"
+  },
+  {
+   "id": "cs2_usp_silencer:primary clip size",
+   "weapon": "cs2_usp_silencer",
+   "key": "primary clip size",
+   "value": 12,
+   "verified": "unverified: well-known CS2 value from memory, not read from a CS2 file here"
   }
  ]
 }

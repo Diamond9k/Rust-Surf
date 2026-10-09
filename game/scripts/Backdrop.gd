@@ -11,6 +11,8 @@ var meshes := {}
 var mats := {}
 var placed := 0
 var props := 0
+var halls := 0
+var aprons := PackedVector4Array()
 var nodes: Array[MeshInstance3D] = []
 var T: Dictionary
 var terrain: MeshInstance3D
@@ -54,6 +56,7 @@ func build(c: Content, offset: Vector3, yaw_deg: float) -> void:
 	_pit_mask()
 	_terrain()
 	_props()
+	_halls()
 	_scatter()
 
 ## course.json terrain.props: extra copies of the extracted Launch Site meshes set around the course as
@@ -72,6 +75,213 @@ func _props() -> void:
 		mi.global_transform = Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(float(p["yaw"])), 0)).scaled(Vector3.ONE * sc), Vector3(at[0], height(at[0], at[1]) + float(p["dy"]), at[1]))
 		props += 1
 		_avoid.append(mi.global_transform * mesh.get_aabb())
+
+## course.json terrain.halls: large industrial halls built here from Rust's own Launch Site textures
+## (corrugated sheet_metal walls over a cinder block base, roof_plating_a gable roofs, glass_industrial
+## window bands, concrete pilasters and plinth, sheet metal doors, an optional glazed roof lantern). Our
+## buildings, scenery only (no collision): prep extracts no Rust building larger than the warehouse.
+func _halls() -> void:
+	var H: Dictionary = T["halls"]
+	var roles: Dictionary = H["materials"]
+	for h in H["rows"]:
+		var sts := {}
+		for k in roles:
+			var st := SurfaceTool.new()
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			sts[k] = st
+		var used := _hall(h, sts)
+		var mesh := ArrayMesh.new()
+		for k in used:
+			var st: SurfaceTool = sts[k]
+			st.generate_tangents()
+			st.commit(mesh)
+			mesh.surface_set_material(mesh.get_surface_count() - 1, _row_mat(String(roles[k])))
+		var mi := MeshInstance3D.new()
+		mi.name = String(h["id"])
+		mi.mesh = mesh
+		mi.top_level = true
+		add_child(mi)
+		var at: Array = h["pos"]
+		mi.global_transform = Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(float(h["yaw"])), 0)), Vector3(at[0], height(at[0], at[1]) + float(h["dy"]), at[1]))
+		var box := mi.global_transform * mesh.get_aabb()
+		_avoid.append(box)
+		halls += 1
+		var mg := float(H["apron"])
+		aprons.append(Vector4(box.position.x - mg, box.position.z - mg, box.end.x + mg, box.end.z + mg))
+	# the ground round each hall is the site concrete (terrain shader aprons)
+	_ground_material().set_shader_parameter("apron_count", mini(aprons.size(), 8))
+	var ap := aprons.duplicate()
+	ap.resize(8)
+	_ground_material().set_shader_parameter("aprons", ap)
+
+## One hall in its own frame: length along x, width along z, ground at y 0. Returns the roles it drew.
+func _hall(h: Dictionary, sts: Dictionary) -> Dictionary:
+	var sz: Array = h["size"]
+	var L := float(sz[0]) * 0.5
+	var W := float(sz[1]) * 0.5
+	var top := float(sz[2])
+	var rise := float(h["rise"])
+	var bh := float(h["base"])
+	var pl := float(T["halls"]["plinth"])
+	var used := {}
+	# plinth, sunk into the ground so a hall on a slope never floats
+	_hbox(sts["plinth"], Vector3(-L - 0.3, -2.0, -W - 0.3), Vector3(L + 0.3, pl, W + 0.3))
+	used["plinth"] = true
+	var sides := [[Vector3(-L, 0, W), Vector3(L, 0, W), Vector3(0, 0, 1)], [Vector3(L, 0, -W), Vector3(-L, 0, -W), Vector3(0, 0, -1)],
+		[Vector3(L, 0, W), Vector3(L, 0, -W), Vector3(1, 0, 0)], [Vector3(-L, 0, -W), Vector3(-L, 0, W), Vector3(-1, 0, 0)]]
+	var win: Array = h["windows"]
+	var door: Array = h["door"]
+	var sp := float(h["pilaster"])
+	for i in 4:
+		var p: Vector3 = sides[i][0]
+		var q: Vector3 = sides[i][1]
+		var n: Vector3 = sides[i][2]
+		var span := p.distance_to(q)
+		_hwall(sts["base"], p, q, n, 0.0, span, pl, bh, 0.0)
+		_hwall(sts["wall"], p, q, n, 0.0, span, bh, top, 0.0)
+		if rise > 0.0 and i >= 2:  # gable ends
+			var a := p + Vector3(0, top, 0)
+			var b := q + Vector3(0, top, 0)
+			var c := (p + q) * 0.5 + Vector3(0, top + rise, 0)
+			_htri(sts["wall"], a, b, c, n, Vector2(0, -top), Vector2(span, -top), Vector2(span * 0.5, -top - rise))
+		# bays between pilasters: a window band in each on the long walls, the end walls glazed above the door
+		var bays := maxi(1, int(round(span / sp))) if sp > 0.0 else 1
+		var bw := span / bays
+		if float(win[1]) > float(win[0]):
+			for k in bays:
+				var u0 := k * bw + 0.7
+				var u1 := (k + 1) * bw - 0.7
+				if i >= 2 and u1 > span * 0.5 - float(door[0]) * 0.5 - 0.5 and u0 < span * 0.5 + float(door[0]) * 0.5 + 0.5:
+					continue
+				_hwall(sts["glass"], p, q, n, u0, u1, float(win[0]), float(win[1]), 0.04)
+				used["glass"] = true
+		if i >= 2 and float(door[0]) > 0.0:
+			_hwall(sts["door"], p, q, n, span * 0.5 - float(door[0]) * 0.5, span * 0.5 + float(door[0]) * 0.5, pl, float(door[1]), 0.06)
+			_hwall(sts["plinth"], p, q, n, span * 0.5 - float(door[0]) * 0.5 - 0.4, span * 0.5 + float(door[0]) * 0.5 + 0.4, float(door[1]), float(door[1]) + 0.5, 0.12)
+			used["door"] = true
+		if sp > 0.0:
+			for k in bays + 1:
+				_hpost(sts["plinth"], p, q, n, k * bw, top)
+	used["base"] = true
+	used["wall"] = true
+	# roof: a gable along x with eaves overhanging oh (flat when rise is 0), drawn on both sides
+	var oh := float(T["halls"]["eave"])
+	var ey := top - oh * rise / W
+	var ridge := top + rise
+	for sgn: float in [1.0, -1.0]:
+		var a := Vector3(-L - oh, ridge, 0)
+		var b := Vector3(L + oh, ridge, 0)
+		var c := Vector3(L + oh, ey, (W + oh) * sgn)
+		var d := Vector3(-L - oh, ey, (W + oh) * sgn)
+		var n := (b - a).cross(d - a).normalized()
+		if n.y < 0.0:
+			n = -n
+		var sl := a.distance_to(d)
+		_hquad(sts["roof"], [a, b, c, d], n, [Vector2(a.x, 0), Vector2(b.x, 0), Vector2(c.x, sl), Vector2(d.x, sl)])
+		var dn := Vector3(0, -0.05, 0)
+		_hquad(sts["roof"], [a + dn, b + dn, c + dn, d + dn], -n, [Vector2(a.x, 0), Vector2(b.x, 0), Vector2(c.x, sl), Vector2(d.x, sl)])
+		# fascia along the eave
+		_hquad(sts["plinth"], [d, c, c - Vector3(0, 0.4, 0), d - Vector3(0, 0.4, 0)], Vector3(0, 0, sgn), [Vector2(d.x, 0), Vector2(c.x, 0), Vector2(c.x, 0.4), Vector2(d.x, 0.4)])
+	used["roof"] = true
+	# a glazed lantern along the ridge
+	var ln: Array = h["lantern"]
+	if float(ln[1]) > 0.0:
+		var ll := L * float(ln[0])
+		var lw := float(ln[1]) * 0.5
+		var y0 := top + rise * (1.0 - lw / W) - 0.2
+		var y1 := ridge + float(ln[2])
+		_hwall(sts["glass"], Vector3(-ll, 0, lw), Vector3(ll, 0, lw), Vector3(0, 0, 1), 0.0, ll * 2.0, y0, y1, 0.0)
+		_hwall(sts["glass"], Vector3(ll, 0, -lw), Vector3(-ll, 0, -lw), Vector3(0, 0, -1), 0.0, ll * 2.0, y0, y1, 0.0)
+		_hwall(sts["wall"], Vector3(ll, 0, lw), Vector3(ll, 0, -lw), Vector3(1, 0, 0), 0.0, lw * 2.0, y0, y1, 0.0)
+		_hwall(sts["wall"], Vector3(-ll, 0, -lw), Vector3(-ll, 0, lw), Vector3(-1, 0, 0), 0.0, lw * 2.0, y0, y1, 0.0)
+		var o := 0.4
+		_hquad(sts["roof"], [Vector3(-ll - o, y1, -lw - o), Vector3(ll + o, y1, -lw - o), Vector3(ll + o, y1, lw + o), Vector3(-ll - o, y1, lw + o)], Vector3.UP,
+			[Vector2(-ll, -lw), Vector2(ll, -lw), Vector2(ll, lw), Vector2(-ll, lw)])
+		used["glass"] = true
+	return used
+
+## A wall strip on the face p -> q (outward n): from u0 to u1 metres along it, y0 to y1 high, lifted off by
+## off. UV in metres, v down from the top so the textures hang the right way up.
+func _hwall(st: SurfaceTool, p: Vector3, q: Vector3, n: Vector3, u0: float, u1: float, y0: float, y1: float, off: float) -> void:
+	var d := (q - p).normalized()
+	var a := p + d * u0 + n * off
+	var b := p + d * u1 + n * off
+	_hquad(st, [a + Vector3(0, y0, 0), b + Vector3(0, y0, 0), b + Vector3(0, y1, 0), a + Vector3(0, y1, 0)], n,
+		[Vector2(u0, -y0), Vector2(u1, -y0), Vector2(u1, -y1), Vector2(u0, -y1)])
+
+## A concrete pilaster standing proud of the wall at u metres along it.
+func _hpost(st: SurfaceTool, p: Vector3, q: Vector3, n: Vector3, u: float, top: float) -> void:
+	var d := (q - p).normalized()
+	var w := 0.35
+	var dep := 0.35
+	_hwall(st, p, q, n, u - w, u + w, 0.0, top + 0.1, dep)
+	for s: float in [-1.0, 1.0]:
+		var c := p + d * (u + w * s)
+		var e := Vector3(0, top + 0.1, 0)
+		_hquad(st, [c, c + n * dep, c + n * dep + e, c + e], d * s, [Vector2(0, 0), Vector2(dep, 0), Vector2(dep, -e.y), Vector2(0, -e.y)])
+
+## A box with its five visible faces (no bottom), UV in metres.
+func _hbox(st: SurfaceTool, lo: Vector3, hi: Vector3) -> void:
+	var sides := [[Vector3(lo.x, 0, hi.z), Vector3(hi.x, 0, hi.z), Vector3(0, 0, 1)], [Vector3(hi.x, 0, lo.z), Vector3(lo.x, 0, lo.z), Vector3(0, 0, -1)],
+		[Vector3(hi.x, 0, hi.z), Vector3(hi.x, 0, lo.z), Vector3(1, 0, 0)], [Vector3(lo.x, 0, lo.z), Vector3(lo.x, 0, hi.z), Vector3(-1, 0, 0)]]
+	for sd in sides:
+		var p: Vector3 = sd[0]
+		var q: Vector3 = sd[1]
+		_hwall(st, p, q, sd[2], 0.0, p.distance_to(q), lo.y, hi.y, 0.0)
+	_hquad(st, [Vector3(lo.x, hi.y, lo.z), Vector3(hi.x, hi.y, lo.z), Vector3(hi.x, hi.y, hi.z), Vector3(lo.x, hi.y, hi.z)], Vector3.UP,
+		[Vector2(lo.x, lo.z), Vector2(hi.x, lo.z), Vector2(hi.x, hi.z), Vector2(lo.x, hi.z)])
+
+## Godot front faces are clockwise: every triangle is wound to face along n (as Course._quad).
+func _hquad(st: SurfaceTool, pts: Array, n: Vector3, uv: Array) -> void:
+	var p0: Vector3 = pts[0]
+	var flip := ((pts[1] as Vector3) - p0).cross((pts[2] as Vector3) - p0).dot(n) > 0.0
+	for tri in ([[0, 2, 1], [0, 3, 2]] if flip else [[0, 1, 2], [0, 2, 3]]):
+		for i in tri:
+			st.set_color(_grime((pts[i] as Vector3).y))
+			st.set_normal(n)
+			st.set_uv(uv[i])
+			st.add_vertex(pts[i])
+
+## Vertex shade of a hall: dirt splashed up the lowest metres of the walls (course.json halls grime).
+func _grime(y: float) -> Color:
+	var g: Array = T["halls"]["grime"]
+	var k := lerpf(float(g[0]), 1.0, clampf(y / float(g[1]), 0.0, 1.0))
+	return Color(k, k, k)
+
+func _htri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, n: Vector3, ua: Vector2, ub: Vector2, uc: Vector2) -> void:
+	var pts := [a, b, c]
+	var uv := [ua, ub, uc]
+	var order := [0, 2, 1] if (b - a).cross(c - a).dot(n) > 0.0 else [0, 1, 2]
+	for i in order:
+		st.set_color(_grime((pts[i] as Vector3).y))
+		st.set_normal(n)
+		st.set_uv(uv[i])
+		st.add_vertex(pts[i])
+
+## A materials.json row as a plain StandardMaterial3D (UV in metres, scaled by the row's uv_scale).
+func _row_mat(id: String) -> StandardMaterial3D:
+	var key := "row:" + id
+	if mats.has(key):
+		return mats[key]
+	var mr: Dictionary = {}
+	for r in Sheets.load_sheet("materials")["rows"]:
+		if r["id"] == id:
+			mr = r
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = content.texture(mr["albedo"], "MainTex")
+	if mr["normal"] != "(none)":
+		var nt := content.texture(mr["normal"], "BumpMap")
+		if nt:
+			m.normal_enabled = true
+			m.normal_texture = nt
+	var tn: Array = mr["tint"]
+	m.albedo_color = Color(tn[0], tn[1], tn[2])
+	m.roughness = float(mr["roughness"])
+	m.uv1_scale = Vector3.ONE / float(mr["uv_scale"])
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	m.vertex_color_use_as_albedo = true  # hall grime; meshes without colours read white
+	mats[key] = m
+	return m
 
 ## course.json terrain.scatter: trees, bushes, grass tufts and rocks built here (we have no Rust
 ## vegetation meshes) and scattered over the ground as MultiMeshes in chunks, so the land reads as
@@ -656,6 +866,8 @@ uniform float road_scale = 6.0;
 uniform float road_width = 8.0;
 uniform int road_count = 0;
 uniform vec4 roads[8];
+uniform int apron_count = 0;
+uniform vec4 aprons[8];
 uniform float scrub_cell = 4.0;
 uniform float scrub_density = 0.3;
 uniform vec3 scrub_color = vec3(0.3, 0.32, 0.2);
@@ -734,6 +946,13 @@ void fragment() {
 	float slope = 1.0 - clamp(wn.y, 0.0, 1.0);
 	float dirt = max(max(smoothstep(1.0 - dirt_cover - 0.05, 1.0 - dirt_cover + 0.05, m), smoothstep(0.08, 0.3, slope)), low);
 	float site = inside * (1.0 - low) * smoothstep(1.0 - site_cover - 0.05, 1.0 - site_cover + 0.05, m2);
+	// concrete aprons round the halls, with ragged edges
+	float apron = 0.0;
+	for (int i = 0; i < apron_count; i++) {
+		vec2 da = max(max(aprons[i].xy - p, p - aprons[i].zw), vec2(0.0));
+		apron = max(apron, 1.0 - smoothstep(0.0, 4.0, length(da) + (fbm(p / 5.0 + vec2(3.0, 17.0)) - 0.5) * 6.0));
+	}
+	site = max(site, apron * (1.0 - low));
 	vec3 c = mix(mix(c0, c1, dirt), c2 * site_shade, site);
 	vec3 nm = mix(mix(n0, n1, dirt), n2, site);
 	float tint = fbm(p / (macro_period * 2.3) + vec2(7.0, 3.0));

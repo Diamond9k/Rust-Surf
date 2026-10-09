@@ -39,8 +39,7 @@ var _gaps: Array[float] = []       # kill interval: from the later of the bot st
 var _flick_sum := 0.0
 var _flick_n := 0
 var _on_target := 0.0
-var _last_shot_at := 0.0   # round clock of the previous shot (track credits the gap a hitting shot covers)
-var _shot_gap := 0.0
+var _last_shot_at := 0.0   # round clock of the latest shot
 var _last_kill_at := 0.0   # round clock of the previous kill: the kill interval counts from it or the bot's stand-up
 var _last_kill_shot := -1
 var _used := {}
@@ -219,8 +218,15 @@ func _show_surf_hud(on: bool) -> void:
 	if on:
 		_surf_hud.clear()
 
+## The round clock stands still whenever Weapons blocks the trigger: the Esc menu, the buy menu, or a frozen
+## player (a Gauntlet capture freezes the camera but keeps the range live).
 func _paused() -> bool:
-	return main.settings != null and main.settings.is_open
+	if main.settings != null and main.settings.is_open:
+		return true
+	var w: Node = main.weapons
+	if w != null and w.get("_buy") is CanvasLayer and (w.get("_buy") as CanvasLayer).visible:
+		return true
+	return main.player != null and main.player.frozen and main.get("shots_running") != true
 
 func _inside_arena(at: Vector3) -> bool:
 	var sz: Array = V["arena_size"]
@@ -281,6 +287,23 @@ func _paint(c: Vector3, sx: float, sz: float, mat: Material) -> void:
 	mi.position = center + c + Vector3(0, 0.006, 0)
 	add_child(mi)
 
+## A see-through black that fades from alpha a at UV 'from' to nothing at UV 'to' (floor contact shade).
+func _shade(a: float, from: Vector2, to: Vector2) -> StandardMaterial3D:
+	var g := Gradient.new()
+	g.set_color(0, Color(0, 0, 0, a))
+	g.set_color(1, Color(0, 0, 0, 0))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.width = 64
+	gt.height = 64
+	gt.fill_from = from
+	gt.fill_to = to
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_texture = gt
+	return m
+
 ## Painted or plaque text; rot in degrees ((-90, 0, 0) lies flat on the floor, readable from the spawn).
 func _text3d(s: String, c: Vector3, rot: Vector3, height_m: float, col: Color) -> void:
 	var l := Label3D.new()
@@ -302,8 +325,8 @@ func _lane_x(lane: float) -> float:
 	return -_f("lane_count") * _f("lane_width") * 0.5 + (lane - 0.5) * _f("lane_width")
 
 ## The walls' own concrete: the wall material's Rust texture with tonal variation, pour lines every
-## wall_lift_m and grime streaks running down from the top edge (UV is metres along / up the wall, UV2.x
-## metres below the top).
+## wall_lift_m, grime streaks and Rust's own leak decals (course.json weathering atlas) running down from the
+## top edge (UV is metres along / up the wall, UV2.x metres below the top).
 const WALL_SHADER := "shader_type spatial;
 uniform sampler2D tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -318,6 +341,12 @@ uniform vec3 grid_col = vec3(0.86);
 uniform float grid_m = 1.0;
 uniform float grid_major = 5.0;
 uniform float grid_a = 0.2;
+uniform sampler2D tex_leak : source_color, filter_linear_mipmap, repeat_enable;
+uniform bool has_leak = false;
+uniform float leaks = 0.0;
+uniform vec2 leak_v = vec2(0.607, 0.925);
+uniform float leak_len = 4.0;
+uniform float leak_width = 5.0;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vn(vec2 p) {
 	vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
@@ -327,6 +356,18 @@ float fbm(vec2 p) {
 	float s = 0.0; float a = 0.5;
 	for (int i = 0; i < 4; i++) { s += a * vn(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; }
 	return s / 0.9375;
+}
+// a band of the leak atlas, as Course.gd's ramps read it: v from v0 at t = 0 to v1 at t = 1, u in
+// leak_width tiles that each pick the atlas's left (moss) or right (rust) half; colour from a blurred mip
+vec4 band(vec2 v, float u, float t, float seed) {
+	float tile = floor(u);
+	float hf = step(0.5, hash(vec2(tile, seed)));
+	vec2 at = vec2((fract(u) * 0.96 + 0.02) * 0.5 + hf * 0.5, mix(v.x, v.y, clamp(t, 0.0, 1.0)));
+	vec2 g = vec2(u * 0.5, mix(v.x, v.y, t)) * vec2(textureSize(tex_leak, 0));
+	float lod = log2(max(max(length(dFdx(g)), length(dFdy(g))), 1.0)) + 0.5;
+	vec4 soft = textureLod(tex_leak, at, lod + 2.5);
+	float a = smoothstep(0.45, 0.9, textureLod(tex_leak, at, lod + 1.5).a);
+	return vec4(clamp(soft.rgb / max(soft.a, 0.1), 0.0, 1.0), a);
 }
 void fragment() {
 	vec2 m = UV;
@@ -346,9 +387,16 @@ void fragment() {
 	float minor = 1.0 - smoothstep(0.004, 0.012 + px, min(g.x, g.y));
 	float major = 1.0 - smoothstep(0.012, 0.03 + px, min(gM.x, gM.y));
 	c = mix(c, grid_col, max(minor * 0.45, major) * grid_a * (1.0 - s * 0.6));
+	float la = 0.0;
+	if (has_leak) {
+		float run = smoothstep(0.3, 0.55, fbm(vec2(m.x / 9.0, 3.7)));
+		vec4 lk = band(leak_v, m.x / leak_width, top / leak_len, 11.0);
+		la = clamp(lk.a * leaks * run * (1.0 - smoothstep(0.75, 1.0, top / leak_len)), 0.0, 1.0);
+		c = mix(c, mix(lk.rgb, vec3(dot(lk.rgb, vec3(0.333))), 0.35) * 0.75, la);
+	}
 	ALBEDO = c;
 	if (has_nrm) { NORMAL_MAP = texture(nrm, uv).rgb; }
-	ROUGHNESS = mix(rough, 1.0, s * 0.5);
+	ROUGHNESS = mix(rough, 1.0, max(s * 0.5, la * 0.4));
 }
 "
 
@@ -373,6 +421,17 @@ func _weathered(id: String) -> Material:
 	m.set_shader_parameter("grid_a", float(g[2]))
 	var pc := _col("color_paint")
 	m.set_shader_parameter("grid_col", Vector3(pc.r, pc.g, pc.b))
+	var wt: Dictionary = Sheets.load_sheet("course")["weathering"]
+	var lk: Texture2D = content.texture(String(wt["texture"]), "MainTex") if content else null
+	var lw: Array = V["wall_leaks"]
+	m.set_shader_parameter("has_leak", lk != null and float(lw[0]) > 0.0)
+	if lk:
+		m.set_shader_parameter("tex_leak", lk)
+	m.set_shader_parameter("leaks", float(lw[0]))
+	m.set_shader_parameter("leak_len", float(lw[1]))
+	m.set_shader_parameter("leak_width", float(wt["leak_width"]))
+	var lv: Array = wt["leak_v"]
+	m.set_shader_parameter("leak_v", Vector2(float(lv[0]), float(lv[1])))
 	return m
 
 ## One inner wall face: a quad from 'from' along 'along' for span metres, h tall, facing n.
@@ -427,6 +486,11 @@ func _arena() -> void:
 		_box(Vector3(s * (hx - 0.07), bh + 0.04, 0), Vector3(0.14, 0.08, sz_z), tm)
 		_box(Vector3(0, trim * 0.5, s * (hz - 0.1)), Vector3(sx, trim, 0.12), tm)
 		_box(Vector3(s * (hx - 0.1), trim * 0.5, 0), Vector3(0.12, trim, sz_z), tm)
+	# contact shade on the floor along every wall foot (the corner a baked map would darken)
+	var ao: Array = V["wall_ao"]
+	for s in [-1.0, 1.0]:
+		_paint(Vector3(0, -0.003, s * (hz - float(ao[0]) * 0.5)), sx, float(ao[0]), _shade(float(ao[1]), Vector2(0.5, 0.5 + s * 0.5), Vector2(0.5, 0.5 - s * 0.5)))
+		_paint(Vector3(s * (hx - float(ao[0]) * 0.5), -0.003, 0), float(ao[0]), sz_z, _shade(float(ao[1]), Vector2(0.5 + s * 0.5, 0.5), Vector2(0.5 - s * 0.5, 0.5)))
 	var pm := _mat(String(V["pilaster_material"]))
 	var pw: Array = V["pilaster_size"]
 	var lamp := _flat(_col("color_lamp"), 2.5, 0.4)
@@ -960,7 +1024,6 @@ func on_shot_fired() -> void:
 	if not (active and _state == "round"):
 		return
 	_shots += 1
-	_shot_gap = _clock - _last_shot_at
 	_last_shot_at = _clock
 	_shot_frame = Engine.get_process_frames()
 	_shot_ok = _behind_line()
@@ -981,8 +1044,7 @@ func register_hit(unit: Node3D, dmg: float, head: bool, _at: Vector3, group: Str
 			_flick_n += 1
 			_spawn_mode()
 		"track":
-			if _count(head):
-				_on_target += minf(_shot_gap, _track_credit_cap())
+			_count(head)  # accuracy only: time on target is sampled every physics tick (_track_tick)
 			(unit as Bot).kick = _f("bot_flinch") * 0.5
 		"bots":
 			var b := unit as Bot
@@ -1043,16 +1105,30 @@ func _count(head: bool) -> bool:
 		_heads += 1
 	return true
 
-## Track credits each hitting shot with the time since the shot before it, at most one cycle of the held gun
-## (and track_credit_max_s): holding the trigger without firing, or firing and missing, earns nothing.
-func _track_credit_cap() -> float:
-	var cap := _f("track_credit_max_s")
+## Track: one physics tick of time on target when the trigger is held on a gun that can fire (not reloading),
+## from behind the firing line, with the crosshair ray on the live track bot. The same for every gun: a tick is
+## a tick whatever the fire rate, and shots only count toward accuracy and the miss cost.
+func _track_tick(dt: float, trigger: bool, on_bot: bool) -> void:
+	if not (active and _state == "round" and mode == "track") or _paused():
+		return
+	if not trigger or not on_bot or not _behind_line():
+		return
 	var w: Node = main.weapons
-	if w and w.rows.has(_shot_weapon):
-		var cyc := float(w.mstat(_shot_weapon, "cycletime"))  # the firing gun's mode cadence (burst, fan fire)
-		if cyc > 0.0:
-			cap = minf(cap, cyc)
-	return cap
+	if w != null and float(w.get("_reload_until")) > 0.0:
+		return
+	_on_target += dt
+
+## The crosshair ray (screen centre, where the player looks) against the world: true when the first thing it
+## meets is a part of the track bot, so a wall or crate between them blocks it.
+func _crosshair_on(unit: Node3D) -> bool:
+	var p: SurfPlayer = main.player
+	if p == null or p.cam == null:
+		return false
+	var xf: Transform3D = p.cam.global_transform
+	var q := PhysicsRayQueryParameters3D.create(xf.origin, xf.origin - xf.basis.z * _f("track_ray_m"))
+	q.exclude = [p.get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	return not hit.is_empty() and hit["collider"] is AimTarget and (hit["collider"] as AimTarget).unit == unit
 
 func _kill(b: Bot, head: bool) -> void:
 	b.alive = false
@@ -1306,7 +1382,8 @@ func _taper_mesh(r1: float, r2: float, len: float) -> ArrayMesh:
 	_meshes[key] = m
 	return m
 
-func _cloth_tex(normal: bool) -> NoiseTexture2D:
+## The cloth weave: greyscale value noise between the two cloth_noise levels, multiplied into the slot colour.
+func _cloth_tex() -> NoiseTexture2D:
 	var n := FastNoiseLite.new()
 	n.noise_type = FastNoiseLite.TYPE_VALUE_CUBIC
 	n.frequency = 0.18
@@ -1316,46 +1393,106 @@ func _cloth_tex(normal: bool) -> NoiseTexture2D:
 	t.height = 128
 	t.seamless = true
 	t.noise = n
-	if normal:
-		t.as_normal_map = true
-		t.bump_strength = 3.0
-	else:
-		var cn: Array = V["cloth_noise"]
-		var g := Gradient.new()
-		g.set_color(0, Color(float(cn[0]), float(cn[0]), float(cn[0])))
-		g.set_color(1, Color(float(cn[1]), float(cn[1]), float(cn[1])))
-		t.color_ramp = g
+	var cn: Array = V["cloth_noise"]
+	var g := Gradient.new()
+	g.set_color(0, Color(float(cn[0]), float(cn[0]), float(cn[0])))
+	g.set_color(1, Color(float(cn[1]), float(cn[1]), float(cn[1])))
+	t.color_ramp = g
 	return t
 
-## One material per outfit slot; cloth gets the procedural weave, metal the course's metal texture.
+## Bot skin, cloth and kit. Primitives read flat under the range's even light, so the shade gives them volume
+## the way baked AO does on a game model: faces turned down darken (ao_down), the part's rim darkens toward
+## grazing view (edge), the lowest foot_ao_m of the body darkens toward the floor it stands on (foot_ao),
+## and cloth gets a soft sheen at the silhouette plus its weave (local-space triplanar, so it rides the part).
+## Kit metal takes the trim material's texture the same way.
+const BOT_SHADER := "shader_type spatial;
+uniform vec3 col : source_color = vec3(0.5);
+uniform sampler2D weave : filter_linear_mipmap, repeat_enable;
+uniform bool cloth = false;
+uniform sampler2D tex : source_color, filter_linear_mipmap, repeat_enable;
+uniform bool has_tex = false;
+uniform float weave_scale = 6.0;
+uniform float rough = 0.9;
+uniform float spec = 0.4;
+uniform float metal = 0.0;
+uniform float ao_down = 0.55;
+uniform float edge = 0.75;
+uniform float sheen = 0.25;
+uniform float foot_ao = 0.6;
+uniform float foot_ao_m = 0.35;
+instance uniform float base_y = 0.0;
+varying vec3 wn;
+varying vec3 wp;
+varying vec3 lp;
+varying vec3 ln;
+void vertex() {
+	wn = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	lp = VERTEX;
+	ln = NORMAL;
+}
+void fragment() {
+	vec3 c = col;
+	vec3 b = pow(abs(normalize(ln)), vec3(4.0));
+	b /= max(b.x + b.y + b.z, 0.0001);
+	if (has_tex) {
+		vec2 s = vec2(weave_scale * 0.25);
+		c *= texture(tex, lp.yz * s).rgb * b.x + texture(tex, lp.xz * s).rgb * b.y + texture(tex, lp.xy * s).rgb * b.z;
+	}
+	if (cloth) {
+		float w = texture(weave, lp.yz * weave_scale).r * b.x + texture(weave, lp.xz * weave_scale).r * b.y + texture(weave, lp.xy * weave_scale).r * b.z;
+		c *= w;
+		RIM = sheen;
+		RIM_TINT = 0.6;
+	}
+	c *= mix(1.0, ao_down, clamp(-normalize(wn).y, 0.0, 1.0));
+	c *= mix(edge, 1.0, sqrt(clamp(dot(NORMAL, VIEW), 0.0, 1.0)));
+	c *= mix(foot_ao, 1.0, smoothstep(0.0, foot_ao_m, wp.y - base_y));
+	ALBEDO = c;
+	ROUGHNESS = rough;
+	SPECULAR = spec;
+	METALLIC = metal;
+}
+"
+
+## One material per outfit slot: [roughness, specular, metallic] from bot_slot_pbr, cloth slots woven.
 func _slot_mat(outfit: int, slot: String) -> Material:
 	var key := "%d/%s" % [outfit, slot]
 	if _mats.has(key):
 		return _mats[key]
 	var o: Dictionary = S["outfits"][outfit]
-	var m: StandardMaterial3D
+	var col: Color
 	match slot:
-		"gun_metal":
-			m = _flat(_col("color_gun_metal"), 0.0, 0.45)
-			m.metallic = 0.6
-		"gun_wood":
-			m = _flat(_col("color_gun_wood"), 0.0, 0.7)
-		"metal":
-			m = _mat(String(V["trim_material"]))
-			m.uv1_world_triplanar = false
-			m.uv1_scale = Vector3.ONE * 2.0
-			m.albedo_color = _c(o["metal"])
-		"skin", "eyes", "hair", "gloves", "boots":
-			m = _flat(_c(o[slot]), 0.0, 0.75 if slot in ["skin", "gloves"] else 0.9)
-		_:
-			m = _flat(_c(o[slot]), 0.0, 0.95)
-			if not _mats.has("cloth"):
-				_mats["cloth"] = [_cloth_tex(false), _cloth_tex(true)]
-			m.albedo_texture = _mats["cloth"][0]
-			m.normal_enabled = true
-			m.normal_texture = _mats["cloth"][1]
-			m.uv1_triplanar = true
-			m.uv1_scale = Vector3.ONE * 6.0
+		"gun_metal": col = _col("color_gun_metal")
+		"gun_wood": col = _col("color_gun_wood")
+		_: col = _c(o[slot])
+	var pbr: Dictionary = V["bot_slot_pbr"]
+	var cloth := not pbr.has(slot)
+	var k: Array = pbr.get(slot, pbr["cloth"])
+	if not _mats.has("shader"):
+		var sh := Shader.new()
+		sh.code = BOT_SHADER
+		_mats["shader"] = sh
+		_mats["cloth"] = _cloth_tex()
+	var m := ShaderMaterial.new()
+	m.shader = _mats["shader"]
+	m.set_shader_parameter("col", col)
+	m.set_shader_parameter("cloth", cloth)
+	m.set_shader_parameter("weave", _mats["cloth"])
+	var src: StandardMaterial3D = main.course.materials.get(String(V["trim_material"])) if slot == "metal" else null
+	if src and src.albedo_texture:  # kit metal (masks, plates) wears the course's rusty trim metal
+		m.set_shader_parameter("has_tex", true)
+		m.set_shader_parameter("tex", src.albedo_texture)
+	m.set_shader_parameter("weave_scale", _f("bot_weave_scale"))
+	m.set_shader_parameter("rough", float(k[0]))
+	m.set_shader_parameter("spec", float(k[1]))
+	m.set_shader_parameter("metal", float(k[2]))
+	var sd: Array = V["bot_shade"]
+	m.set_shader_parameter("ao_down", float(sd[0]))
+	m.set_shader_parameter("edge", float(sd[1]))
+	m.set_shader_parameter("sheen", float(sd[2]) if cloth else 0.0)
+	m.set_shader_parameter("foot_ao", float(sd[3]))
+	m.set_shader_parameter("foot_ao_m", float(sd[4]))
 	_mats[key] = m
 	return m
 
@@ -1381,6 +1518,7 @@ func _bot(at: Vector3, yaw_deg: float, outfit: int, tag: String) -> Bot:
 		var s := _shape_of(r)
 		var tb := _target(b, s[2], s[1], _slot_mat(outfit, String(r["slot"])), s[0], String(r["group"]) == "head", String(r["group"]), b.pose, s[4])
 		(tb.get_child(0) as MeshInstance3D).scale = s[3]
+		(tb.get_child(0) as MeshInstance3D).set_instance_shader_parameter("base_y", b.global_position.y)
 		b.bodies.append(tb)
 		by_id[String(r["id"])] = tb
 	var gear: Array = o["gear"]
@@ -1396,6 +1534,7 @@ func _bot(at: Vector3, yaw_deg: float, outfit: int, tag: String) -> Bot:
 		mi.mesh = s[1]
 		mi.material_override = _slot_mat(outfit, String(r["slot"]))
 		mi.transform = on.transform.affine_inverse() * (s[0] as Transform3D).scaled_local(s[3])
+		mi.set_instance_shader_parameter("base_y", b.global_position.y)
 		on.add_child(mi)
 	return b
 
@@ -1405,6 +1544,7 @@ func _physics_process(dt: float) -> void:
 	var t := _targets[0]
 	if not is_instance_valid(t):
 		return
+	_track_tick(dt, Input.is_action_pressed("surf_attack"), _crosshair_on(t))
 	var half := _f("track_half_range")
 	_flip -= dt
 	if _flip <= 0.0:
@@ -1495,26 +1635,58 @@ func _selftest() -> void:
 	var took := (Time.get_ticks_msec() - t0) / 1000.0
 	ok = _check("round starts after the countdown", _state == "round" and absf(took - _f("countdown_s")) < 0.5, "%.2f s" % took) and ok
 	ok = _check("test run wrote no best file", FileAccess.file_exists(String(V["best_file"])) == had_best, had_best) and ok
-	# track: time on target comes only from shots that hit, at most one capped gap per shot
+	# track: time on target is sampled per tick (trigger held, crosshair on the bot); shots only count accuracy
 	_quick = true
 	mode = "track"
 	_start_round()
 	for i in 4:
 		await get_tree().process_frame
 	var tb := _targets[0] as Bot
-	ok = _check("track: no shots, no time", _on_target == 0.0, _on_target) and ok
+	var tick := 1.0 / Engine.physics_ticks_per_second
+	var cam: Camera3D = p.cam
+	var keep_cam := cam.transform
+	await get_tree().physics_frame
+	cam.look_at(_part(tb, "chest").global_position)
+	var seen := _crosshair_on(tb)
+	cam.look_at(_part(tb, "chest").global_position + global_transform.basis.x * 8.0)
+	ok = _check("track: the crosshair ray finds the bot, and misses beside it", seen and not _crosshair_on(tb), seen) and ok
+	cam.transform = keep_cam
+	var base := _on_target  # the real trigger is never held headless, so _physics_process adds nothing
+	_track_tick(tick, false, true)
+	_track_tick(tick, true, false)
+	ok = _check("track: no trigger or off the bot, no time", _on_target == base, _on_target) and ok
+	for i in 10:
+		_track_tick(tick, true, true)
+	var one := _on_target
+	ok = _check("track: ten ticks on target = ten ticks, whatever the gun", is_equal_approx(one - base, 10.0 * tick), "%.4f s" % (one - base)) and ok
 	_part(tb, "chest").hit(30.0, false, Vector3.ZERO)
-	ok = _check("track: hit without a shot earns nothing", _on_target == 0.0 and _hits == 0, _on_target) and ok
+	ok = _check("track: hit without a shot earns nothing", _on_target == one and _hits == 0, _on_target) and ok
 	_fire()
 	_part(tb, "chest").hit(30.0, false, Vector3.ZERO)
 	_part(tb, "head").hit(30.0, true, Vector3.ZERO)
-	var one := _on_target
-	ok = _check("track: one shot credits one capped gap", one > 0.0 and one <= _track_credit_cap() + 0.0001 and _hits == 1, "%.3f s" % one) and ok
+	ok = _check("track: a hit counts accuracy, not time", _on_target == one and _hits == 1 and _shots == 1, _stats_line()) and ok
 	_fire()
 	ok = _check("track: a miss earns nothing", _on_target == one and _hits == 1, _on_target) and ok
-	_fire()
-	_part(tb, "chest").hit(30.0, false, Vector3.ZERO)
-	ok = _check("track: same-frame shot after a shot earns ~0", _on_target - one < 0.0001, _on_target - one) and ok
+	p.global_position = to_global(Vector3(0, 0.05, _f("firing_line_z") - 2.0))
+	_track_tick(tick, true, true)
+	ok = _check("track: past the firing line earns nothing", _on_target == one, _on_target) and ok
+	p.global_position = spawn_pos()
+	main.settings.is_open = true
+	_track_tick(tick, true, true)
+	var held_left := _left
+	await get_tree().process_frame
+	ok = _check("track: menu open earns nothing and holds the clock", _on_target == one and _left == held_left, "%.3f s" % _left) and ok
+	main.settings.is_open = false
+	var buy: Variant = main.weapons.get("_buy")
+	if buy is CanvasLayer:
+		(buy as CanvasLayer).visible = true
+		held_left = _left
+		await get_tree().process_frame
+		await get_tree().process_frame
+		ok = _check("buy menu open holds the round clock", _paused() and _left == held_left, "%.3f s" % _left) and ok
+		(buy as CanvasLayer).visible = false
+	else:
+		ok = _check("buy menu found", false, buy) and ok
 	_on_target += 1.0  # a full second on target, so the miss cost shows above the floor of 0
 	ok = _check("track: misses cost points", _score() == maxi(0, int(_on_target * _f("points_track_s")) - (_shots - _hits) * int(_f("points_miss"))) and _shots > _hits, _score()) and ok
 	# bots: one shot that kills two bots adds one time-to-kill, not a zero

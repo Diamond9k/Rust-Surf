@@ -43,7 +43,8 @@ A CS2 file that fails is exported again on its own (twice by default, `sheets/pr
 `data/done-0.2.0.txt` only when every surf asset, the arms, the knife, all 35 weapons (model, every
 clip, shot sound) are in place and `items_game.txt` exported whole and names every weapon. Otherwise it
 stops with the reason on screen, in a Windows message box (the launcher's console window may close
-before you can read it) and in `data/prep.log`, writes the reasons to `data/prep_status.json` (the game
+before you can read it; the box closes itself after 15 minutes so an unattended setup still exits) and in
+`data/prep.log`, writes the reasons to `data/prep_status.json` (the game
 shows them in its error panel, so a partial install never looks like a working one) and runs again on
 the next start, redoing only what is missing.
 
@@ -59,8 +60,12 @@ tools such as `Source2Viewer-CLI.exe`).
 ## Known limits in 0.2.0
 
 - Prep has run on a real install for the Rust content, the CS2 arms, knife, knife clips and sounds.
-  The 35 weapon exports and the stats read are tested against a synthetic `items_game.txt` and
-  `weapons.vdata` and a fake exporter (`prep/tests`), not yet on a fresh Windows install.
+  The 35 weapon exports and the stats read are tested against a synthetic `items_game.txt` (built to
+  CS:GO's layout: prefab chains, nested attribute blocks, `[$WIN32]` conditionals, escaped quotes) and
+  `weapons.vdata` and a fake exporter (`prep/tests`), not yet on a fresh Windows install. The release
+  build itself cannot be made without that run: `tools/package.py` refuses unless its `--data` folder is
+  a whole prep run of this version in which every one of the 35 guns got every required stat from CS2's
+  own files.
 - Where CS2 keeps live weapon stats is unverified: the reader takes `items_game.txt` attributes (the
   CS:GO layout) first and `weapons.vdata` fields second, and the vdata path and field names in
   `sheets/prep.json` are from memory. If the real files leave a gun without a required stat in both,
@@ -71,7 +76,7 @@ tools such as `Source2Viewer-CLI.exe`).
   panel, which reads `data/prep_status.json`.
 - Weapon constants CS2 does not publish (recoil decay, penetration, armor) are CS:GO SDK defaults or
   estimates. `python3 tools/preflight.py --list` prints every sheet cell labelled unverified
-  (about 260 in this build: weapon defaults, weapon alt/reload modes, HUD and settings values, prep's
+  (about 280 in this build: weapon defaults, weapon alt/reload modes, HUD and settings values, prep's
   vdata map and others); `tools/package.py` records the count in the release's entries file.
 - Rust weapons are not in this version.
 
@@ -82,19 +87,28 @@ tools such as `Source2Viewer-CLI.exe`).
   source of truth; `game/data/` and `prep/` hold byte-identical copies (`tools/package.py` writes them).
 - `game/` the Godot 4.7 project. Every script is one row of `sheets/systems.json`.
 - `prep/` the one-time extractor Melty runs before the first start. `python3 -m unittest discover prep/tests`
-  runs its tests (set `RS_DATA` to an extracted data folder to also check real exports).
+  runs its tests (set `RS_DATA` to an extracted data folder to also check real exports, `RS_GODOT` to a
+  Godot 4.7.2 binary for the reader parity test, `RS_UNITYPY_PYTHON` to a Python with UnityPy for the
+  bundle import line).
 - `tools/preflight.py` checks every table of every sheet: each cell filled, each row verified or labelled
   unverified, every cross-sheet reference, every copy. `--strict` also fails on unverified cells.
-- `tools/package.py --godot <Godot 4.7.2> --data <extracted data folder>` builds the release zip. It
+- `tools/package.py --godot <Godot 4.7.2> --data <prep output folder>` builds the release zip. It
   copies the sheets into `game/data/` and `prep/`, then refuses to package unless preflight is clean,
-  the prep unit tests pass and every game script passes Godot's `--check-only`. It then empties
-  `dist/RustSurf`, exports the game into it itself (Godot's Windows export templates must be installed)
-  and runs the headless `--lobbytest`, `--wtest` and `--uitest` on that exported pack, each under a
-  wall-clock limit and required to exit 0 with its pass line, so the zip holds exactly the build that was
-  tested. It also refuses unless the export holds every current sheet, the prep bundle has `python.exe`
-  with its standard library, UnityPy, `vrf/`, `vgm/` and every prep source byte for byte (on Windows the
-  bundle's own `python.exe` must import everything setup imports), and the zip reads back whole; a
-  refused build deletes any older zip of the same version.
+  the prep unit tests pass, and `--data` is a whole prep run of this version on a real Rust + CS2 install
+  (done file, every content row, all 35 guns with model, clips and sound, and no gun left on
+  class-average stats; the hashes of its `prep_status.json` and `weapon_stats.json` go in the entries
+  file). Every game script must pass Godot's `--check-only`, and the game's own `items_game.txt` reader
+  (`tools/kv_parity.gd`) must read the test fixture and the real file exactly as prep does. It then
+  empties `dist/RustSurf`, exports the game into it itself (Godot's Windows export templates must be
+  installed) and runs the headless `--lobbytest`, `--wtest` and `--uitest` on that exported pack with the
+  `--data` folder, each under a wall-clock limit and required to exit 0 with its pass line, so the zip
+  holds exactly the build that was tested. It also refuses unless the export holds every current sheet,
+  the prep bundle has `python.exe` with its standard library, UnityPy, `vrf/`, `vgm/` and every prep
+  source byte for byte and nothing a dev run left there (an allowlist), the bundle's own `python.exe`
+  (under wine off Windows) imports everything setup imports and decodes a DXT1 and a BC7 block through
+  UnityPy, and the zip reads back whole with its `LICENSES/`. Where the bundle check cannot run,
+  `--no-bundle-smoke` builds anyway and the entries file says so. A refused build deletes any older zip
+  of the same version.
 
 ## Credits
 

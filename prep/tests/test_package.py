@@ -87,7 +87,7 @@ class Build(unittest.TestCase):
         cmd = self.smoked[0]
         self.assertEqual(cmd[0], os.path.join(self.b, "python.exe"))
         self.assertEqual(cmd[-1], self.b)
-        for mod in ("UnityPy", "lazybundle", "prep", "ctypes"):
+        for mod in ("UnityPy", "lazybundle", "prep", "prep_rust", "normals", "ctypes", "Texture2DConverter", "BC7", "DXT1"):
             self.assertIn(mod, cmd[2])
         out, errs = self.build(smoke=lambda *a: (1, "ModuleNotFoundError: No module named 'lz4'"))
         self.assertIsNone(out)
@@ -103,11 +103,11 @@ class Build(unittest.TestCase):
             for f in os.listdir(os.path.join(REPO, "prep")):
                 if f.endswith((".py", ".json")):
                     shutil.copy(os.path.join(REPO, "prep", f), stub)
-            try:
-                import UnityPy  # noqa: F401
-            except ImportError:
-                self.skipTest("UnityPy is not installed here (lazybundle patches its real modules)")
-            code, out = package._run([sys.executable, "-c", package.SMOKE, stub], stub, 120, print)
+            py = os.environ.get("RS_UNITYPY_PYTHON", sys.executable)  # a Python with UnityPy, when this one has none
+            code, out = package._run([py, "-c", "import UnityPy"], stub, 120, print)
+            if code != 0:
+                self.skipTest("UnityPy is not installed here (set RS_UNITYPY_PYTHON to a Python that has it)")
+            code, out = package._run([py, "-c", package.SMOKE, stub], stub, 120, print)
             self.assertEqual(code, 0, out)
             self.assertIn("BUNDLE OK", out)
         finally:
@@ -123,6 +123,56 @@ class Build(unittest.TestCase):
         self.assertNotIn("prep/old.log", names)
         self.assertFalse(any("__pycache__" in n for n in names))
         self.assertTrue(os.path.exists(out[:-4] + ".entries.json"))
+
+    def test_dev_leftovers_in_the_bundle_are_refused(self):
+        """An allowlist, not a walk of whatever is there: a dev prep run's data and a removed prep module never ship."""
+        for p in ("data/cs2/weapon_stats.json", "prep_status.json", "done-%s.txt" % self.ver, "old_module.py", "notes.json",
+                  "UnityPy/resources/x.glb", "Lib/site-packages/thing/__init__.py"):
+            self.write(os.path.join(self.b, p), b"x")
+        out, errs = self.build()
+        self.assertIsNone(out)
+        for n in ("data/", "old_module.py", "notes.json", "prep_status.json", "done-%s.txt" % self.ver):
+            self.assertTrue(any("prep bundle holds %s," % n in e for e in errs), (n, errs))
+        for n in ("data/cs2/weapon_stats.json", "UnityPy/resources/x.glb"):
+            self.assertTrue(any("holds %s, a prep output" % n in e for e in errs), (n, errs))
+        self.assertFalse(any("Lib" in e for e in errs), errs)
+        self.assertFalse(os.path.exists(os.path.join(self.r, "dist", "RustSurf-%s.zip" % self.ver)))
+
+    def test_installed_packages_are_allowed(self):
+        """Single-file modules a dist-info RECORD lists, package folders, the embedded Python's own files."""
+        for p in ("brotli.py", "_brotli.cp312-win_amd64.pyd", "python312.dll", "python312._pth", "vcruntime140.dll", "LICENSE.txt",
+                  "PIL/__init__.py", "Brotli-1.1.0.dist-info/METADATA"):
+            self.write(os.path.join(self.b, p), b"x")
+        self.write(os.path.join(self.b, "Brotli-1.1.0.dist-info", "RECORD"), b"brotli.py,sha256=x,1\n_brotli.cp312-win_amd64.pyd,,\n")
+        out, errs = self.build()
+        self.assertEqual(errs, [])
+
+    def test_zip_readback_needs_licenses(self):
+        out, errs = self.build()
+        self.assertEqual(errs, [])
+        bare = os.path.join(self.r, "bare.zip")
+        with zipfile.ZipFile(out) as z, zipfile.ZipFile(bare, "w") as w:
+            for n in z.namelist():
+                if not n.startswith("LICENSES/"):
+                    w.writestr(n, z.read(n))
+            w.writestr("prep/weapon_stats.json", "{}")
+        errs = package.verify_zip(self.r, bare)
+        self.assertIn("zip has no LICENSES/ file (the third-party licenses ship with the tools)", errs)
+        self.assertIn("zip holds prep/weapon_stats.json, a prep output", errs)
+        self.assertEqual(package.verify_zip(self.r, out), [])
+
+    def test_bundle_smoke_never_silently_skipped(self):
+        """Off Windows with no wine the import check cannot run: that refuses the build unless --no-bundle-smoke,
+        which the entries file then records."""
+        if sys.platform == "win32" or shutil.which("wine") or shutil.which("wine64"):
+            self.skipTest("the check can run here")
+        out, errs = self.build(smoke=None)
+        self.assertIsNone(out)
+        self.assertTrue(any("import check cannot run here" in e for e in errs), errs)
+        out, errs = self.build(smoke=None, allow_no_smoke=True)
+        self.assertEqual(errs, [])
+        with open(out[:-4] + ".entries.json", encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["bundle_smoke"], "not run (--no-bundle-smoke)")
 
     def test_stale_prep_source_in_bundle_is_replaced(self):
         self.write(os.path.join(self.b, "prep.py"), b"old")
@@ -176,19 +226,22 @@ class Build(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.r, "prep", "hud.json")))  # prep only gets the sheets it reads
 
     def test_failed_gate_blocks_the_zip(self):
-        out, errs = self.build(gate=lambda: (["Godot --wtest: exit 1, pass line present"], 3))
+        out, errs = self.build(gate=lambda v: (["Godot --wtest: exit 1, pass line present"], 3))
         self.assertIsNone(out)
         self.assertEqual(errs, ["Godot --wtest: exit 1, pass line present"])
-        out, errs = self.build(gate=lambda: ([], 3))
+        seen = []
+        out, errs = self.build(gate=lambda v: (seen.append(v), ([], 3, {"guns": 35, "guns_with_stats": 35}))[1])
         self.assertEqual(errs, [])
+        self.assertEqual(seen, [self.ver])
         with open(out[:-4] + ".entries.json", encoding="utf-8") as f:
             meta = json.load(f)
-        self.assertEqual((meta["gates"], meta["unverified_cells"]), ("passed", 3))
+        self.assertEqual((meta["gates"], meta["unverified_cells"], meta["bundle_smoke"]), ("passed", 3, "passed"))
+        self.assertEqual(meta["release_data"], {"guns": 35, "guns_with_stats": 35})
 
     def test_refused_build_removes_an_older_zip(self):
         out, errs = self.build()
         self.assertEqual(errs, [])
-        out, errs = self.build(gate=lambda: (["Godot --wtest on the exported pck: exit 1"], 0))
+        out, errs = self.build(gate=lambda v: (["Godot --wtest on the exported pck: exit 1"], 0))
         self.assertIsNone(out)
         for p in ("RustSurf-%s.zip", "RustSurf-%s.entries.json"):
             self.assertFalse(os.path.exists(os.path.join(self.r, "dist", p % self.ver)), p)
@@ -216,6 +269,21 @@ FAKE_GODOT = """#!/usr/bin/env python3
 import os, sys, time
 mode = os.environ.get("FAKE_GODOT", "ok")
 a = sys.argv[1:]
+if "--script" in a and a[a.index("--script") + 1].endswith("kv_parity.gd"):  # tools/kv_parity.gd: the game's items_game reader, played here by prep's own reader
+    if mode == "kvcrash":
+        print("SCRIPT ERROR: Invalid access to property or key '_ig'")
+        sys.exit(1)
+    game = a[a.index("--path") + 1]
+    sys.path.insert(0, os.path.join(os.path.dirname(game), "prep"))
+    import items_game, json
+    u = a[a.index("--") + 1:]
+    got = items_game.prefab_chains(u[0], u[2:])
+    if mode == "kvdiff":
+        got["weapon_ak47"]["damage"] = "99"
+    with open(u[1], "w") as f:
+        json.dump(got, f)
+    print("KVPARITY done %d" % len(got))
+    sys.exit(0)
 if "--check-only" in a:
     if mode == "parse" and a[-1].endswith("B.gd"):
         print('SCRIPT ERROR: Parse Error: Expected expression after "+" operator.')
@@ -274,6 +342,9 @@ class Gate(unittest.TestCase):
         os.chmod(self.godot, 0o755)
         self.data = os.path.join(self.r, "data")
         os.makedirs(self.data)
+        shutil.copytree(os.path.join(REPO, "prep"), os.path.join(self.r, "prep"), ignore=shutil.ignore_patterns("__pycache__"))
+        os.makedirs(os.path.join(self.r, "tools"))
+        shutil.copy(os.path.join(REPO, "tools", "kv_parity.gd"), os.path.join(self.r, "tools"))
 
     def tearDown(self):
         shutil.rmtree(self.r, ignore_errors=True)
@@ -288,6 +359,22 @@ class Gate(unittest.TestCase):
         errs, lines = self.gate("ok")
         self.assertEqual(errs, [])
         self.assertIn("gate: 2 scripts parse-checked", lines)  # .godot/ caches are not game scripts
+
+    def test_kv_parity(self):
+        """The game's items_game reader and prep's must agree on the fixture, and on the release data's real file."""
+        errs, lines = self.gate("ok")
+        self.assertIn("gate: kv parity items_game.txt: 4 gun(s) read alike", lines)
+        errs, _ = self.gate("kvdiff")
+        self.assertEqual(len(errs), 1, errs)
+        self.assertIn("read 1 gun(s) differently (weapon_ak47; first weapon_ak47: damage game '99' prep '36')", errs[0])
+        errs, _ = self.gate("kvcrash")
+        self.assertTrue(errs and errs[0].startswith("kv parity on") and "SCRIPT ERROR" in errs[0], errs)
+        real = os.path.join(self.data, "cs2", "scripts", "items")
+        os.makedirs(real)
+        shutil.copy(os.path.join(REPO, package.FIXTURE), real)
+        errs, lines = self.gate("ok")
+        self.assertEqual(errs, [])
+        self.assertEqual(sum("kv parity" in l for l in lines), 2)
 
     def test_parse_error(self):
         errs, _ = self.gate("parse")

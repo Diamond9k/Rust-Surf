@@ -10,6 +10,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import prep_cs2
 LOG = print
+DIALOG_FALLBACK_S = 900.0  # the failure box's limit when prep.json itself cannot be read (it holds fail_dialog_s)
 
 RUST_BUNDLES = ["content.bundle", "assetscenes.bundle", "audio.bundle",
                 "textures.0.bundle", "textures.1.bundle", "textures.2.bundle", "textures.3.bundle", "textures.4.bundle"]
@@ -147,7 +148,7 @@ def finish(a, problems, warnings, log):
             log("  - " + p)
         log("Details: " + os.path.join(a.out, "prep.log"))
         if not a.no_dialog:
-            a.dialog("Rust Surf setup did not finish", dialog_text(a, problems), None if a.dialog_wait is None else float(a.dialog_wait))
+            a.dialog("Rust Surf setup did not finish", dialog_text(a, problems), a.dialog_wait)
         return 1
     with open(done + ".tmp", "w", encoding="utf-8") as f:
         f.write("ok %s warnings=%s\n" % (a.version, warnings))
@@ -166,9 +167,9 @@ def main(argv=None, steps=None, runner=None, show=None):
     a = ap.parse_args(argv)
     a.dialog = show or dialog
     try:
-        a.dialog_wait = prep_cs2.settings()["fail_dialog_s"]
-    except Exception:  # a damaged prep.json must not hide the reasons: prep's own problems still get a box
-        a.dialog_wait = None  # no timeout: the box stays until closed
+        a.dialog_wait = float(prep_cs2.settings()["fail_dialog_s"])
+    except Exception:  # a damaged prep.json must not hide the reasons, nor hold an unattended setup open forever
+        a.dialog_wait = DIALOG_FALLBACK_S
     a.vrf = os.path.join(a.tools, "vrf", "Source2Viewer-CLI.exe")
     a.vgm = os.path.join(a.tools, "vgm", "vgmstream-cli.exe")
     a.runner = runner

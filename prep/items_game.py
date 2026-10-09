@@ -138,13 +138,11 @@ def _attrs(block):
     return out
 
 
-def stats(path, names):
-    """{weapon_name: every attribute of its prefab chain} for the names found (missing names are left out)."""
+def _load(path):
     with open(path, encoding="utf-8", errors="replace") as f:
         root = parse(f.read())
     ig = root.get("items_game", root)
     prefabs = ig.get("prefabs", {})
-    items = ig.get("items", {})
 
     def chain(block, seen):
         out = {}
@@ -153,7 +151,20 @@ def stats(path, names):
                 out.update(chain(prefabs[p], seen | {p}))
         out.update(_attrs(block))
         return out
+    return ig, prefabs, chain
 
+
+def prefab_chains(path, names):
+    """{weapon_name: the attributes of its <weapon_name>_prefab chain alone}: what Weapons.gd reads from the raw
+    file (before weapon_stats.json goes on top), for the reader parity gate (tools/kv_parity.gd)."""
+    ig, prefabs, chain = _load(path)
+    return {n: dict(sorted(chain(prefabs[n + "_prefab"], set()).items())) for n in names if isinstance(prefabs.get(n + "_prefab"), dict)}
+
+
+def stats(path, names):
+    """{weapon_name: every attribute of its prefab chain} for the names found (missing names are left out)."""
+    ig, prefabs, chain = _load(path)
+    items = ig.get("items", {})
     by_name = {}
     for k, it in items.items():
         if isinstance(it, dict) and it.get("name") in names:

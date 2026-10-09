@@ -281,6 +281,18 @@ class Prep(unittest.TestCase):
         code, _ = self.main(FakeVRF(items_game_for(WEAPONS)))
         self.assertEqual((code, self.boxes), (0, []))
 
+    def test_unreadable_prep_sheet_still_bounds_the_box(self):
+        """prep.json holds fail_dialog_s: when it cannot be read the box still closes on its own, so an unattended
+        setup exits instead of waiting for a click forever."""
+        def broken(here=prep_cs2.HERE):
+            raise ValueError("prep.json is damaged")
+        with mock.patch.object(prep_cs2, "settings", broken):
+            code, _ = self.main(FakeVRF(items_game_for(WEAPONS)))
+        self.assertEqual(code, 1)
+        self.assertEqual(len(self.boxes), 1)
+        self.assertEqual(self.boxes[0][2], prep.DIALOG_FALLBACK_S)
+        self.assertTrue(any("ValueError" in p for p in self.status()["problems"]))
+
     def test_dialog_text_stays_readable(self):
         a = type("A", (), {"out": self.out})()
         text = prep.dialog_text(a, ["x" * 1000] + ["p%d" % i for i in range(12)])

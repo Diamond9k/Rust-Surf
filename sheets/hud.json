@@ -178,6 +178,27 @@
       "verified": "Source/CS:GO crosshair code as remembered, unverified: not checked against the CS2 client"
     },
     {
+      "id": "default_xh_size",
+      "value": 5,
+      "unit": "convar units",
+      "note": "cl_crosshairstyle 0/1 (Default, Default Static) draw this fixed length whatever cl_crosshairsize says; the player's colour, alpha, outline, dot and T still apply",
+      "verified": "unverified: that CS2's Default styles ignore the size/thickness/gap convars is CS:GO behaviour as remembered by Gauntlet round 1 reviewers; 5 is the cl_crosshairsize fallback, not checked against the CS2 client"
+    },
+    {
+      "id": "default_xh_thickness",
+      "value": 0.5,
+      "unit": "convar units",
+      "note": "Default styles' fixed thickness (see default_xh_size)",
+      "verified": "unverified: 0.5 is the cl_crosshairthickness fallback, not checked against the CS2 client"
+    },
+    {
+      "id": "default_xh_gap",
+      "value": 1,
+      "unit": "convar units",
+      "note": "Default styles' fixed gap (see default_xh_size)",
+      "verified": "unverified: 1 is the cl_crosshairgap fallback, not checked against the CS2 client"
+    },
+    {
       "id": "spread_units",
       "value": 320,
       "unit": "units",
@@ -281,6 +302,20 @@
       "unit": "0-1",
       "note": "opacity of the dark panel behind the settings column (over the blurred game)",
       "verified": "design value after Gauntlet round 2 reviewers asked for a darker, more opaque panel; unverified against the CS2 client"
+    },
+    {
+      "id": "menu_save_delay",
+      "value": 0.4,
+      "unit": "s",
+      "note": "a slider drag saves settings.json once, this long after the last step (closing the menu saves at once), instead of one file write per value_changed",
+      "verified": "design value (Gauntlet round 1 code review: a drag wrote dozens of files a second)"
+    },
+    {
+      "id": "menu_vignette",
+      "value": 0.45,
+      "unit": "0-1",
+      "note": "how much the blurred game behind the Esc menu darkens toward the corners",
+      "verified": "design value after Gauntlet round 1 visual reviewers asked for a vignetted blurred background; CS2's own strength unverified: not checked against the CS2 client"
     }
   ]
 }

@@ -79,7 +79,7 @@ func _material(m: Dictionary) -> StandardMaterial3D:
 			# anisotropic: ground and ramps seen at grazing angles keep their detail instead of blurring
 			# aniso keeps ramps detailed at grazing angles; sharp (no mips) is the crisp far gravel the Gauntlet critics preferred
 			mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR if m.get("filter", "aniso") == "sharp" else BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-		var n := content.texture(m["normal"], "BumpMap")
+		var n := _normal(m)
 		if n:
 			mat.normal_enabled = true
 			mat.normal_texture = n
@@ -87,6 +87,10 @@ func _material(m: Dictionary) -> StandardMaterial3D:
 		mat.albedo_color = Color(0.2, 0.9, 0.4, 0.15)
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	return mat
+
+## A row's normal map; "(none)" for textures Rust ships without one (glass_industrial).
+func _normal(m: Dictionary) -> Texture2D:
+	return null if m["normal"] == "(none)" else content.texture(m["normal"], "BumpMap")
 
 ## The course's own surfaces: the same textures through the weathering shader (materials.json
 ## weather, grime, detail). AimLobby still borrows the plain StandardMaterial3D from materials.
@@ -101,8 +105,8 @@ func _surface(m: Dictionary) -> Material:
 	sh.code = SURFACE_SHADER
 	sm.shader = sh
 	sm.set_shader_parameter("tex_a", t)
-	sm.set_shader_parameter("nrm_a", content.texture(m["normal"], "BumpMap"))
-	sm.set_shader_parameter("has_nrm", content.texture(m["normal"], "BumpMap") != null)
+	sm.set_shader_parameter("nrm_a", _normal(m))
+	sm.set_shader_parameter("has_nrm", _normal(m) != null)
 	var w: Texture2D = null
 	if m["weather"] != "(none)":
 		w = content.texture(m["weather"], "MainTex")
@@ -349,7 +353,7 @@ uniform float leak_width = 5.0;
 uniform float debris_width = 2.0;
 varying vec3 wpos;
 varying vec3 wn;
-varying vec2 face_off;
+varying flat vec2 face_off;  // flat: interpolation jitter fed into hash() speckled the leak decals and slab joints per pixel
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vnoise(vec2 p) {
@@ -429,9 +433,11 @@ void fragment() {
 	float bot = max(UV2.y, 0.0);
 	float occ = 1.0;
 	if (panel > 0.0 && face > 0.5) {
-		vec2 ps = vec2(panel * 1.6, panel);  // slabs longer along the ramp than down its slope
-		vec2 pc = m / ps;
-		pc.x += floor(pc.y) * 0.5;  // staggered rows, as cast slabs are laid, not a square grid
+		// rows of cast slabs, each row with its own slab length and offset so the joints never line
+		// up into a grid down a long ramp
+		float row = floor(m.y / panel);
+		vec2 ps = vec2(panel * mix(1.2, 2.4, hash(vec2(row, 5.0) + face_off)), panel);
+		vec2 pc = vec2(m.x / ps.x + hash(vec2(row, 9.0) + face_off), m.y / ps.y);
 		vec2 f = fract(pc);
 		c *= mix(0.9, 1.07, hash(floor(pc) + vec2(3.0, 7.0)));
 		vec2 e = min(f, 1.0 - f) * ps;

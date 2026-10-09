@@ -90,21 +90,21 @@
     },
     {
       "id": "sun_disc_deg",
-      "value": 0.9,
+      "value": 1.1,
       "note": "visible sun disc radius in the sky, degrees (a game-sized disc, larger than the real 0.27)",
-      "tuned": "2026-10-09 world_r1 renders, by eye"
+      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: small sun disc (was 0.9)"
     },
     {
       "id": "sun_halo_deg",
-      "value": 6,
+      "value": 9,
       "note": "radius of the bright glow around the disc, degrees",
-      "tuned": "2026-10-09 world_r1 renders, by eye"
+      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: small sun with weak bloom (was 6)"
     },
     {
       "id": "sun_halo",
-      "value": 0.22,
+      "value": 0.4,
       "note": "glow strength around the disc, times the sun light",
-      "tuned": "2026-10-09 world_r1 renders, by eye"
+      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: small sun with weak bloom (was 0.22)"
     },
     {
       "id": "sun_disc_energy",
@@ -179,12 +179,12 @@
     {
       "id": "sky_horizon",
       "value": [
-        0.7,
-        0.74,
-        0.76
+        0.64,
+        0.73,
+        0.82
       ],
       "note": "pale, dusty horizon",
-      "tuned": "2026-10-08 by eye"
+      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: bluer horizon, less grey haze (was [0.7, 0.74, 0.76])"
     },
     {
       "id": "ground_horizon",
@@ -231,18 +231,18 @@
     {
       "id": "fog_color",
       "value": [
-        0.66,
-        0.7,
-        0.72
+        0.6,
+        0.68,
+        0.76
       ],
       "note": "distance haze",
-      "tuned": "2026-10-08 by eye"
+      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: bluer haze to match the horizon (was [0.66, 0.7, 0.72])"
     },
     {
       "id": "fog_density",
-      "value": 0.0016,
+      "value": 0.0011,
       "note": "exponential fog per metre",
-      "tuned": "2026-10-09 Gauntlet r3: blind critics preferred the 0.0016 haze of 0.2.0 over 0.0024 and 0.0014"
+      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: flat grey horizon strip, washed-out mid-ground (was 0.0016)"
     },
     {
       "id": "fog_sun_scatter",
@@ -252,9 +252,9 @@
     },
     {
       "id": "fog_aerial",
-      "value": 0.75,
+      "value": 0.9,
       "note": "how much the haze takes the sky colour behind it (1 = distant hills fade into the sky with no grey band)",
-      "tuned": "2026-10-09 world_r3: 0.9 flattened the far hills into grey cut-outs (r2 critics), by eye"
+      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: distant hills take the blue sky colour instead of a grey band (was 0.75)"
     },
     {
       "id": "fog_sky_affect",
@@ -294,9 +294,9 @@
     },
     {
       "id": "glow_intensity",
-      "value": 0.6,
+      "value": 0.8,
       "note": "bloom strength (was a constant in Main.gd)",
-      "tuned": "2026-10-09 world_r1 (gauntlet 2): 0.4 left the sun a small soft blob (r3 critics), by eye"
+      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: weak bloom round the sun (was 0.6)"
     },
     {
       "id": "glow_threshold",
@@ -328,7 +328,7 @@
       "id": "shaft_density",
       "value": 0.0006,
       "note": "volumetric haze density for sun shafts through the towers and ramps (0 turns the volumetric pass off)",
-      "tuned": "2026-10-09 world_r3: 0.0018 and 0.0011 washed the sun view into a flat white band (r2 critics), by eye"
+      "tuned": "2026-10-09 world_r2 (gauntlet 2): 0.0012 tried for god-rays, but the volumetric haze speckled the ramp faces in the start render; kept at 0.0006"
     },
     {
       "id": "shaft_forward",

@@ -270,8 +270,6 @@ def write_stats(outdir, ws, here=HERE):
     stats_expected gaps are warnings."""
     cfg = settings(here)
     vd = sheet("prep", here)["vdata_keys"]
-    light = set(keys(cfg["stats_light_slots"]))
-    need_of_item = {w["item"]: keys(cfg["stats_required_light" if w["slot"] in light else "stats_required"]) for w in weapon_rows(ws)}
     names = [w["item"] for w in weapon_rows(ws)]
     st, src = {}, []
     if present(outdir, ITEMS_GAME):
@@ -305,8 +303,7 @@ def write_stats(outdir, ws, here=HERE):
     lost = [n for n in names if n not in st]
     if lost:
         problems.append("CS2 has no weapon entry for %s in items_game.txt%s: a CS2 update may have renamed them" % (short(lost), " or weapons.vdata" if vst else ""))
-    thin = {n: [k for k in need_of_item[n] if not number(st[n].get(k))] for n in names if n in st}
-    thin = ["%s (%s)" % (n, "/".join(m)) for n, m in thin.items() if m]
+    thin = ["%s (%s)" % (n, "/".join(m)) for n, m in stats_gaps(st, ws, cfg).items()]
     for x in thin:
         LOG("  stats missing: " + x)
     if thin and blocks(cfg):
@@ -320,6 +317,20 @@ def write_stats(outdir, ws, here=HERE):
     if part:
         warnings.append("%d weapon(s) use class averages for some stats: %s" % (len(part), short(part, 3)))
     return problems, warnings
+
+
+def stats_gaps(st, ws, cfg):
+    """{weapon item: [stats_required keys (stats_required_light for stats_light_slots guns) that st does not give
+    as a number]} for every weapons.json gun st has an entry for; tools/package.py asks the same of a release's data."""
+    light = set(keys(cfg["stats_light_slots"]))
+    out = {}
+    for w in weapon_rows(ws):
+        n = w["item"]
+        if n in st:
+            miss = [k for k in keys(cfg["stats_required_light" if w["slot"] in light else "stats_required"]) if not number(st[n].get(k))]
+            if miss:
+                out[n] = miss
+    return out
 
 
 def blocks(cfg):

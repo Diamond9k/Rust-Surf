@@ -146,12 +146,13 @@ func _glb(vpk_path: String) -> String:
 func _cls(id: String) -> String:
 	return "knife" if id == "knife" or not rows.has(id) else String(rows[id]["slot"])
 
-## Every attribute of one weapon: its items_game prefab chain (any key), then prep's weapon_stats.json.
+## Every attribute of one weapon: its items_game entry the way prep's items_game.stats reads it (any key), then
+## prep's weapon_stats.json on top.
 func _resolve(id: String) -> void:
 	var out := {}
 	var item := String(rows[id]["item"])
 	if _ig != "":
-		var raw := _ig_chain(item + "_prefab", {})
+		var raw := ig_stats(item)
 		for k in raw:
 			if String(raw[k]).is_valid_float():
 				out[k] = float(raw[k])
@@ -161,9 +162,9 @@ func _resolve(id: String) -> void:
 			out[k] = float(s[k])
 	_st[id] = out
 
-## prep refuses a gun without every stats_required value, but an older or partial data folder could still hold
-## one: each exported gun missing any is named in problems (Main shows them) instead of silently playing on
-## class averages.
+## prep only warns about a gun missing a stats_required value (prep.json stats_required_blocks "no"), so the
+## data folder can hold one: each exported gun missing any is named in problems (Main shows them) instead of
+## silently playing on class averages. The wording matches prep's warning: setup again cannot fix it.
 func _stats_check() -> void:
 	var P := Sheets.values("prep")
 	var light := String(P.get("stats_light_slots", "")).split(",", false)
@@ -178,7 +179,7 @@ func _stats_check() -> void:
 			thin[id] = miss
 			names.append("%s (%s)" % [rows[id]["name"], ", ".join(miss)])
 	if names.size() > 0:
-		problems.append("%d gun(s) lack CS2 stats and use class averages: %s. Run setup again." % [names.size(), "; ".join(names.slice(0, 3)) + (" and more" if names.size() > 3 else "")])
+		problems.append("%d gun(s) lack CS2 stats and use class averages: %s. Rust Surf needs an update for this CS2 version; setup again will not fix it." % [names.size(), "; ".join(names.slice(0, 3)) + (" and more" if names.size() > 3 else "")])
 		push_warning("weapons: " + problems[0])
 
 ## One stat: the player's items_game value, else the class fallback column in weapon_defaults.json.
@@ -330,8 +331,8 @@ func _process(dt: float) -> void:
 	_reload_tick(t)
 	_part_tick(t)
 	_auto_reload(held(), t)
-	if _burst_left > 0 and t >= _burst_at:
-		_shoot(held(), t, true)
+	while _burst_left > 0 and t >= _burst_at:
+		_shoot(held(), _burst_at, true)  # each round on its slot, not the frame's time
 	if _rezoom > 0 and t >= _next_fire and _reload_until == 0.0 and _shell_next == 0.0:
 		var rz := _rezoom
 		_rezoom = 0
@@ -351,8 +352,23 @@ func _process(dt: float) -> void:
 			fire()
 		return
 	var auto := stat(id, "is full auto") > 0.5
-	if Input.is_action_just_pressed("surf_attack") or (auto and Input.is_action_pressed("surf_attack")) or _fan:
+	if Input.is_action_just_pressed("surf_attack"):
 		fire()
+	elif (auto and Input.is_action_pressed("surf_attack")) or _fan:
+		hold_fire(id, t, dt)
+
+## A held automatic trigger: every round whose slot fell inside this frame goes off at its own slot time (up to
+## fire_catchup_max a frame), so a long frame or a hitch never lowers the rate of fire, like CS2's sub-tick
+## input. A slot older than the frame starts a fresh cycle now. Returns the rounds fired.
+func hold_fire(id: String, t: float, dt: float) -> int:
+	var n := 0
+	while n < int(X["fire_catchup_max"]) and held() == id and t >= _next_fire:
+		var before := _next_fire
+		_shoot(id, _next_fire if t - _next_fire <= dt + 0.0005 else t, false)
+		if _next_fire == before:
+			break  # it did not fire (empty, reloading, a toggle)
+		n += 1
+	return n
 
 ## R8 primary: holding attack pulls the hammer once the gun is ready and the round goes off revolver_cock
 ## seconds later; letting go first cancels it. Held on, it pulls again after each shot. True when it fires.
@@ -392,7 +408,8 @@ func _attack2(id: String) -> void:
 			main.hud.message("Silencer " + ("attached" if _alt_on[id] else "detached"), 1.5)
 		"burst":
 			_alt_on[id] = not _alt_on.get(id, false)
-			main.hud.message("Switched to Burst-Fire Mode" if _alt_on[id] else "Switched to Semi-Automatic", 1.5)
+			var msg: Array = X["burst_messages"]  # burst, full-auto base (FAMAS), semi-auto base (Glock)
+			main.hud.message(String(msg[0] if _alt_on[id] else (msg[1] if stat(id, "is full auto") > 0.5 else msg[2])), 1.5)
 	_hud()
 
 ## The silencer mesh follows the toggle halfway through it (when the can comes off or goes on); delay 0 now.
@@ -443,8 +460,10 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 		else:
 			_burst_left = int(X["burst_shots"]) - 1
 		_burst_at = t + float(X["burst_gap"])
-		cyc = float(X["burst_gap"]) * float(_burst_left) + (stat(id, "cycletime alt") if _has(id, "cycletime alt") else float(X["burst_cooldown"]))
-		_next_fire = t + cyc
+		if not from_burst or _burst_left <= 0:
+			# the cooldown runs from the pull's last round, every round of it on burst_gap from the pull
+			cyc = float(X["burst_gap"]) * float(_burst_left) + (stat(id, "cycletime alt") if _has(id, "cycletime alt") else float(X["burst_cooldown"]))
+			_next_fire = t + cyc
 	else:
 		_burst_left = 0
 		_next_fire = cadence(_next_fire, t, cyc, get_process_delta_time())
@@ -605,18 +624,25 @@ func _shoot_ray(cam: Camera3D, reach: float, spread_mrad: float) -> Dictionary:
 	q.exclude = [main.player.get_rid()]
 	return cam.get_world_3d().direct_space_state.intersect_ray(q)
 
-## The far face of what the bullet entered: walk out in pen_step_units steps and look back. Nothing within
-## pen_max_units, or a different object first, means the bullet stops here.
+## The far face of what the bullet entered: walk out in pen_step_units steps and look back. Something else met
+## on the way back (an overlapping part of the same bot, a body touching the wall) lies past the exit: it is
+## skipped and the look back repeats, so the exit found is always the entered object's own far face (the main
+## trace then meets the other thing next). Nothing within pen_max_units means the bullet stops here.
 func _exit(space: PhysicsDirectSpaceState3D, col: Object, pos: Vector3, dir: Vector3, ex: Array[RID]) -> Dictionary:
 	var step := float(X["pen_step_units"]) * u
 	var d := step
+	var skip: Array[RID] = ex.duplicate()
 	while d <= float(X["pen_max_units"]) * u:
-		var q := PhysicsRayQueryParameters3D.create(pos + dir * d, pos + dir * 0.001)
-		q.exclude = ex
-		q.hit_back_faces = false
-		var r: Dictionary = space.intersect_ray(q)
-		if not r.is_empty():
-			return r if r["collider"] == col else {}
+		for i in int(X["pen_exit_skips"]) + 1:
+			var q := PhysicsRayQueryParameters3D.create(pos + dir * d, pos + dir * 0.001)
+			q.exclude = skip
+			q.hit_back_faces = false
+			var r: Dictionary = space.intersect_ray(q)
+			if r.is_empty():
+				break
+			if r["collider"] == col:
+				return r
+			skip.append(r["rid"])
 		d += step
 	return {}
 
@@ -673,17 +699,25 @@ func pattern(id: String, mode: int) -> PackedVector2Array:
 	_tables[k] = out
 	return out
 
+## The (angle, suppressed magnitude) of the held mode's pattern at a fractional recoil index: like CS's
+## GetRecoilOffsets it blends the two table entries around the index, and the suppression ramp reads the
+## fractional index too, so a spray resumed after a partial recovery kicks in between two shots' values.
+func kick_at(id: String, index: float) -> Vector2:
+	var tab := pattern(id, _mode(id))
+	var f := clampf(index, 0.0, float(tab.size() - 1))
+	var i := int(f)
+	var e := tab[i].lerp(tab[mini(i + 1, tab.size() - 1)], f - float(i))
+	var shots := maxf(float(X["recoil_suppression_shots"]), 1.0)
+	return Vector2(e.x, e.y * lerpf(float(X["recoil_suppression_factor"]), 1.0, clampf(f / shots, 0.0, 1.0)))
+
 func _alt_or(id: String, key: String, sfx: String) -> float:
 	return stat(id, key + sfx) if sfx != "" and _has(id, key + sfx) else stat(id, key)
 
-## One shot's kick: the pattern entry at the recoil index pushes the aim punch velocity; the camera gets a
-## little extra view punch of its own. The first shots of a spray are suppressed.
+## One shot's kick: the pattern at the recoil index pushes the aim punch velocity; the camera gets a little
+## extra view punch of its own. The first shots of a spray are suppressed.
 func _recoil(id: String) -> void:
-	var tab := pattern(id, _mode(id))
-	var i := clampi(int(_recoil_index), 0, tab.size() - 1)
-	var e := tab[i]
-	var shots := float(X["recoil_suppression_shots"])
-	var mag := e.y * lerpf(float(X["recoil_suppression_factor"]), 1.0, clampf(float(i) / maxf(shots, 1.0), 0.0, 1.0))
+	var e := kick_at(id, _recoil_index)
+	var mag := e.y
 	var r := deg_to_rad(e.x)
 	_aim_vel += Vector2(cos(r), -sin(r)) * mag  # angle 0 kicks straight up, positive angles to the right
 	_view.x += float(X["view_punch_extra"]) * mag
@@ -720,7 +754,7 @@ func _decay(id: String, dt: float, t: float) -> void:
 		rec = lerpf(rec, stat(id, fin), clampf((_recoil_index - s0) / (s1 - s0), 0.0, 1.0))
 	var k := exp(-dt * log(1.0 / float(X["recovery_decay_to"])) / maxf(rec, 0.01))
 	_inaccuracy *= k
-	if t > _last_shot + stat(id, "cycletime") * 1.1:
+	if t > _last_shot + mstat(id, "cycletime") * 1.1:
 		_recoil_index *= k
 		if _recoil_index < 0.5:
 			_recoil_index = 0.0
@@ -738,7 +772,8 @@ func _inacc(id: String) -> float:
 	if id == "knife" or id == "":
 		return 0.0
 	var p: SurfPlayer = main.player
-	var a := mstat(id, "inaccuracy crouch") if p.ducked else mstat(id, "inaccuracy stand")
+	var crouch: bool = p.ducked and (p.grounded or float(X["air_crouch_cone"]) > 0.0)
+	var a := mstat(id, "inaccuracy crouch") if crouch else mstat(id, "inaccuracy stand")
 	var maxspd := maxf(mstat(id, "max player speed"), 1.0)
 	a += move_share(p.speed_units(), maxspd, p.get("walking") == true) * mstat(id, "inaccuracy move")
 	if not p.grounded:
@@ -807,13 +842,21 @@ func _set_zoom(level: int) -> void:
 	if _fov_tween:
 		_fov_tween.kill()
 	_fov_tween = create_tween()
-	_fov_tween.tween_property(p.cam, "fov", fov, maxf(stat(id, "zoom time 1") if id != "" else 0.05, 0.01))
+	_fov_tween.tween_property(p.cam, "fov", fov, zoom_time(id, level))
 	_zoom = level
 	if main.viewmodel:
 		main.viewmodel.visible = level == 0
 	_scope_layer.visible = level > 0
 	_xhair()
 	_scope.queue_redraw()
+
+## Seconds of the fov ease into a scope level: items_game's "zoom time <level>" (0 = back out), else its
+## "zoom time 1", else the class zoom_time column.
+func zoom_time(id: String, level: int) -> float:
+	if id == "" or not rows.has(id):
+		return float(X["zoom_time_none"])
+	var k := "zoom time %d" % level
+	return maxf(stat(id, k) if _has(id, k) else stat(id, "zoom time 1"), 0.01)
 
 func scoped() -> bool:
 	return _zoom > 0
@@ -1164,6 +1207,16 @@ func _test_box(body: StaticBody3D, size: Vector3, at: Vector3) -> StaticBody3D:
 	body.global_position = at
 	return body
 
+func _test_ball(body: StaticBody3D, radius: float, at: Vector3) -> StaticBody3D:
+	var cs := CollisionShape3D.new()
+	var sp := SphereShape3D.new()
+	sp.radius = radius
+	cs.shape = sp
+	body.add_child(cs)
+	main.add_child(body)
+	body.global_position = at
+	return body
+
 func _selftest() -> void:
 	var p: SurfPlayer = main.player
 	# recoil pattern: seeded, the same on every build, different per weapon
@@ -1270,6 +1323,55 @@ func _selftest() -> void:
 	while _burst_left > 0:
 		_shoot("cs2_glock", _burst_at, true)
 	_check("burst_glock", 20 - int(ammo["cs2_glock"][0]) == int(X["burst_shots"]), "rounds=%d" % (20 - int(ammo["cs2_glock"][0])))
+	# burst cadence: at 60 fps every round of a pull lands on burst_gap from the pull, not on the next frame
+	ammo["cs2_glock"] = [20, 0]
+	_next_fire = 0.0
+	var bt0 := _now()
+	_shoot("cs2_glock", bt0, false)
+	var bshots: Array = [_last_shot - bt0]
+	var ft := bt0
+	while _burst_left > 0 and ft < bt0 + 1.0:
+		ft += 1.0 / 60.0
+		while _burst_left > 0 and ft >= _burst_at:
+			_shoot("cs2_glock", _burst_at, true)
+			bshots.append(_last_shot - bt0)
+	var gap := float(X["burst_gap"])
+	var cool := stat("cs2_glock", "cycletime alt") if _has("cs2_glock", "cycletime alt") else float(X["burst_cooldown"])
+	var on_slot := bshots.size() == int(X["burst_shots"])
+	for i in bshots.size():
+		on_slot = on_slot and absf(float(bshots[i]) - gap * i) < 0.0001
+	_check("burst_cadence_60fps", on_slot and absf(_next_fire - bt0 - (gap * (bshots.size() - 1) + cool)) < 0.0001, "round times %s s (gap %.3f), next pull at +%.3f s" % [str(bshots), gap, _next_fire - bt0])
+	_alt_on["cs2_glock"] = false
+	# held full auto at 12 fps keeps the AK's rate of fire (rounds catch up inside a long frame)
+	slots["primary"] = "cs2_ak47"
+	current = "primary"
+	ammo["cs2_ak47"] = [999, 0]
+	_reload_until = 0.0
+	_shell_next = 0.0
+	_toggle_until = 0.0
+	var at0 := _now()
+	_next_fire = at0
+	var rounds := 0
+	var slow := 1.0 / 12.0
+	var ht := at0
+	while ht < at0 + 3.0 - 0.0001:
+		rounds += hold_fire("cs2_ak47", ht, slow)
+		ht += slow
+	var want_r := 3.0 / stat("cs2_ak47", "cycletime")
+	_check("auto_rate_low_fps", absf(rounds - want_r) <= 1.0, "ak47 held 3 s at 12 fps: %d rounds (want %.0f)" % [rounds, want_r])
+	refill()
+	_aim = Vector2.ZERO
+	_aim_vel = Vector2.ZERO
+	_view = Vector2.ZERO
+	# recoil index: a fractional index blends the two table entries around it, suppression included
+	_recoil_index = 0.0
+	var ka := kick_at("cs2_ak47", 5.0)
+	var kb := kick_at("cs2_ak47", 6.0)
+	var kh := kick_at("cs2_ak47", 5.5)
+	var tab := pattern("cs2_ak47", 0)
+	var sup := lerpf(float(X["recoil_suppression_factor"]), 1.0, clampf(1.5 / maxf(float(X["recoil_suppression_shots"]), 1.0), 0.0, 1.0))
+	var k15 := kick_at("cs2_ak47", 1.5)
+	_check("recoil_index_blend", kh.is_equal_approx((ka + kb) * 0.5) and is_equal_approx(k15.y, (tab[1].y + tab[2].y) * 0.5 * sup), "ak47 index 5 %s, 6 %s, 5.5 %s; 1.5 suppressed by %.3f" % [ka, kb, kh, sup])
 	_alt_on["cs2_glock"] = false
 	# shotgun: shell by shell, one per shell_each, fire breaks it off
 	slots["primary"] = "cs2_nova"
@@ -1356,6 +1458,25 @@ func _selftest() -> void:
 			exp_d = toll.call(exp_d)
 	var got_d: float = float(fall_hits[0][1]) if fall_hits.size() > 0 else -1.0
 	_check("falloff_through_walls", stat("cs2_ak47", "penetration") <= 0.0 or absf(got_d - exp_d) < 0.005, "100 through two 8-unit walls to 6 m: %.2f (want %.2f, falloff on the total %.0f units flown, compounding=%s)" % [got_d, exp_d, flown, float(X["falloff_cumulative"]) > 0.0])
+	# a head sphere with a thin neck plate inside its back edge: the bullet leaves the head past the plate and
+	# goes on into the next bot (the look back skips the plate instead of stopping the bullet in the head)
+	var bot_a := Node3D.new()
+	var bot_b := Node3D.new()
+	main.add_child(bot_a)
+	main.add_child(bot_b)
+	var head_p := _test_ball(TestPart.new(), 0.12, Vector3(0, -1200, -3)) as TestPart
+	var neck_p := _test_box(TestPart.new(), Vector3(0.3, 0.3, 0.04), Vector3(0, -1200, -3.12)) as TestPart
+	var next_p := _test_box(TestPart.new(), Vector3(0.3, 0.3, 0.3), Vector3(0, -1200, -3.8)) as TestPart
+	head_p.is_head = true
+	head_p.unit = bot_a
+	neck_p.unit = bot_a
+	next_p.unit = bot_b
+	made += [bot_a, bot_b, head_p, neck_p, next_p]
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var ov_hits: Array = []
+	_trace("cs2_ak47", Vector3(0, -1200, 0), Vector3(0, 0, -1), 10.0, 36.0, ov_hits)
+	_check("pen_overlapping_parts", stat("cs2_ak47", "penetration") <= 0.0 or (ov_hits.size() == 2 and ov_hits[0][0] == head_p and ov_hits[1][0] == next_p), "head over a neck plate, a second bot behind: %d hit(s) %s" % [ov_hits.size(), str(ov_hits.map(func(h: Array) -> String: return "head" if h[0] == head_p else ("next" if h[0] == next_p else "neck")))])
 	for w in made:
 		(w as Node).queue_free()
 	# airborne cone: nothing at the apex, the take-off value at jump speed, capped at air_inacc_max_scale x
@@ -1440,6 +1561,7 @@ func _selftest() -> void:
 	var kv := _kv(_ig.find("{"))
 	_ig = ""
 	_check("items_game_reader", kv.get("a") == "2" and kv.get("b") == 'say "hi"' and not kv.has("c") and not kv.has("blk") and kv.get("d", {}).get("y") == "8", str(kv))
+	_ig_parity()
 	# movement: CS's power curve puts half the speed range at most of the move cone; walking stays linear
 	var ms := [move_share(0.0, 250.0, false), move_share(250.0 * (0.34 + 0.95) * 0.5, 250.0, false), move_share(250.0 * (0.34 + 0.95) * 0.5, 250.0, true), move_share(250.0, 250.0, false)]
 	_check("move_power_curve", ms[0] == 0.0 and is_equal_approx(ms[1], pow(0.5, float(X["move_inacc_power"]))) and is_equal_approx(ms[2], 0.5) and ms[3] == 1.0, "share at rest, mid run, mid walk, full = %s" % str(ms))
@@ -1494,6 +1616,16 @@ func _selftest() -> void:
 	thin.clear()
 	_stats_check()
 	_check("stats_required_flagged", flagged, "an AK with only damage is named in the HUD problems")
+	# stats: values every CS2 player knows, against what the player's files gave (a moved or renamed key fails)
+	var compared := 0
+	var wrong: PackedStringArray = []
+	for r in Sheets.load_sheet("weapon_defaults")["reference"]:
+		var wid := String(r["weapon"])
+		if rows.has(wid) and _has(wid, String(r["key"])):
+			compared += 1
+			if absf(stat(wid, String(r["key"])) - float(r["value"])) > 0.0005:
+				wrong.append("%s %s=%s (want %s)" % [wid, r["key"], stat(wid, String(r["key"])), r["value"]])
+	_check("stats_reference", wrong.is_empty(), "%d known value(s) compared with the files, %s" % [compared, "all equal" if wrong.is_empty() else "; ".join(wrong)] + ("" if compared > 0 else " (no CS2 stats in this data folder)"))
 	# the aim lobby counts a real traced shot on a target the eye can see, one hit per shot
 	var lob: Node = main.lobby
 	if lob and lob.has_method("toggle") and lob.has_method("on_shot_fired"):
@@ -1541,6 +1673,81 @@ func _selftest() -> void:
 	print("WTEST weapons checks=%d failed=%d" % [_checks, _fails])
 	get_tree().quit(1 if _fails > 0 else 0)
 
+## One weapon's attributes as prep/items_game.stats gives them: the "items" entry named item (its prefab chain,
+## its own attributes on top), else the <item>_prefab block's chain. Strings, like prep's.
+func ig_stats(item: String) -> Dictionary:
+	var it := _ig_item(item)
+	if it.is_empty():
+		return _ig_chain(item + "_prefab", {})
+	var out := {}
+	for p in String(it.get("prefab", "")).split(" ", false):
+		out.merge(_ig_chain(p, {}), true)
+	out.merge(_ig_attrs(it), true)
+	return out
+
+## The block under items_game's "items" whose "name" is item, {} when there is none.
+func _ig_item(item: String) -> Dictionary:
+	var at := _ig.find("\"items\"", maxi(_ig_prefabs, 0))
+	while at >= 0:
+		var j := at + 7
+		while j < _ig.length() and " \t\r\n".contains(_ig[j]):
+			j += 1
+		if j < _ig.length() and _ig[j] == "{":
+			break
+		at = _ig.find("\"items\"", j)
+	if at < 0:
+		return {}
+	var rx := RegEx.create_from_string("\"name\"\\s+\"" + item + "\"")
+	var m := rx.search(_ig, at)
+	while m:
+		var b := _ig.rfind("{", m.get_start())
+		if b > at:
+			var blk := _kv(b)
+			if String(blk.get("name", "")) == item:
+				return blk
+		m = rx.search(_ig, m.get_end())
+	return {}
+
+## --wtest: prep's own test fixture items_game.txt read by this reader and by prep/items_game.py (run with the
+## machine's python) must give every weapon the same attributes. Skipped where either is missing (an exported
+## game has no prep folder beside it).
+func _ig_parity() -> void:
+	var root := ProjectSettings.globalize_path("res://").path_join("..").simplify_path()
+	var fx := root.path_join("prep/tests/fixtures/items_game.txt")
+	var py := root.path_join("prep/items_game.py")
+	var names := ["weapon_ak47", "weapon_m4a1", "weapon_glock", "weapon_taser"]
+	if not FileAccess.file_exists(fx) or not FileAccess.file_exists(py):
+		_check("items_game_parity", true, "skipped: no prep/tests fixture beside this build")
+		return
+	var out: Array = []
+	var code := -1
+	for exe in ["python3", "python"]:
+		out.clear()
+		code = OS.execute(exe, [py, fx] + names, out, true)
+		if code == 0:
+			break
+	var want: Variant = JSON.parse_string(String(out[0]) if code == 0 and out.size() > 0 else "")
+	if not (want is Dictionary):
+		_check("items_game_parity", true, "skipped: no python to run prep/items_game.py (exit %d)" % code)
+		return
+	var keep := _ig
+	var keep_p := _ig_prefabs
+	_ig = FileAccess.get_file_as_string(fx)
+	_ig_prefabs = _ig.find("\"prefabs\"")
+	var bad: PackedStringArray = []
+	for nm in names:
+		var mine := ig_stats(nm)
+		var theirs: Dictionary = want.get(nm, {})
+		for k in theirs:
+			if String(mine.get(k, "<none>")) != String(theirs[k]):
+				bad.append("%s %s: gd %s py %s" % [nm, k, mine.get(k, "<none>"), theirs[k]])
+		for k in mine:
+			if not theirs.has(k):
+				bad.append("%s %s: only gd" % [nm, k])
+	_ig = keep
+	_ig_prefabs = keep_p
+	_check("items_game_parity", bad.is_empty() and want.size() == names.size(), "%d weapons of prep's fixture: %s" % [want.size(), "identical" if bad.is_empty() else "; ".join(bad.slice(0, 6))])
+
 ## Just the prefab chain of one items_game entry: its "prefab" parents first, its own attributes on top.
 func _ig_chain(name: String, seen: Dictionary) -> Dictionary:
 	if seen.has(name) or seen.size() > 16:
@@ -1550,6 +1757,12 @@ func _ig_chain(name: String, seen: Dictionary) -> Dictionary:
 	var out := {}
 	for p in String(blk.get("prefab", "")).split(" ", false):
 		out.merge(_ig_chain(p, seen), true)
+	out.merge(_ig_attrs(blk), true)
+	return out
+
+## A block's attributes: "damage" "36", or the block form "damage" { "attribute_class" .. "value" "36" }.
+func _ig_attrs(blk: Dictionary) -> Dictionary:
+	var out := {}
 	var at: Variant = blk.get("attributes", {})
 	if at is Dictionary:
 		for k in at:

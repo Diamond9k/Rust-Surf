@@ -16,6 +16,7 @@ const OLD := {"sens": "sensitivity", "vm_fov": "viewmodel_fov", "vm_x": "viewmod
 	"xh_color": "cl_crosshaircolor", "xh_dot": "cl_crosshairdot", "speed": "show_speed"}
 const BLUR := """shader_type canvas_item;
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
+uniform float vignette = 0.0;
 void fragment() {
 	vec2 px = SCREEN_PIXEL_SIZE * 6.0;
 	vec3 c = vec3(0.0);
@@ -24,7 +25,9 @@ void fragment() {
 			c += textureLod(screen_tex, SCREEN_UV + vec2(float(x), float(y)) * px, 3.0).rgb;
 		}
 	}
-	COLOR = vec4(mix(c / 25.0, vec3(0.035, 0.04, 0.05), 0.6), 1.0);
+	vec3 col = mix(c / 25.0, vec3(0.035, 0.04, 0.05), 0.6);
+	vec2 d = (SCREEN_UV - 0.5) * vec2(1.0, 0.8);
+	COLOR = vec4(col * (1.0 - vignette * smoothstep(0.15, 0.75, length(d) * 1.4)), 1.0);
 }"""
 
 var main: Node
@@ -49,6 +52,9 @@ var _u := 1.0
 var _loading := true
 var _no_save := false    # an unreadable settings file could not be set aside: never write over it
 var _was_frozen := false # the player's frozen state before the menu opened (Shots or a lobby pose may hold it)
+var _lim := {}           # slider id -> [lo, hi]: the sheet range widened to take the player's own CS2 value
+var _save_due := false   # a slider moved: one save after hud.json menu_save_delay, not one per value_changed
+var saves := 0           # files written this session (--uitest counts them)
 
 func setup(m: Node) -> void:
 	main = m
@@ -93,6 +99,7 @@ func toggle() -> void:
 		main.player.frozen = true
 	else:
 		main.player.frozen = _was_frozen
+		_flush()
 	if main.timer: main.timer.set_process(not is_open)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if is_open else Input.MOUSE_MODE_CAPTURED
 
@@ -134,7 +141,8 @@ func _fit(r: Dictionary, v: Variant, snap: bool = true) -> Variant:
 			return clampi(int(v), 0, String(r["choices"]).split("|").size() - 1)
 		"slider":
 			var st := float(r["step"])
-			var f := clampf(float(v), float(r["min"]), float(r["max"]))
+			var lh: Array = _lim.get(r["id"], [float(r["min"]), float(r["max"])])
+			var f := clampf(float(v), float(lh[0]), float(lh[1]))
 			return snappedf(f, st) if snap and st > 0.0 else f
 	return v
 
@@ -142,13 +150,17 @@ func _load() -> void:
 	for id in rows:
 		if rows[id]["kind"] != "binds":
 			vals[id] = _initial(rows[id])
-	var path := FILE
-	if not FileAccess.file_exists(path) and FileAccess.file_exists(FILE + ".tmp"):
-		path = FILE + ".tmp"  # a save cut off between removing the old file and the rename (Windows) left only the temp
-	if not FileAccess.file_exists(path):
-		return
-	var js := JSON.new()  # parse() reports a bad file to us instead of printing an engine error
-	var d: Variant = js.data if js.parse(FileAccess.get_file_as_string(path)) == OK else null
+			if rows[id]["kind"] == "slider":  # a CS2 value past the slider's range stays the player's, never clamped
+				_lim[id] = [minf(float(rows[id]["min"]), float(vals[id])), maxf(float(rows[id]["max"]), float(vals[id]))]
+	# a settings.json.tmp left beside the file is the newest whole write (the rename after it failed or was cut
+	# off), so it wins when it parses; a torn temp is ignored and overwritten by the next save
+	var d: Variant = _read(FILE + ".tmp")
+	var path := FILE + ".tmp"
+	if not (d is Dictionary):
+		path = FILE
+		if not FileAccess.file_exists(path):
+			return
+		d = _read(path)
 	if not (d is Dictionary):
 		# set the unreadable file aside before any save can write over it; if that fails, never save this session
 		var bad := FILE + ".bad"
@@ -167,6 +179,8 @@ func _load() -> void:
 			saved["volume"] = float(d["volume"]) / 100.0
 	for k in saved:
 		if vals.has(k) and (saved[k] is float or saved[k] is bool):
+			if _lim.has(k) and saved[k] is float:  # a value the player set here earlier is in range by definition
+				_lim[k] = [minf(float(_lim[k][0]), float(saved[k])), maxf(float(_lim[k][1]), float(saved[k]))]
 			vals[k] = _fit(rows[k], saved[k], false)
 			_changed[k] = true
 	if d.get("keys") is Dictionary:  # v0.2.1: id -> [key, key]
@@ -181,10 +195,30 @@ func _load() -> void:
 			if _keys.has(id) and d["binds"][id] is String:
 				_set_keys(id, [String(d["binds"][id]).to_upper()])
 
+## The parsed file, or null when it is missing or does not parse (parse() reports it to us, not the log).
+func _read(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		return null
+	var js := JSON.new()
+	return js.data if js.parse(FileAccess.get_file_as_string(path)) == OK else null
+
+## A slider drag saves once, menu_save_delay after it settles (closing the menu saves at once).
+func _save_soon() -> void:
+	if _save_due:
+		return
+	_save_due = true
+	get_tree().create_timer(float(main.hud.H["menu_save_delay"])).timeout.connect(_flush)
+
+func _flush() -> void:
+	if _save_due:
+		_save()
+
 ## Writes a temp file and renames it over the old one, so a crash mid-write never loses the settings.
 func _save() -> void:
+	_save_due = false
 	if _no_save:
 		return
+	saves += 1
 	var out := {}
 	for k in _changed:  # only what the player changed here, so the rest keeps following their CS2 config
 		out[k] = vals[k]
@@ -249,7 +283,8 @@ func _channel(ids: Array, v: float) -> void:
 		if p:
 			p.volume_db = float(main.sounds.rows[id]["volume_db"]) + linear_to_db(maxf(v, 0.0001))
 
-func _change(k: String, v: Variant, snap: bool = true) -> void:
+## soon: a slider drag, saved once it settles instead of on every step.
+func _change(k: String, v: Variant, snap: bool = true, soon: bool = false) -> void:
 	v = _fit(rows[k], v, snap)
 	if vals[k] == v and _changed.has(k):
 		return
@@ -257,7 +292,10 @@ func _change(k: String, v: Variant, snap: bool = true) -> void:
 	_apply(k)
 	if not _loading:
 		_changed[k] = true
-		_save()
+		if soon:
+			_save_soon()
+		else:
+			_save()
 
 # --- binds ---
 
@@ -496,6 +534,7 @@ func _build() -> void:
 	var mat := ShaderMaterial.new()
 	mat.shader = Shader.new()
 	mat.shader.code = BLUR
+	mat.set_shader_parameter("vignette", float(main.hud.H["menu_vignette"]))
 	blur.material = mat
 	_root.add_child(blur)
 	# nav bar: icon buttons like CS2's main menu (settings lit, resume, aim lobby, restart; quit on the right)
@@ -799,8 +838,9 @@ func _row(parent: Control, r: Dictionary, n: int) -> void:
 	hb.add_child(right)
 	if r["kind"] == "slider":
 		var s := HSlider.new()
-		s.min_value = float(r["min"])
-		s.max_value = float(r["max"])
+		var lh: Array = _lim.get(k, [float(r["min"]), float(r["max"])])
+		s.min_value = float(lh[0])
+		s.max_value = float(lh[1])
 		s.step = float(r["step"])
 		s.value = float(vals[k])
 		s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -816,7 +856,7 @@ func _row(parent: Control, r: Dictionary, n: int) -> void:
 		right.add_child(f)
 		_ctl[k] = [s, f]
 		s.value_changed.connect(func(v: float) -> void:
-			_change(k, v)
+			_change(k, v, true, true)
 			f.text = _fmt(r, float(vals[k])))
 		var commit := func(_t: String = "") -> void:
 			var t := f.text.strip_edges()
@@ -949,7 +989,7 @@ func _draw_preview(pv: Control) -> void:
 	var hud: Hud = main.hud
 	var spread := hud.spread_to_px(0.006 + 0.05 * k, h)
 	pv.draw_set_transform((sz * 0.5).floor())
-	Hud.draw_xh(pv, hud.convars, h, hud.H, spread, hud.spread_to_px(0.02 * k, h))
+	Hud.draw_xh(pv, hud.convars, h, hud.H, spread, hud.spread_to_px(0.02 * k, h), hud._wgap)
 	pv.draw_set_transform(Vector2.ZERO)
 
 func _process(_dt: float) -> void:
@@ -1010,6 +1050,48 @@ func _uitest() -> void:
 	_changed.clear()
 	_load()
 	ok.call(is_equal_approx(float(vals["sensitivity"]), 3.25), "a lone settings.json.tmp is read back")
+	# a torn settings.json beside a whole .tmp: the .tmp (the newest whole write) wins and nothing is lost
+	bf = FileAccess.open(FILE, FileAccess.WRITE)
+	bf.store_string("{ \"values\": {")
+	bf.close()
+	bf = FileAccess.open(FILE + ".tmp", FileAccess.WRITE)
+	bf.store_string(JSON.stringify({"values": {"sensitivity": 4.5}, "keys": {}}))
+	bf.close()
+	_changed.clear()
+	_load()
+	ok.call(is_equal_approx(float(vals["sensitivity"]), 4.5), "a whole .tmp wins over a torn settings.json")
+	bf = FileAccess.open(FILE, FileAccess.WRITE)
+	bf.store_string(JSON.stringify({"values": {"sensitivity": 1.5}, "keys": {}}))
+	bf.close()
+	_changed.clear()
+	_load()
+	ok.call(is_equal_approx(float(vals["sensitivity"]), 4.5), "a whole .tmp (rename failed) wins over the older settings.json")
+	for p in [FILE, FILE + ".tmp", FILE + ".bad"]:
+		DirAccess.remove_absolute(gp.call(p))
+	# a CS2 value past the slider range stays the player's: 0.05 sensitivity is neither clamped on load nor on a nudge
+	var sens0: float = main.player.input.sensitivity
+	main.player.input.sensitivity = 0.05
+	_changed.clear()
+	_load()
+	_change("sensitivity", 0.05, false)
+	ok.call(is_equal_approx(float(vals["sensitivity"]), 0.05) and is_equal_approx(float(_fit(sr, 0.04, false)), 0.05), "CS2 sensitivity 0.05 kept (range widened to it, not past it)")
+	main.player.input.sensitivity = sens0
+	_changed.clear()
+	_load()
+	# a slider drag writes the file once after it settles, not once per value_changed
+	_rebuild()
+	var n0 := saves
+	var sl: HSlider = _ctl["volume"][0]
+	for i in 20:
+		sl.value = 0.2 + i * 0.01
+	var during := saves - n0
+	_flush()
+	ok.call(during == 0 and saves - n0 == 1 and is_equal_approx(float(vals["volume"]), 0.39), "a 20-step volume drag saves once (%d during, %d after)" % [during, saves - n0])
+	for p in [FILE, FILE + ".tmp", FILE + ".bad"]:
+		DirAccess.remove_absolute(gp.call(p))
+	_changed.clear()
+	_load()
+	_apply("volume")
 	# zoom_sensitivity_ratio: the player's convar unrounded, and a change reaches Weapons
 	main.hud.convars["zoom_sensitivity_ratio"] = "0.818933"
 	ok.call(is_equal_approx(float(_initial(rows["zoom_sensitivity_ratio"])), 0.818933), "zoom_sensitivity_ratio 0.818933 from the convar")
@@ -1060,6 +1142,17 @@ func _uitest() -> void:
 	ok.call(float(Hud.xh_px({"cl_crosshairthickness": "0.7"}, 1080, hv)["thickness"]) == 1.0, "thickness 0.7 at 1080p draws 1 px")
 	ok.call(float(Hud.xh_px({"cl_crosshairthickness": "1"}, 1080, hv)["thickness"]) == 2.0, "thickness 1 at 1080p draws 2 px")
 	ok.call(Hud.xh_color({"cl_crosshaircolor": "1", "cl_crosshairusealpha": "0"}, hv).is_equal_approx(Color8(50, 250, 50)), "colour 1 is 50,250,50")
+	# styles 0/1 keep hud.json's fixed Default shape; cl_crosshairgap_useweaponvalue swaps gap_base for the gun's
+	var big := {"cl_crosshairsize": "10", "cl_crosshairthickness": "3", "cl_crosshairgap": "-3"}
+	var d0 := big.duplicate()
+	d0["cl_crosshairstyle"] = "0"
+	var d4 := big.duplicate()
+	d4["cl_crosshairstyle"] = "4"
+	var m0: Dictionary = Hud.xh_px(d0, 1080, hv)
+	ok.call(m0["size"] == roundf(float(hv["default_xh_size"]) * 1080 / float(hv["yres_base"])) and m0["size"] != Hud.xh_px(d4, 1080, hv)["size"], "style 0 ignores cl_crosshairsize (%s px), style 4 follows it" % m0["size"])
+	var g4: float = Hud.xh_px(d4, 1080, hv)["gap"]
+	var gw: float = Hud.xh_px(d4, 1080, hv, float(hv["gap_base"]) + 6.0)["gap"]
+	ok.call(gw > g4, "a weapon gap widens the static gap (%s -> %s px)" % [g4, gw])
 	ok.call(Hud.xh_color({"cl_crosshaircolor": "5", "cl_crosshaircolor_r": "10", "cl_crosshaircolor_g": "20", "cl_crosshaircolor_b": "30", "cl_crosshairalpha": "128"}, hv).is_equal_approx(Color8(10, 20, 30, 128)), "colour 5 is the custom RGB with alpha")
 	# no hit marker unless the player turns it on
 	main.hud.hitmarker(false)
@@ -1068,6 +1161,8 @@ func _uitest() -> void:
 	main.hud.hitmarker(false)
 	ok.call(main.hud._hit > 0.0, "hit marker shows when turned on")
 	ok.call(main.hud.hit_ctl.visible and main.hud.hit_ctl.get_parent() != main.hud.crosshair, "hit marker draws apart from the crosshair (shown on snipers too)")
+	await get_tree().process_frame
+	ok.call(main.hud.hit_ctl.position == main.hud.crosshair.position, "hit marker sits on the crosshair (cl_crosshair_recoil moves both)")
 	main.hud.hit_marker = false
 	main.hud._hit = 0.0
 	# no bare 0 at rest; the dynamic gap follows the live camera fov

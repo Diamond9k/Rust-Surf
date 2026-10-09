@@ -34,6 +34,7 @@ var _sized: Array = []  # [Label, base px]
 var _msg_gen := 0      # each message() bumps it, so an older timer never clears a newer message
 var _hp := 100.0
 var _armor := 100.0
+var _wgap := NAN          # the held gun's crosshair gap when cl_crosshairgap_useweaponvalue is on, else NAN
 
 func setup(cv: Dictionary, cs2_dir: String = "") -> void:
 	convars = cv
@@ -262,9 +263,10 @@ static func xh_color(cv: Dictionary, hv: Dictionary) -> Color:
 	return c
 
 ## The cl_crosshair* crosshair at the origin of ci for a window h px tall. spread_px is how far the
-## dynamic styles move out (spread + inaccuracy), fire_px the firing-only part (style 5). The menu preview uses it too.
-static func draw_xh(ci: CanvasItem, cv: Dictionary, h: float, hv: Dictionary, spread_px: float, fire_px: float) -> void:
-	var m := xh_px(cv, h, hv)
+## dynamic styles move out (spread + inaccuracy), fire_px the firing-only part (style 5), wgap the gun's own gap
+## (cl_crosshairgap_useweaponvalue; NAN for none). The menu preview uses it too.
+static func draw_xh(ci: CanvasItem, cv: Dictionary, h: float, hv: Dictionary, spread_px: float, fire_px: float, wgap: float = NAN) -> void:
+	var m := xh_px(cv, h, hv, wgap)
 	var yres := h / float(hv["yres_base"])
 	var style := int(num(cv, "cl_crosshairstyle", 2))
 	var size: float = m["size"]
@@ -319,15 +321,22 @@ static func draw_xh(ci: CanvasItem, cv: Dictionary, h: float, hv: Dictionary, sp
 			ci.draw_rect(Rect2(-half, -half, th, th).grow(grow), Color(0, 0, 0, c.a) if pass_i == 0 else c)
 
 ## Whole-pixel arm length, thickness (Source truncates YRES(thickness), min 1), static gap and outline
-## (screen pixels, not scaled; 0 when off) for a window h px tall.
-static func xh_px(cv: Dictionary, h: float, hv: Dictionary) -> Dictionary:
+## (screen pixels, not scaled; 0 when off) for a window h px tall. Styles 0/1 (Default, Default Static) keep
+## hud.json's fixed default_xh_* shape whatever the size/thickness/gap convars say. With
+## cl_crosshairgap_useweaponvalue the gun's wgap replaces gap_base.
+static func xh_px(cv: Dictionary, h: float, hv: Dictionary, wgap: float = NAN) -> Dictionary:
 	var yres := h / float(hv["yres_base"])
 	var ot := 0.0
 	if on(cv, "cl_crosshair_drawoutline", "false"):
 		ot = maxf(roundf(num(cv, "cl_crosshair_outlinethickness", 1)), 1.0)
-	return {"size": maxf(roundf(num(cv, "cl_crosshairsize", 5) * yres), 0.0),
-		"thickness": maxf(floorf(num(cv, "cl_crosshairthickness", 0.5) * yres), 1.0),
-		"gap": roundf((float(hv["gap_base"]) + num(cv, "cl_crosshairgap", 1)) * h / float(hv["gap_ref_height"])),
+	var fixed := int(num(cv, "cl_crosshairstyle", 2)) in [0, 1]
+	var size := float(hv["default_xh_size"]) if fixed else num(cv, "cl_crosshairsize", 5)
+	var th := float(hv["default_xh_thickness"]) if fixed else num(cv, "cl_crosshairthickness", 0.5)
+	var gap := float(hv["default_xh_gap"]) if fixed else num(cv, "cl_crosshairgap", 1)
+	var base := float(hv["gap_base"]) if is_nan(wgap) else wgap
+	return {"size": maxf(roundf(size * yres), 0.0),
+		"thickness": maxf(floorf(th * yres), 1.0),
+		"gap": roundf((base + gap) * h / float(hv["gap_ref_height"])),
 		"outline": ot}
 
 ## Pixels a spread cone of rad radians covers on a window h px tall (Source: YRES(rad x 320 / tan(fov/2)), fov the
@@ -359,7 +368,7 @@ func _no_xh() -> bool:
 
 func _draw_crosshair() -> void:
 	if not _no_xh():
-		draw_xh(crosshair, convars, get_viewport().get_visible_rect().size.y, H, _dyn, _fire)
+		draw_xh(crosshair, convars, get_viewport().get_visible_rect().size.y, H, _dyn, _fire, _wgap)
 
 func _draw_hit() -> void:
 	if _hit <= 0.0:
@@ -380,6 +389,7 @@ func _process(delta: float) -> void:
 	var spread := 0.0
 	var fire := 0.0
 	var w: Node = get_parent().get("weapons") if get_parent() else null
+	_wgap = NAN
 	if w != null and w.has_method("_spread") and w.has_method("held") and w.get("main") != null and w.main.player != null:
 		var id: String = w.held()
 		var x: Variant = w.get("X")
@@ -387,11 +397,14 @@ func _process(delta: float) -> void:
 		if id != "":
 			spread = float(w._spread(id)) * to_rad
 			fire = float(w.get("_inaccuracy")) * to_rad
+			if on(convars, "cl_crosshairgap_useweaponvalue", "false") and w.has_method("_has") and w._has(id, "crosshair min distance"):
+				_wgap = float(w.stat(id, "crosshair min distance"))
 	var h := get_viewport().get_visible_rect().size.y
 	var k := clampf(delta * float(H["dynamic_rate"]), 0.0, 1.0)
 	_dyn = lerpf(_dyn, spread_to_px(spread, h), k)
 	_fire = lerpf(_fire, spread_to_px(fire, h), k)
 	crosshair.position = (get_viewport().get_visible_rect().size * 0.5).floor() + _recoil_px(w, h).round()
+	hit_ctl.position = crosshair.position  # the marker stays on the crosshair it marks (cl_crosshair_recoil moves it)
 	crosshair.queue_redraw()
 
 func update(speed_u: float, t: float, pb: float, running: bool) -> void:

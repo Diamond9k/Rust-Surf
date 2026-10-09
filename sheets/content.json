@@ -153,6 +153,56 @@
       "verified": "2026-10-09 present in the local prep output (listed in launch_site_placements.json materials); atlas bands read from the png alpha, unverified against Rust's decal UVs"
     },
     {
+      "id": "tex_sheet_metal",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material sheet_metal (Launch Site, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/sheet_metal_{albedo,normal}.png",
+      "used_by": "materials.hall_wall, hall_door (corrugated walls and doors of the Backdrop halls)",
+      "verified": "2026-10-09 present in the local prep output rsdata/rust/tex (exported with the backdrop materials: the warehouse_launch_site_a mesh names it)"
+    },
+    {
+      "id": "tex_roof_plating",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material roof_plating_a (Launch Site, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/roof_plating_a_{albedo,normal}.png",
+      "used_by": "materials.hall_roof (hall roofs)",
+      "verified": "2026-10-09 present in the local prep output rsdata/rust/tex (exported with the backdrop materials: the warehouse_launch_site_a mesh names it)"
+    },
+    {
+      "id": "tex_glass_industrial",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material glass_industrial (Launch Site, placed by the monument prefab) :: _MainTex",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/glass_industrial_albedo.png",
+      "used_by": "materials.hall_glass (hall window bands; Rust's material has no normal map)",
+      "verified": "2026-10-09 present in the local prep output rsdata/rust/tex (exported with the backdrop materials: the warehouse_launch_site_a mesh names it)"
+    },
+    {
+      "id": "tex_concrete_trim",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material concrete_trim (Launch Site, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/concrete_trim_{albedo,normal}.png",
+      "used_by": "materials.hall_plinth (hall plinths)",
+      "verified": "2026-10-09 present in the local prep output rsdata/rust/tex (exported with the backdrop materials: the warehouse_launch_site_a mesh names it)"
+    },
+    {
+      "id": "tex_cinder_blocks",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material cinder_blocks (Launch Site, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/cinder_blocks_{albedo,normal}.png",
+      "used_by": "materials.hall_base (hall lower walls)",
+      "verified": "2026-10-09 present in the local prep output rsdata/rust/tex (exported with the backdrop materials: the warehouse_launch_site_a mesh names it)"
+    },
+    {
       "id": "amb_wind_rust",
       "game": "rust",
       "kind": "audio",

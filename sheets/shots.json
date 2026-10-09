@@ -100,7 +100,7 @@
       "pitch": -3,
       "frames": 60,
       "what": "aim lobby at the firing line: the numbered lanes, near and raised bots in a rifle-ready stance, catwalks and crates down range, with the round HUD",
-      "verified": "2026-10-09 rendered in lobby_r1_g6 (Gauntlet round 4): rifle-ready bots with tapered limbs and Rust kits, worn floor numbers; the gun is shown in its idle hold (the lobby skips the draw clip in captures)"
+      "verified": "2026-10-09 rendered in lobby_r2_15 (ultracode round 2): same pose; bots with filled-out clothing, AO-style shading and textured kit metal, Rust leak decals on the wall tops; the gun is shown in its idle hold (the lobby skips the draw clip in captures)"
     }
   ]
 }
