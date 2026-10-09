@@ -100,9 +100,9 @@
     },
     {
       "id": "fog_density",
-      "value": 0.0014,
+      "value": 0.0016,
       "note": "exponential fog per metre",
-      "tuned": "2026-10-09 Gauntlet r2: critics marked the haze down; lighter haze plus anisotropic ground"
+      "tuned": "2026-10-09 Gauntlet r3: blind critics preferred the 0.0016 haze of 0.2.0 over 0.0024 and 0.0014"
     },
     {
       "id": "fog_sun_scatter",

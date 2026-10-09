@@ -35,7 +35,7 @@
    "game": "cs2",
    "slot": "rifle",
    "name": "M4A4",
-   "item": "weapon_m4a4",
+   "item": "weapon_m4a1",
    "model": "weapons/models/m4a4/weapon_rif_m4a4.vmdl_c",
    "clips": {
     "draw": "animation/anims/viewmodel/rifle/rifle_m4a4/draw_m4a4.vnmclip_c",

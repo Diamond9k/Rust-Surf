@@ -4,6 +4,8 @@ usage: gen_weapons.py <cs2_files.txt> [out.json]
 Stats are not written here: the game reads them from scripts/items/items_game.txt at runtime."""
 import sys, json, re, os
 
+# items_game names that differ from our ids (the M4A4 is weapon_m4a1 in CS2's item schema)
+ITEM = {"m4a4": "weapon_m4a1"}
 # (id, slot, model dir, model file stem, viewmodel clip folder, clip suffix, display name, sound dir, shot sound stem)
 CS2 = [
     ("ak47", "rifle", "ak47", "weapon_rif_ak47", "rifle/rifle_ak", "ak", "AK-47", "ak47", "ak47_01"),
@@ -51,7 +53,7 @@ def main():
     rows, report = [], []
     for wid, slot, mdir, stem, folder, suf, name, sdir, shot in CS2:
         model = "weapons/models/%s/%s.vmdl_c" % (mdir, stem)
-        row = {"id": "cs2_" + wid, "game": "cs2", "slot": slot, "name": name, "item": "weapon_" + wid,
+        row = {"id": "cs2_" + wid, "game": "cs2", "slot": slot, "name": name, "item": ITEM.get(wid, "weapon_" + wid),
                "model": model if model in files else None}
         # clip folder: exact, else any folder starting with the same weapon stem
         base = "animation/anims/viewmodel/" + folder + "/"

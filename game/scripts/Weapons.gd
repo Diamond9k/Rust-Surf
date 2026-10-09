@@ -74,6 +74,13 @@ func stat(id: String, key: String, fallback: String) -> float:
 			return float(s[key])
 	return float(defaults[_cls(id)][fallback])
 
+## Full magazine and reserve for every weapon (each aim lobby round).
+func refill() -> void:
+	for id in rows:
+		ammo[id] = [int(stat(id, "primary clip size", "clip")), int(stat(id, "primary reserve ammo max", "reserve"))]
+	_reload_until = 0.0
+	_hud()
+
 func held() -> String:
 	return slots[current]
 
@@ -168,8 +175,7 @@ func fire() -> void:
 	if id != "knife":
 		a[0] = int(a[0]) - 1
 	var vm: Viewmodel = main.viewmodel
-	if not vm.play("shoot1") and id == "knife":
-		vm.play("inspect")
+	vm.play("shoot1")  # the default knife ships no attack clip in its folder, so it swings without one
 	_sound(id)
 	var cam: Camera3D = main.player.cam
 	var reach := 1.5
@@ -178,6 +184,8 @@ func fire() -> void:
 	var spread_mrad := _spread(id)
 	var hit_any := false
 	var head_any := false
+	if main.lobby and main.lobby.has_method("on_shot_fired"):
+		main.lobby.on_shot_fired()  # one trigger pull or knife swing = one shot
 	var per_target := {}  # collider -> [damage, head, point]: shotgun pellets land as one hit per target
 	for i in int(stat(id, "bullets", "bullets")):
 		var r := _shoot_ray(cam, reach, spread_mrad)
@@ -200,8 +208,6 @@ func fire() -> void:
 		(e[3] as Object).hit(float(e[0]), bool(e[1]), e[2])
 		hit_any = true
 		head_any = head_any or bool(e[1])
-	if main.lobby and main.lobby.has_method("on_shot_fired"):
-		main.lobby.on_shot_fired()  # one trigger pull or knife swing = one shot
 	if hit_any and main.hud.has_method("hitmarker"):
 		main.hud.hitmarker(head_any)
 	if id != "knife":

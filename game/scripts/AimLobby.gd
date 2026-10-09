@@ -247,6 +247,10 @@ func _start_round() -> void:
 	_shots = 0
 	_react_sum = 0.0
 	_react_n = 0
+	_hit_shot = -1
+	_head_shot = false
+	if main.weapons and main.weapons.has_method("refill"):
+		main.weapons.refill()  # an aim map never runs you dry
 	_left = _f("round_s")
 	_state = "round"
 	_summary.visible = false

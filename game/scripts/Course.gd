@@ -41,7 +41,8 @@ func _material(m: Dictionary) -> StandardMaterial3D:
 		if t:
 			mat.albedo_texture = t
 			# anisotropic: ground and ramps seen at grazing angles keep their detail instead of blurring
-			mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+			# aniso keeps ramps detailed at grazing angles; sharp (no mips) is the crisp far gravel the Gauntlet critics preferred
+			mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR if m.get("filter", "aniso") == "sharp" else BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 		var n := content.texture(m["normal"], "BumpMap")
 		if n:
 			mat.normal_enabled = true
