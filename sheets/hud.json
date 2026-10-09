@@ -101,6 +101,20 @@
       "verified": "design value judged on the ui_r3 renders, unverified against the CS2 client"
     },
     {
+      "id": "font_bundled",
+      "value": "res://fonts/saira-semi-condensed-%d.woff2",
+      "unit": "path (%d = weight)",
+      "note": "HUD and menu face when the CS2 install has no panorama font: Saira Semi Condensed (SIL OFL 1.1, game/fonts/OFL.txt), a squared condensed sans picked as the nearest free face to CS2's Stratum2; the system font stays behind it for missing glyphs",
+      "verified": "design choice judged on the ui_r1 renders; that it resembles Stratum2 is a by-eye judgement, unverified against the CS2 client"
+    },
+    {
+      "id": "font_bundled_weights",
+      "value": "400,500,600,700",
+      "unit": "weights",
+      "note": "weights shipped in game/fonts; a request takes the nearest one",
+      "verified": "checked: the four files are in game/fonts (fontsource @fontsource/saira-semi-condensed 5.3.0, latin subset)"
+    },
+    {
       "id": "bar_height",
       "value": 64,
       "unit": "px",
@@ -139,15 +153,29 @@
       "id": "vital_bar_width",
       "value": 72,
       "unit": "px",
-      "note": "health and armor bars under the numbers (full at 100)",
+      "note": "health and armor bars beside their numbers (full at 100)",
       "verified": "design value matched by eye to CS2 from memory, unverified: not checked against the CS2 client"
     },
     {
       "id": "vital_bar_height",
-      "value": 4,
+      "value": 6,
       "unit": "px",
-      "note": "health and armor bar thickness (min 2 px)",
+      "note": "health and armor bar thickness (min 2 px); 6 so a bar beside the digits reads as a bar",
       "verified": "design value, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "vital_gap",
+      "value": 8,
+      "unit": "px",
+      "note": "space between a health/armor number and its bar (the armor icon sits 2.5 gaps after the health bar)",
+      "verified": "design value judged on the ui_r1 renders, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "digit_mid",
+      "value": 0.18,
+      "unit": "x font px",
+      "note": "the health/armor digits' visual centre, below the line box's computed baseline-centre (ascent - descent)/2 offset by this share of the font size upward; the icons and bars centre on it",
+      "verified": "tuned by eye on the bundled Saira Semi Condensed at 540p and 1080p (ui_r1_g renders); another face (CS2's own, Bahnschrift) may sit a pixel off"
     },
     {
       "id": "low_ammo_frac",
@@ -216,7 +244,7 @@
       "id": "dynamic_rate",
       "value": 12,
       "unit": "1/s",
-      "note": "how fast the dynamic gap eases toward the current spread",
+      "note": "how fast the dynamic gap eases toward the current spread: each frame closes 1 - exp(-rate x dt) of the distance, so the motion is the same at any frame rate",
       "verified": "design value, unverified: not checked against the CS2 client"
     },
     {

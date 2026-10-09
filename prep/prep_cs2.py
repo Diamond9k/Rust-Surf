@@ -251,14 +251,15 @@ def export(run, outdir, files, extra, cfg, fresh=False, retries=None):
     for b in batches(todo, int(cfg["vrf_batch_files"]), int(cfg["vrf_batch_chars"])):
         run(b, extra)
     for attempt in range(int(cfg["vrf_retries"]) if retries is None else retries):
-        todo = [f for f in todo if not present(outdir, f)]
+        # every file again, not just this run's: an export can overwrite a texture an earlier, whole model shares
+        todo = [f for f in files if not present(outdir, f)]
         if not todo:
             break
         LOG("  retry %d: %d file(s) failed the output check: %s" % (attempt + 1, len(todo), ", ".join(todo[:6]) + (" ..." if len(todo) > 6 else "")))
         for f in todo:  # one per call, so one bad path cannot cost the others; a damaged output goes first
             discard(outdir, f)
             run([f], extra)
-    lost = [f for f in todo if not present(outdir, f)]
+    lost = [f for f in files if not present(outdir, f)]
     for f in lost:
         LOG("  NOT EXPORTED: " + f)
     return lost

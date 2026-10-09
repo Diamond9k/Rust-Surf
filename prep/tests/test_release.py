@@ -104,11 +104,14 @@ class ReleaseData(unittest.TestCase):
 
 class KvParity(unittest.TestCase):
     """The fixture through the game's own reader (tools/kv_parity.gd) and prep's; needs a Godot 4.7.2 binary in
-    RS_GODOT (or GODOT), skipped without one. tools/package.py runs the same check on every release."""
+    RS_GODOT (or GODOT), skipped without one except under CI. tools/package.py --ci sets RS_GODOT for the unit tests
+    and runs the same check itself; so does every release."""
 
     def test_fixture_reads_alike(self):
         godot = os.environ.get("RS_GODOT") or os.environ.get("GODOT")
         if not godot or not os.path.isfile(godot):
+            if os.environ.get("CI"):  # a CI runner always has Godot (tools/package.py --ci passes it): a skip there hides the check
+                self.fail("CI is set but RS_GODOT / GODOT names no Godot binary: the reader parity test cannot be skipped in CI")
             self.skipTest("set RS_GODOT to a Godot 4.7.2 binary")
         lines = []
         self.assertEqual(package.kv_parity(REPO, godot, [os.path.join(REPO, package.FIXTURE)], log=lines.append), [])

@@ -408,9 +408,30 @@
   {
    "id": "recovery_decay_to",
    "value": 0.1,
-   "used_in": "fire inaccuracy falls to this share over the weapon's recovery time",
+   "used_in": "the accuracy penalty above its stand / crouch base falls to this share of the gap over the weapon's recovery time",
    "source": "CS:GO UpdateAccuracyPenalty (log 10 / recovery)",
    "verified": "unverified for CS2"
+  },
+  {
+   "id": "recoil_index_rest_cycles",
+   "value": 1.1,
+   "used_in": "the recoil index starts easing back once this many cycletimes have passed since the last shot (never during a held spray)",
+   "source": "CS:GO SDK WEAPON_RECOIL_DECAY_THRESHOLD (recalled from memory, not read here)",
+   "verified": "unverified for CS2 (CS:GO SDK from memory)"
+  },
+  {
+   "id": "recoil_index_decay_scale",
+   "value": 1.0,
+   "used_in": "the recoil index eases back at the fire-inaccuracy recovery rate (ln(1/recovery_decay_to) / recovery time) times this",
+   "source": "mashup rule: CS:GO's own recoil index decay rate was not checked",
+   "verified": "unverified: mashup rule, the CS2 rate was not measured"
+  },
+  {
+   "id": "recoil_index_snap",
+   "value": 0.5,
+   "used_in": "a resting recoil index under this snaps to 0 (the next shot is a first shot again)",
+   "source": "mashup rule",
+   "verified": "unverified: mashup rule, not a CS2 value"
   },
   {
    "id": "burst_shots",
@@ -471,9 +492,16 @@
   {
    "id": "bolt_cycletime",
    "value": 0.5,
-   "used_in": "a scoped weapon this slow or slower unscopes after each shot and rescopes when ready (AWP, SSG 08)",
+   "used_in": "a scoped gun with a cycletime this long or longer leaves the scope after each shot, when items_game gives no unzoom_key attribute",
    "source": "CS2 play knowledge",
    "verified": "unverified threshold"
+  },
+  {
+   "id": "unzoom_key",
+   "value": "unzoom after shot",
+   "used_in": "Weapons.unzoom_after_shot: the items_game attribute that marks a bolt gun leaving the scope after each shot (bolt_cycletime decides when the file lacks it)",
+   "source": "CS:GO items_game attribute name (recalled from memory)",
+   "verified": "unverified: the key name was not read from a CS2 items_game.txt here"
   },
   {
    "id": "revolver_cock",
@@ -488,6 +516,13 @@
    "used_in": "scoped mouse sensitivity = sensitivity x ratio x zoom fov / 90",
    "source": "CS2 convar zoom_sensitivity_ratio default 1; the player's own convar replaces it at start and the settings menu changes it",
    "verified": "unverified formula (CS:GO behaviour)"
+  },
+  {
+   "id": "scope_accuracy_wait",
+   "value": 1,
+   "used_in": "1: a scope gives its scoped spread and inaccuracy only once its zoom time has passed (a quickscope on the same tick shoots unscoped); 0: at once",
+   "source": "CS:GO SDK m_zoomFullyActiveTime (recalled from memory)",
+   "verified": "unverified for CS2 (CS:GO SDK from memory)"
   },
   {
    "id": "scope_lens",
@@ -817,6 +852,34 @@
    "used_in": "movement inaccuracy share = remap(speed)^this when not walking (a run gets most of the move cone early)",
    "source": "CS:GO GetInaccuracy powf(scale, 0.25) on the movement remap (from memory of the SDK)",
    "verified": "unverified for CS2 (CS:GO SDK from memory)"
+  },
+  {
+   "id": "duck_speed_scale",
+   "value": 0.34,
+   "used_in": "grounded and ducked: max ground speed = the weapon's max player speed x this (air strafing keeps the full value)",
+   "source": "CS:GO SDK CS_PLAYER_SPEED_DUCK_MODIFIER (recalled from memory)",
+   "verified": "unverified for CS2 (CS:GO SDK from memory)"
+  },
+  {
+   "id": "walk_speed_scale",
+   "value": 0.52,
+   "used_in": "grounded and walking (+speed held): max ground speed = the weapon's max player speed x this; the movement cone is linear while walking",
+   "source": "CS:GO SDK CS_PLAYER_SPEED_WALK_MODIFIER (recalled from memory)",
+   "verified": "unverified for CS2 (CS:GO SDK from memory)"
+  },
+  {
+   "id": "walk_action",
+   "value": "surf_walk",
+   "used_in": "Weapons.walking(): the Godot action read as CS2's +speed; input.json may bind it, else walk_key is bound at start",
+   "source": "mashup choice (input.json has no +speed row yet)",
+   "verified": "mashup choice, not a CS2 value"
+  },
+  {
+   "id": "walk_key",
+   "value": "SHIFT",
+   "used_in": "the key bound to walk_action when input.json binds none",
+   "source": "CS2 default +speed bind (from memory)",
+   "verified": "unverified: CS2's user_keys_default.vcfg was not read here"
   },
   {
    "id": "falloff_cumulative",

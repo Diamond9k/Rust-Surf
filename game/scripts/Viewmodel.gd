@@ -400,6 +400,14 @@ func debug() -> String:
 		binds = meshes[0].skin.get_bind_count()
 	return "vm %s playing=%s t=%.2f bones=%d meshes=%d binds=%d hand_R=%s wpn=%s" % [anim.current_animation, anim.is_playing(), anim.current_animation_position, sk.get_bone_count(), meshes.size(), binds, hp, wp]
 
+## Ends whatever one-shot clip or kick is playing and holds the idle (a capture pose wants the weapon at rest).
+func settle() -> void:
+	_next_clip = ""
+	_kick = ""
+	if anim:
+		anim.stop()
+	idle()
+
 func idle() -> void:
 	if anim and anim.current_animation != _idle_name:
 		anim.get_animation(_idle_name).loop_mode = Animation.LOOP_LINEAR

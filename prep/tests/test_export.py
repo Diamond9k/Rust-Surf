@@ -175,6 +175,20 @@ class Export(Tmp):
         self.assertIn((["a/m4.vmdl_c"], []), v.calls)
         self.assertTrue(prep_cs2.png_ok(os.path.join(self.d, "a", "m4_color_psd_0.png")))
 
+    def test_shared_texture_broken_by_a_later_export_is_redone(self):
+        """A model whole from an earlier run (skipped) whose texture a later export overwrites with garbage: the check
+        after the batches covers every file, so it is exported again rather than left broken until the next start."""
+        self.go(FakeVRF(), ["a/m0.vmdl_c"])
+        v = FakeVRF()
+        inner = v(None, self.d, 5)
+        def run(files, extra):
+            inner(files, extra)
+            if "a/m1.vmdl_c" in files:  # m1's export also writes m0's (shared) texture, garbled
+                self.put("a/m0_color_psd_0.png", garbled_png())
+        self.assertEqual(prep_cs2.export(run, self.d, ["a/m0.vmdl_c", "a/m1.vmdl_c"], [], CFG), [])
+        self.assertEqual(v.calls, [(["a/m1.vmdl_c"], []), (["a/m0.vmdl_c"], [])])
+        self.assertTrue(prep_cs2.present(self.d, "a/m0.vmdl_c"))
+
     def test_discard_keeps_whole_outputs(self):
         self.go(FakeVRF())
         prep_cs2.discard(self.d, "a/m1.vmdl_c")

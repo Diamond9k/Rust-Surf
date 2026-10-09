@@ -1559,6 +1559,40 @@
       "scissor": 0.5,
       "tuned": "2026-10-09 world_r3 (gauntlet 3): alpha statistics read from rsdata/rust/tex pngs; renders by eye; Rust shader modes unverified"
     },
+    "sheen": {
+      "_doc": "Rust materials on the placed Launch Site meshes drawn as metal: [metallic, roughness] per Rust material name. prep's glTF export sets every material to metallic 0, roughness 0.9 and the albedo alpha carries no smoothness for these (alpha is 1.0 in every one of these pngs), so Rust's own values are not available: a look so the floodlight lattices, trims and vents catch the sun as steel (gauntlet critics: flat rust lattices with no metallic sheen), unverified against Rust's shaders.",
+      "materials": {
+        "metal_grate_diffuse": [
+          0.45,
+          0.55
+        ],
+        "pipelines_pillars": [
+          0.45,
+          0.55
+        ],
+        "metal_trims_site": [
+          0.4,
+          0.55
+        ],
+        "site_steel_trims": [
+          0.4,
+          0.55
+        ],
+        "site_metal_panels_d": [
+          0.3,
+          0.6
+        ],
+        "sheet_metal": [
+          0.35,
+          0.6
+        ],
+        "vents_site": [
+          0.4,
+          0.55
+        ]
+      },
+      "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye"
+    },
     "halls": {
       "_doc": "Large industrial halls Backdrop.gd builds from Rust's Launch Site textures, scenery only (no collision), standing where the fixed views look: the extracted set has no Rust building bigger than the 18 x 30 m warehouse, and the critics asked for big hangars. Our arrangement and our buildings, not Rust meshes (unverified against Rust's own Launch Site buildings). pos is course [x, z] (the hall stands on the ground height there plus dy); size is [length along x before yaw, width, eave height] in metres; rise is the gable's height above the eaves (0: flat roof); base is the height of the cinder block course under the corrugated walls; windows is the [bottom, top] of the glazed band in every bay; door is [width, height] of the sheet metal door in each end wall; pilaster is the bay width (concrete posts); lantern is [share of the length, width, height above the ridge] of a glazed roof lantern (width 0: none). materials names the materials.json row for each part; plinth and eave are metres. apron: metres of site concrete laid round each hall's footprint in the terrain shader (at most 32 halls and terrain.props apron_meshes together get one). grime: [shade at the foot, metres it fades out over] of the dirt darkening the bottom of the walls.",
       "materials": {
@@ -1841,6 +1875,12 @@
         4.0
       ]
     }
+  },
+  "shell": {
+    "_doc": "Valley ramps built as solid cast blocks (Course.gd _valley_shell): coping is the flat top in metres outside each rim, skirt how far the outer walls run below the crease. Part of the collision. Our look (gauntlet critics: the valleys read as thin folded sheets with no geometry thickness), unverified against any CS2 surf map.",
+    "coping": 1.2,
+    "skirt": 3.0,
+    "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye"
   },
   "trim": {
     "_doc": "Steel strips along each ramp face's exposed edges (both edges of a ridge face, the rim of a valley), scenery only: the collision stays the bare prism. width and offset in metres (offset is the flat's thickness: it stands that far proud of the face, inner side closed, so the edge reads as a solid steel capping); v0 is the metre offset into the material's texture where the strip starts (1.66 m at uv_scale 3 is site_steel_trims' dark plain steel plate band, v 0.553-0.687 of the texture, mean sRGB about 96: the light riveted panel band at 1.17 m read as an over-bright white strip along the ridge, and the rusty top band at 0.1 m as a smeared brown one).",

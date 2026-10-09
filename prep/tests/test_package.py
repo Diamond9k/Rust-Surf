@@ -334,6 +334,12 @@ if "--wtest" in a:
              "srcmiscount": ["reequip_idle idle clip on three equips: []"]}.get(mode, [])
     for f in fails:
         print("WTEST FAIL " + f)
+    sheets = os.path.join(os.path.dirname(a[a.index("--path") + 1]), "sheets") if src else ""
+    if os.path.isfile(os.path.join(sheets, "weapon_defaults.json")):  # what the game prints when it read the data folder's stats
+        import json
+        ids = {r["id"] for r in json.load(open(os.path.join(sheets, "weapons.json")))["rows"]}
+        n = sum(1 for r in json.load(open(os.path.join(sheets, "weapon_defaults.json")))["reference"] if r["weapon"] in ids)
+        print("WTEST PASS stats_reference %d known value(s) compared with the files, all equal" % (0 if mode == "srcnostats" else n))
     print("WTEST weapons checks=21 failed=%d" % (len(fails) + (mode == "srcmiscount")))
     sys.exit(1 if fails else 0)
 if "--uitest" in a:
@@ -507,20 +513,37 @@ class Ci(unittest.TestCase):
         The prep unit tests are not run again from inside themselves."""
         os.environ["FAKE_GODOT"] = "src"
         lines = []
+        errs, lines, envs = self.repo_ci()
+        self.assertEqual(errs, [], errs)
+        for want in ("gate: preflight clean", "gate: prep unit tests OK", "gate: synthetic stats install: prep read every gun's stats",
+                     "gate: kv parity items_game.txt", "gate: --wtest", "gate: --uitest UITEST ok"):
+            self.assertTrue(any(l.startswith(want) for l in lines), (want, lines))
+        self.assertEqual(sum(l.startswith("gate: kv parity items_game.txt") for l in lines), 2, lines)  # the fixture and the synthetic install
+        self.assertEqual(envs[0].get("RS_GODOT"), os.path.abspath(self.godot))  # so the unit tests run the reader parity test
+
+    def repo_ci(self, mode="src"):
+        """package.ci on the repo itself with the fake Godot; the prep unit tests are not run again from inside themselves."""
+        os.environ["FAKE_GODOT"] = mode
+        lines, envs = [], []
         real = package._run
-        def run(cmd, cwd, timeout, log):
+        def run(cmd, cwd, timeout, log, env=None):
             if cmd[1:3] == ["-m", "unittest"]:
+                envs.append(env or {})
                 return 0, "OK"
-            return real(cmd, cwd, timeout, log)
+            return real(cmd, cwd, timeout, log, env)
         with unittest.mock.patch.object(package, "_run", run):
             errs = package.ci(REPO, self.godot, 60, lines.append)
-        self.assertEqual(errs, [], errs)
-        for want in ("gate: preflight clean", "gate: prep unit tests OK", "gate: kv parity items_game.txt", "gate: --uitest UITEST ok"):
-            self.assertTrue(any(l.startswith(want) for l in lines), (want, lines))
+        return errs, lines, envs
+
+    def test_ci_needs_the_game_to_read_the_stats(self):
+        """A game that ignores the data folder's weapon_stats.json compares no reference value: --ci refuses."""
+        errs, _, _ = self.repo_ci("srcnostats")
+        self.assertEqual(len(errs), 1, errs)
+        self.assertIn("stats_reference", errs[0])
 
     def test_ci_without_godot_says_so(self):
         real = package._run
-        with unittest.mock.patch.object(package, "_run", lambda c, *a: (0, "OK") if c[1:3] == ["-m", "unittest"] else real(c, *a)):
+        with unittest.mock.patch.object(package, "_run", lambda c, *a, **k: (0, "OK") if c[1:3] == ["-m", "unittest"] else real(c, *a, **k)):
             errs = package.ci(REPO, "", 60, lambda s: None)
         self.assertEqual(len(errs), 1, errs)
         self.assertTrue(errs[0].startswith("no Godot binary"), errs)

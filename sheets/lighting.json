@@ -32,9 +32,9 @@
     },
     {
       "id": "sun_energy",
-      "value": 1.8,
+      "value": 2.1,
       "note": "direct sun strength",
-      "tuned": "2026-10-08 by eye"
+      "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye: 1.8 -> 2.1 with ambient_energy 1.2 -> 0.95 (critics: flat lighting, weak shadows; Rust's sun has harder contrast); 2026-10-08 by eye"
     },
     {
       "id": "shadow_distance",
@@ -44,21 +44,43 @@
     },
     {
       "id": "shadow_blur",
-      "value": 0.6,
+      "value": 0.45,
       "note": "directional shadow filter softness (was a constant in Main.gd)",
-      "tuned": "2026-10-08 by eye"
+      "tuned": "2026-10-09 world_r1b_1 site_overview render (gauntlet round 1, batch 4), by eye: 0.35 -> 0.45 (acne lines on the lit ground); 2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye: 0.6 -> 0.35 (critics: soft, low-resolution shadows); 2026-10-08 by eye"
     },
     {
       "id": "shadow_bias",
-      "value": 0.05,
+      "value": 0.1,
       "note": "shadow depth bias (Godot default 0.1); lower keeps contact shadows attached",
-      "tuned": "2026-10-09 world_r2 renders, by eye"
+      "tuned": "2026-10-09 world_r1b_1 site_overview render (gauntlet round 1, batch 4), by eye: 0.05 -> 0.1 (with the tighter cascades and less blur, faint horizontal acne lines striped the sunlit ground); 2026-10-09 world_r2 renders, by eye"
     },
     {
       "id": "shadow_normal_bias",
       "value": 0.6,
       "note": "shadow normal bias (Godot default 1.0); lower narrows the light leak where the two faces of a valley ramp meet",
       "tuned": "2026-10-09 world_r2 renders, by eye"
+    },
+    {
+      "id": "shadow_splits",
+      "value": [
+        0.05,
+        0.15,
+        0.4
+      ],
+      "note": "where the 2nd, 3rd and 4th shadow cascades start, as shares of shadow_distance (Godot default 0.1, 0.2, 0.5): the first cascade covers the nearest ~22 m so ramp edges, rails and the viewmodel's surroundings get crisp shadows",
+      "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye (critics: soft, low-resolution shadows)"
+    },
+    {
+      "id": "shadow_atlas",
+      "value": 4096,
+      "note": "directional shadow atlas size in pixels, 16-bit depth (Godot's default size; kept for older GPUs: the player's 2021 AMD driver crashed once in 8 boots)",
+      "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye"
+    },
+    {
+      "id": "shadow_quality",
+      "value": 4,
+      "note": "soft shadow filter quality for the sun, RenderingServer.ShadowQuality (0 hard .. 5 ultra; project default 2): 4 takes more filter taps so blurred edges stay smooth rather than banded",
+      "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye"
     },
     {
       "id": "bounce_pitch",
@@ -96,9 +118,9 @@
     },
     {
       "id": "sun_halo_deg",
-      "value": 9,
+      "value": 6,
       "note": "radius of the bright glow around the disc, degrees",
-      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: small sun with weak bloom (was 6)"
+      "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye: 9 -> 6, a tighter glare round a defined disc (PC r4 judge: blown sun; critics: a soft blob); 2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: small sun with weak bloom (was 6)"
     },
     {
       "id": "sun_halo",
@@ -108,9 +130,9 @@
     },
     {
       "id": "sun_disc_energy",
-      "value": 14,
+      "value": 6,
       "note": "disc brightness, times the sun light (blooms with glow on)",
-      "tuned": "2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): 9 -> 14 (critics: the sun reads as a soft blob), by eye; 2026-10-09 world_r1 renders, by eye"
+      "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye: 14 -> 6 (world_r1b_2 sun render: the 12x disc bloomed into a ~70 px soft blob; at 6x the disc stays well past the glow threshold but keeps a defined edge); 2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): 9 -> 14 (critics: the sun reads as a soft blob), by eye; 2026-10-09 world_r1 renders, by eye"
     },
     {
       "id": "sun_warm",
@@ -214,9 +236,9 @@
     },
     {
       "id": "ambient_energy",
-      "value": 1.2,
+      "value": 0.95,
       "note": "sky light fill",
-      "tuned": "2026-10-08 by eye"
+      "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye: 1.2 -> 0.95 with sun_energy 2.1 (critics: flat lighting); 2026-10-08 by eye"
     },
     {
       "id": "ambient_color",
@@ -323,12 +345,12 @@
         0,
         1,
         0.8,
-        1,
         0.8,
-        0.6
+        0.5,
+        0.3
       ],
       "note": "bloom weight per blur level 1..7 (Godot glow levels); the wide levels 5-7 spread a broad glow round the sun disc as Rust's sun has (a look, unverified against Rust's post stack)",
-      "tuned": "2026-10-09 world_r1 (gauntlet 2) sun render, by eye"
+      "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye: the widest levels 1, 0.8, 0.6 -> 0.8, 0.5, 0.3 (PC r4 judge: blown sun, the bloom whitened a wide patch of sky); 2026-10-09 world_r1 (gauntlet 2) sun render, by eye"
     },
     {
       "id": "shaft_density",

@@ -9,11 +9,14 @@ usage: package.py [<version>] --godot <Godot binary> --data <prep output folder>
        package.py --ci --godot <Godot 4.7.2 headless binary>
   -> "CI: clean" or the problems, exit 1; no zip. Every push runs it (.github/workflows/ci.yml): the checks that
      need neither the games' files nor export templates (see ci()), so a script change is tested before release.
+     Its headless tests play on a synthetic CS2 stats install (prep/tests/ci_data.py) that prep's own
+     write_stats turns into weapon_stats.json, so all 35 guns' stats travel the release path on every push.
 First any dist/RustSurf-<version>.zip and .entries.json of the same version are deleted, so a refused build
 never leaves an older zip that looks released. The sheets are copied over game/data/ and prep/ (game/data/ is
 not in git, so a fresh clone holds none or stale ones; --no-sync only checks). Then the gates, each must pass:
 - tools/preflight.py: every sheet cell filled and verified or honestly labelled unverified
-- python -m unittest discover prep/tests (prep, export checks, items_game/vdata readers, this file)
+- python -m unittest discover prep/tests (prep, export checks, items_game/vdata readers, this file), with RS_GODOT
+  set to --godot so the game-vs-prep reader test runs (under CI it fails rather than skips without one)
 - release data: --data is this version's prep run on a real Rust + CS2 install (the release candidate run on the
   packaging PC): done-<version>.txt, prep_status.json ok, every content row and Launch Site piece whole, all
   weapons.json guns with model, clips and shot sound, and every gun's stats_required values read from CS2's
@@ -26,7 +29,7 @@ not in git, so a fresh clone holds none or stale ones; --no-sync only checks). T
   (--export-release; needs the Godot 4.7.2 export templates), and --lobbytest ("LTEST ALL PASS"), --wtest
   ("WTEST weapons checks=N failed=0") and --uitest ("UITEST ok") run on that exported RustSurf.pck
   (--main-pack), each with exit 0, no FAIL / SCRIPT ERROR / Parse Error / engine ERROR: line and a wall-clock
-  limit (--ci excuses only "Error opening file" under its empty data folder), on --data
+  limit (--ci excuses only "Error opening file" under its content-free data folder), on --data
   (so the real CS2 stats reach the gun model) with empty Rust and CS2 folders so the packager's own CS2 config
   cannot change a result. The zip therefore holds exactly the tested export.
 Checks before zipping (each failure is listed, nothing is written):
@@ -364,10 +367,10 @@ def kv_parity(root, godot, files, timeout=300, log=print):
     return errs
 
 
-def _run(cmd, cwd, timeout, log):
+def _run(cmd, cwd, timeout, log, env=None):
     """(exit code, output) of one gate command; a timeout or a missing program is exit -1."""
     try:
-        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, env=env)
         return r.returncode, (r.stdout or "") + (r.stderr or "")
     except subprocess.TimeoutExpired as e:
         return -1, "timed out after %ds: %s" % (timeout, (e.stdout or b"")[-2000:] if isinstance(e.stdout, bytes) else e.stdout or "")
@@ -445,12 +448,13 @@ def scripts_gate(root, godot, timeout=600, log=print):
     return errs
 
 
-def game_tests(godot, launch, data, where, timeout=TEST_TIMEOUT, log=print, allowed=()):
+def game_tests(godot, launch, data, where, timeout=TEST_TIMEOUT, log=print, allowed=(), expect=None):
     """--lobbytest, --wtest and --uitest with launch (["--main-pack", pck] or ["--path", game]) on data, with empty
     Rust and CS2 folders (the packager's own CS2 config cannot change a result), each under a wall-clock limit.
     A test passes on exit 0, its pass line and no FAIL / SCRIPT ERROR / engine ERROR: line. allowed: check names
     whose FAIL alone is accepted (--ci, which has no extracted content); the test's own failed=N must then count
-    exactly those, and there "Error opening file" lines for files under the empty data folder are expected."""
+    exactly those, and there "Error opening file" lines for files under the data folder are expected.
+    expect: {flag: [(regex, what it proves)]} lines a test must also print (--ci: every stats reference compared)."""
     errs = []
     empty = tempfile.mkdtemp(prefix="rs_gate_")
     for d in ("rust", "cs2", "cwd"):
@@ -463,6 +467,8 @@ def game_tests(godot, launch, data, where, timeout=TEST_TIMEOUT, log=print, allo
             fails += [l for l in engine_errors(out, data if allowed else None) if l not in fails]
             excused = [l for l in fails if TEST_FAIL.match(l) and len(l.split()) > 2 and l.split()[2] in allowed]
             hard = [l for l in fails if l not in excused]
+            hard += ["no line %s (%s)" % (rx.pattern, what) for rx, what in (expect or {}).get(flag, []) if not rx.search(out)]
+            fails += [l for l in hard if l not in fails]
             counted = re.search(r"^\w+ \w+ checks=[1-9]\d* failed=(\d+)\s*$", out, re.M)
             if excused and not hard and counted and int(counted.group(1)) == len(excused) and code in (0, 1):
                 log("gate: %s %s with %d check(s) that need extracted content not passing: %s"
@@ -506,12 +512,49 @@ def godot_gate(root, godot, data, timeout=600, log=print):
 CONTENT_CHECKS = ("viewmodel_inside_hull", "reequip_idle")
 
 
+def unit_tests(root, godot, log=print):
+    """python -m unittest discover prep/tests, with RS_GODOT set to godot so the game-vs-prep reader test runs
+    instead of skipping (and with CI set it fails rather than skips when there is no Godot). Returns errors."""
+    env = dict(os.environ)
+    if godot:
+        env["RS_GODOT"] = os.path.abspath(godot)
+    code, out = _run([sys.executable, "-m", "unittest", "discover", "-s", os.path.join("prep", "tests")], root, 1800, log, env)
+    tail = out.strip().splitlines()[-1:] or ["no output"]
+    if code != 0:
+        return ["prep unit tests failed (%s): run python -m unittest discover prep/tests" % tail[0]]
+    log("gate: prep unit tests %s" % tail[0])
+    return []
+
+
+def ci_stats_data(root, data, log=print):
+    """The synthetic CS2 stats install --ci plays on (prep/tests/ci_data.py): an items_game.txt naming every
+    weapons.json gun, through the repo's own prep write_stats into cs2/weapon_stats.json. Returns (errors,
+    the --wtest lines that must show every weapon_defaults reference value compared with those files)."""
+    tests = os.path.join(root, "prep", "tests")
+    if tests not in sys.path:
+        sys.path.insert(0, tests)
+    import ci_data
+    _, prep_cs2, _ = _prep_modules(root)
+    keep, prep_cs2.LOG = prep_cs2.LOG, log
+    try:
+        problems, warnings = ci_data.build(root, data)
+    finally:
+        prep_cs2.LOG = keep
+    errs = ["synthetic stats install: prep says %s" % p for p in problems + warnings]
+    ids = {w["id"] for w in prep_cs2.weapon_rows(prep_cs2.sheet("weapons", os.path.join(root, "prep")))}
+    n = sum(1 for r in prep_cs2.sheet("weapon_defaults", os.path.join(root, "sheets")).get("reference", []) if r["weapon"] in ids)
+    want = re.compile(r"^WTEST PASS stats_reference %d known value" % n, re.M)
+    return errs, {"--wtest": [(want, "the game read all %d reference stats from prep's weapon_stats.json" % n)]}
+
+
 def ci(root, godot, timeout=600, log=print):
     """The checks a push can run without the games or export templates (a Linux Godot 4.7.2 headless binary is
     enough): one version in the recipe and README, sheets/ copied to game/data/ and equal to prep/'s copies,
-    preflight, the prep unit tests, --import and --check-only on every script, the game-vs-prep items_game
-    parity on prep/tests/fixtures/items_game.txt, and --lobbytest, --wtest and --uitest on the source project with
-    an empty data folder (CONTENT_CHECKS excused there). Returns errors."""
+    preflight, the prep unit tests (the reader parity test among them), --import and --check-only on every
+    script, the game-vs-prep items_game parity on prep/tests/fixtures/items_game.txt and on the synthetic
+    install, and --lobbytest, --wtest and --uitest on the source project with that synthetic install as the data
+    folder: every gun's stats come from an items_game.txt through prep into the game, and --wtest must compare
+    every reference stat (CONTENT_CHECKS, which need the games' models, are excused there). Returns errors."""
     rver, errs = recipe_version(root)
     errs += check_readme(root, rver)
     for n in sync_copies(root, prep=False):
@@ -522,25 +565,23 @@ def ci(root, godot, timeout=600, log=print):
     problems, unsure = preflight.check(root)
     errs += ["preflight: " + p for p in problems]
     log("gate: preflight %s, %d cell(s) labelled unverified" % ("clean" if not problems else "%d problem(s)" % len(problems), len(unsure)))
-    code, out = _run([sys.executable, "-m", "unittest", "discover", "-s", os.path.join("prep", "tests")], root, 1800, log)
-    tail = out.strip().splitlines()[-1:] or ["no output"]
-    if code != 0:
-        errs.append("prep unit tests failed (%s): run python -m unittest discover prep/tests" % tail[0])
-    else:
-        log("gate: prep unit tests %s" % tail[0])
-    godot = os.path.abspath(godot) if godot else ""
-    if not godot or not os.path.isfile(godot):
+    godot = os.path.abspath(godot) if godot and os.path.isfile(godot) else ""
+    errs += unit_tests(root, godot, log)
+    if not godot:
         return errs + ["no Godot binary (pass --godot <Godot_v4.7.2 headless executable>): the in-engine checks cannot run"]
-    g = scripts_gate(root, godot, timeout, log)
-    if not g:
-        g = kv_parity(root, godot, [os.path.join(root, FIXTURE)], timeout, log)
-    if not g:
-        data = tempfile.mkdtemp(prefix="rs_ci_data_")
-        try:
-            g = game_tests(godot, ["--path", os.path.abspath(os.path.join(root, "game"))], data, "on the source project (no game content)",
-                           min(timeout, TEST_TIMEOUT), log, CONTENT_CHECKS)
-        finally:
-            shutil.rmtree(data, ignore_errors=True)
+    data = tempfile.mkdtemp(prefix="rs_ci_data_")
+    try:
+        g, expect = ci_stats_data(root, data, log)
+        if not g:
+            log("gate: synthetic stats install: prep read every gun's stats")
+            g = scripts_gate(root, godot, timeout, log)
+        if not g:
+            g = kv_parity(root, godot, [os.path.join(root, FIXTURE), os.path.join(data, "cs2", "scripts", "items", "items_game.txt")], timeout, log)
+        if not g:
+            g = game_tests(godot, ["--path", os.path.abspath(os.path.join(root, "game"))], data, "on the source project (synthetic stats, no game content)",
+                           min(timeout, TEST_TIMEOUT), log, CONTENT_CHECKS, expect)
+    finally:
+        shutil.rmtree(data, ignore_errors=True)
     return errs + g
 
 
@@ -552,12 +593,7 @@ def gates(root, godot, data, ver, log=print):
     problems, unsure = preflight.check(root)
     errs = ["preflight: " + p for p in problems]
     log("gate: preflight %s, %d cell(s) labelled unverified" % ("clean" if not problems else "%d problem(s)" % len(problems), len(unsure)))
-    code, out = _run([sys.executable, "-m", "unittest", "discover", "-s", os.path.join("prep", "tests")], root, 1800, log)
-    tail = out.strip().splitlines()[-1:] or ["no output"]
-    if code != 0:
-        errs.append("prep unit tests failed (%s): run python -m unittest discover prep/tests" % tail[0])
-    else:
-        log("gate: prep unit tests %s" % tail[0])
+    errs += unit_tests(root, godot if godot and os.path.isfile(godot) else "", log)
     rd_errs, report = check_release_data(root, os.path.abspath(data) if data else "", ver)
     errs += ["release data: " + e for e in rd_errs]
     if not rd_errs:

@@ -35,6 +35,7 @@ var _sized: Array = []  # [Label, base px]
 var _msg_gen := 0      # each message() bumps it, so an older timer never clears a newer message
 var _hp := 100.0
 var _armor := 100.0
+var _vx := {}            # bottom-left x positions (icons, numbers, bars) and the digits' centre line, set by _layout
 var _wgap := NAN          # the held gun's crosshair gap when cl_crosshairgap_useweaponvalue is on, else NAN
 
 func setup(cv: Dictionary, cs2_dir: String = "") -> void:
@@ -111,9 +112,22 @@ func _layout() -> void:
 		l.add_theme_constant_override("shadow_offset_y", maxi(int(2 * s), 1))
 	var bh: float = H["bar_height"] * s
 	var fh: float = H["font_health"] * s
+	# icon, number, bar for health, then the same for armor; each bar sits beside its number on the digits'
+	# centre line (a bar under the digits read as an underscore at 540p)
 	var ty := vp.y - bh * 0.5 - fh * 0.62
-	_place(hp_label, Vector2(58 * s, ty), Vector2(110 * s, fh * 1.25))
-	_place(armor_label, Vector2(214 * s, ty), Vector2(110 * s, fh * 1.25))
+	var hf: Font = hp_label.get_theme_font("font")
+	var fpx := maxi(int(round(float(H["font_health"]) * s)), 8)
+	var numw := hf.get_string_size("100", HORIZONTAL_ALIGNMENT_LEFT, -1, fpx).x
+	var lh := fh * 1.25
+	var base := ty + lh * 0.5 + (hf.get_ascent(fpx) - hf.get_descent(fpx)) * 0.5
+	var gap: float = H["vital_gap"] * s
+	_vx = {"cy": roundf(base - fpx * float(H["digit_mid"])), "hp_icon": 30.0 * s, "hp": 52.0 * s}
+	_vx["hp_bar"] = _vx["hp"] + numw + gap
+	_vx["ar_icon"] = _vx["hp_bar"] + float(H["vital_bar_width"]) * s + gap * 2.5
+	_vx["ar"] = _vx["ar_icon"] + 22.0 * s
+	_vx["ar_bar"] = _vx["ar"] + numw + gap
+	_place(hp_label, Vector2(_vx["hp"], ty), Vector2(numw + 4, lh))
+	_place(armor_label, Vector2(_vx["ar"], ty), Vector2(numw + 4, lh))
 	var fc: float = H["font_clip"] * s
 	_place(clip_label, Vector2(vp.x - 330 * s, vp.y - bh * 0.5 - fc * 0.62), Vector2(200 * s, fc * 1.25))
 	var fr: float = H["font_reserve"] * s
@@ -168,11 +182,24 @@ func _load_font(cs2_dir: String, weight: int) -> Font:
 			var ff := FontFile.new()
 			if ff.load_dynamic_font(dir + "/" + best) == OK:
 				return ff
-	# no CS2 font: Windows' DIN-style Bahnschrift is the nearest stock face to Stratum; any other sans is
-	# narrowed by hud.json font_narrow so it keeps Stratum's condensed proportions
 	var sf := SystemFont.new()
 	sf.font_names = PackedStringArray(["Stratum2", "Bahnschrift", "Arial Narrow", "Liberation Sans Narrow", "Arial", "Liberation Sans", "Helvetica"])
 	sf.font_weight = weight
+	# no CS2 font: the bundled OFL face (hud.json font_bundled, a squared condensed sans like Stratum) at the
+	# nearest weight shipped, the system font behind it for glyphs it lacks
+	var near := -1
+	for wt in String(H["font_bundled_weights"]).split(","):
+		if near < 0 or absi(int(wt) - weight) < absi(near - weight):
+			near = int(wt)
+	var path := String(H["font_bundled"]) % near
+	if ResourceLoader.exists(path):
+		var bf := load(path) as FontFile
+		if bf != null:
+			var fb: Array[Font] = [sf]
+			bf.fallbacks = fb
+			return bf
+	# nothing bundled either: Windows' DIN-style Bahnschrift is the nearest stock face to Stratum; any other sans is
+	# narrowed by hud.json font_narrow so it keeps Stratum's condensed proportions
 	var fv := FontVariation.new()
 	fv.base_font = sf
 	if not "Bahnschrift" in OS.get_system_fonts():
@@ -206,27 +233,27 @@ func _draw_deco() -> void:
 	var ammo := _ammo_box.visible and clip_label.visible
 	if ammo:
 		_deco.draw_polygon(PackedVector2Array([Vector2(vp.x - bw, y0), Vector2(vp.x, y0), Vector2(vp.x, vp.y), Vector2(vp.x - bw, vp.y)]), PackedColorArray([clear, dark, dark, clear]))
-	var cy := vp.y - bh * 0.5
+	var cy: float = _vx.get("cy", vp.y - bh * 0.5)
 	var ic := Color(1, 1, 1, 0.92)
 	# health cross
 	var a := 22.0 * s
 	var t := 7.0 * s
-	var cx := 30.0 * s
+	var cx: float = _vx.get("hp_icon", 30.0 * s)
 	_deco.draw_rect(Rect2(cx - t * 0.5, cy - a * 0.5, t, a), ic)
 	_deco.draw_rect(Rect2(cx - a * 0.5, cy - t * 0.5, a, t), ic)
-	# health and armor bars under the numbers: white full part over a dim track, health red when low
+	# health and armor bars beside the numbers: white full part over a dim track, health red when low
 	var bw2: float = H["vital_bar_width"] * s
 	var bh2: float = maxf(roundf(H["vital_bar_height"] * s), 2.0)
-	var by := cy + float(H["font_health"]) * s * 0.5
+	var by := roundf(cy - bh2 * 0.5)
 	var low := _hp <= float(H["low_health"])
-	for e in [[58.0 * s, _hp, low], [214.0 * s, _armor, false]]:
-		var x0: float = e[0] + 4.0 * s
+	for e in [[_vx.get("hp_bar", 120.0 * s), _hp, low], [_vx.get("ar_bar", 300.0 * s), _armor, false]]:
+		var x0: float = roundf(e[0])
 		var f := clampf(float(e[1]) / 100.0, 0.0, 1.0)
 		_deco.draw_rect(Rect2(x0, by, bw2, bh2), Color(1, 1, 1, 0.18))
 		_deco.draw_rect(Rect2(x0, by, roundf(bw2 * f), bh2), Color(1, 0.3, 0.25) if e[2] else ic)
 	hp_label.modulate = Color(1, 0.35, 0.3) if low else Color.WHITE
 	# armor shield
-	var sx := 188.0 * s
+	var sx: float = _vx.get("ar_icon", 188.0 * s)
 	var w := 11.0 * s
 	_deco.draw_colored_polygon(PackedVector2Array([Vector2(sx - w, cy - 11 * s), Vector2(sx, cy - 14 * s), Vector2(sx + w, cy - 11 * s),
 		Vector2(sx + w, cy), Vector2(sx, cy + 13 * s), Vector2(sx - w, cy)]), ic)
@@ -413,7 +440,7 @@ func _process(delta: float) -> void:
 			if on(convars, "cl_crosshairgap_useweaponvalue", "false") and w.has_method("_has") and w._has(id, "crosshair min distance"):
 				_wgap = float(w.stat(id, "crosshair min distance"))
 	var h := get_viewport().get_visible_rect().size.y
-	var k := clampf(delta * float(H["dynamic_rate"]), 0.0, 1.0)
+	var k := 1.0 - exp(-delta * float(H["dynamic_rate"]))  # time-based ease: the same motion at 30 fps or 300
 	_dyn = lerpf(_dyn, spread_to_px(spread, h), k)
 	_fire = lerpf(_fire, spread_to_px(fire, h), k)
 	crosshair.position = (get_viewport().get_visible_rect().size * 0.5).floor() + _recoil_px(w, h).round()

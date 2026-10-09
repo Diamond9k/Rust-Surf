@@ -46,7 +46,14 @@ var _next_fire := 0.0
 var _reload_until := 0.0
 var _shell_next := 0.0   # shotgun: when the next shell goes in, 0 when not loading shells
 var _toggle_until := 0.0 # silencer going on or off
-var _inaccuracy := 0.0   # fire inaccuracy (CS's accuracy penalty), items_game units
+var _penalty := 0.0      # CS's accuracy penalty, items_game units: the stand / crouch base plus fire, take-off, landing
+## The share of the penalty above its base (the fire inaccuracy the HUD's crosshair shows); setting it puts the
+## penalty that far above the held weapon's base.
+var _inaccuracy: float:
+	get:
+		return maxf(_penalty - base_inacc(held()), 0.0)
+	set(v):
+		_penalty = base_inacc(held()) + v
 var _recoil_index := 0.0
 var _last_shot := -10.0
 var _aim := Vector2.ZERO      # aim punch now, degrees (x pitch up, y yaw left), before recoil_scale
@@ -95,6 +102,7 @@ var _shot_log: Variant = null  # --wtest: an Array that records each shot's aim 
 var _inacc_log: Variant = null # --wtest: an Array that records each shot's cone (items_game units) as it flew
 var _decay_at := -1.0    # weapons-clock time the fire inaccuracy and recoil index were last recovered to
 var _burst_pull := 0.0   # when the burst under way was pulled
+var _zoom_full_at := 0.0 # weapons-clock time the scope in progress is fully zoomed (CS's m_zoomFullyActiveTime)
 
 func setup(m: Node) -> void:
 	main = m
@@ -137,6 +145,7 @@ func setup(m: Node) -> void:
 	var cv: Variant = main.hud.get("convars") if main.hud else null
 	if cv is Dictionary and str(cv.get("zoom_sensitivity_ratio", "")).is_valid_float():
 		X["zoom_sensitivity_ratio"] = float(cv["zoom_sensitivity_ratio"])  # the player's own CS2 convar
+	_walk_bind()
 	refill()
 	_punch_reset(_now())
 	_build_buy()
@@ -214,6 +223,8 @@ func _has(id: String, key: String) -> bool:
 ## The held mode's value: in alt mode (scoped, silenced, burst, fan) the key's " alt" twin when items_game
 ## has it. Without it a scoped cone shrinks by the class scoped_inacc_scale and anything else keeps its value.
 func mstat(id: String, key: String) -> float:
+	if _zoom > 0 and id == held() and not zoom_ready() and (key == "spread" or key.begins_with("inaccuracy")):
+		return stat(id, key)  # a scope still easing in shoots with the unscoped cone
 	if _mode(id) == 1 and ALT_KEYS.has(key):
 		if _has(id, key + " alt"):
 			return stat(id, key + " alt")
@@ -271,6 +282,9 @@ func give(id: String) -> void:
 		current = was
 		return
 	ammo[id] = [int(stat(id, "primary clip size")), int(stat(id, "primary reserve ammo max"))]
+	if main.get("shots_running") == true:
+		main.viewmodel.settle()  # a Gauntlet capture shows the gun at rest, never mid-draw at a fast frame rate
+		_next_fire = _now()
 	_hud()
 
 func switch_to(s: String) -> bool:
@@ -305,7 +319,7 @@ func switch_to(s: String) -> bool:
 
 ## CS's Deploy: a drawn weapon starts with no fire inaccuracy, a fresh recoil index and no reload or toggle.
 func _deploy_reset() -> void:
-	_inaccuracy = 0.0
+	_penalty = 0.0
 	_recoil_index = 0.0
 	_reload_until = 0.0
 	_shell_next = 0.0
@@ -553,15 +567,21 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 	var head_any := _deliver(hits)
 	if hits.size() > 0 and main.hud and main.hud.has_method("hitmarker"):
 		main.hud.hitmarker(head_any)
-	_inaccuracy += mstat(id, "inaccuracy fire")
+	_penalty = maxf(_penalty, base_inacc(id)) + mstat(id, "inaccuracy fire")
 	_recoil(id)
-	if _zoom > 0 and stat(id, "cycletime") >= float(X["bolt_cycletime"]):
+	if _zoom > 0 and unzoom_after_shot(id):
 		var z := _zoom
 		_set_zoom(0)
 		_rezoom = z  # bolt action: out of the scope for the bolt, back in when ready
 	if int(a[0]) <= 0:
 		_burst_left = 0
 	_hud()
+
+## A bolt gun leaves the scope for each shot: items_game's unzoom_key attribute when it has one, else a
+## cycletime of bolt_cycletime or more.
+func unzoom_after_shot(id: String) -> bool:
+	var k := String(X["unzoom_key"])
+	return stat(id, k) > 0.5 if _has(id, k) else stat(id, "cycletime") >= float(X["bolt_cycletime"])
 
 ## The next pull of a burst gun, from a round fired at t of a burst pulled at pull with left rounds still to come:
 ## burst_from_pull on (CS:GO's CSBaseGunFire sets the next attack at the pull) the cooldown runs from the pull,
@@ -821,8 +841,9 @@ func _recoil(id: String) -> void:
 	var e := kick_at(id, _recoil_index)
 	var mag := e.y
 	var r := deg_to_rad(e.x)
-	_kick_vel += Vector2(cos(r), -sin(r)) * mag  # angle 0 kicks straight up, positive angles to the right
-	_kick_view.x += float(X["view_punch_extra"]) * mag
+	var kick := Vector2(cos(r), -sin(r)) * mag  # angle 0 kicks straight up, positive angles to the right
+	_kick_vel += kick
+	_kick_view += kick * float(X["view_punch_extra"])  # the camera's extra shake follows the same kick
 	_recoil_index += 1.0
 
 ## The punch at weapons-clock time t (never back): CS's DecayAimPunchAngle runs on a fixed punch_tick grid
@@ -882,14 +903,18 @@ func _decay_to(id: String, t: float) -> void:
 	_decay(id, t - _decay_at, t)
 	_decay_at = t
 
-## The fire inaccuracy recovering to recovery_decay_to over the recovery time, and the recoil index easing back
-## once the trigger rests (the punch decays in _punch_to).
+## CS's UpdateAccuracyPenalty: the accuracy penalty holds the stand or crouch base cone too. A higher base
+## (standing up, unscoping) lifts it at once; above the base it falls back to it by recovery_decay_to over the
+## recovery time, so crouching or scoping tightens the cone over that time and a shot's penalty fades the same
+## way. The recoil index eases back once the trigger has rested recoil_index_rest_cycles cycles (the punch
+## decays in _punch_to).
 func _decay(id: String, dt: float, t: float) -> void:
 	if id == "" or id == "knife":
-		_inaccuracy = 0.0
+		_penalty = 0.0
 		_recoil_index = 0.0
 		return
 	var p: SurfPlayer = main.player
+	var base := base_inacc(id)
 	var rec := stat(id, "recovery time crouch") if p.ducked else stat(id, "recovery time stand")
 	var fin := "recovery time crouch final" if p.ducked else "recovery time stand final"
 	if _has(id, fin) and _has(id, "recovery transition start bullet") and _has(id, "recovery transition end bullet"):
@@ -897,12 +922,12 @@ func _decay(id: String, dt: float, t: float) -> void:
 		var s1 := maxf(stat(id, "recovery transition end bullet"), s0 + 1.0)
 		rec = lerpf(rec, stat(id, fin), clampf((_recoil_index - s0) / (s1 - s0), 0.0, 1.0))
 	var rate := log(1.0 / float(X["recovery_decay_to"])) / maxf(rec, 0.01)
-	_inaccuracy *= exp(-dt * rate)
-	# the recoil index eases back only over the part of dt after the trigger has rested past one cycle
-	var rest := minf(dt, t - (_last_shot + mstat(id, "cycletime") * 1.1))
+	_penalty = base if _penalty <= base else base + (_penalty - base) * exp(-dt * rate)
+	# the recoil index eases back only over the part of dt after the trigger has rested past the threshold
+	var rest := minf(dt, t - (_last_shot + mstat(id, "cycletime") * float(X["recoil_index_rest_cycles"])))
 	if rest > 0.0:
-		_recoil_index *= exp(-rest * rate)
-		if _recoil_index < 0.5:
+		_recoil_index *= exp(-rest * rate * float(X["recoil_index_decay_scale"]))
+		if _recoil_index < float(X["recoil_index_snap"]):
 			_recoil_index = 0.0
 
 ## The camera: eye angles + view punch + the tracked share of the aim punch.
@@ -918,13 +943,36 @@ func _inacc(id: String) -> float:
 	if id == "knife" or id == "":
 		return 0.0
 	var p: SurfPlayer = main.player
-	var crouch: bool = p.ducked and (p.grounded or float(X["air_crouch_cone"]) > 0.0)
-	var a := mstat(id, "inaccuracy crouch") if crouch else mstat(id, "inaccuracy stand")
+	var a := maxf(_penalty, base_inacc(id))  # the accuracy penalty, never under the base it is lifted to
 	var maxspd := maxf(mstat(id, "max player speed"), 1.0)
-	a += move_share(p.speed_units(), maxspd, p.get("walking") == true) * mstat(id, "inaccuracy move")
+	a += move_share(p.speed_units(), maxspd, walking()) * mstat(id, "inaccuracy move")
 	if not p.grounded:
 		a += air_inacc(_jump_inacc(id), absf(p.velocity.y) / u)
-	return a + _inaccuracy
+	return a
+
+## The base of the accuracy penalty now: the crouch cone while ducked, else the stand cone (the held mode's).
+func base_inacc(id: String) -> float:
+	if id == "knife" or id == "" or main == null or main.player == null or not rows.has(id):
+		return 0.0
+	var p: SurfPlayer = main.player
+	var crouch: bool = p.ducked and (p.grounded or float(X["air_crouch_cone"]) > 0.0)
+	return mstat(id, "inaccuracy crouch") if crouch else mstat(id, "inaccuracy stand")
+
+## CS2's walk (+speed, held): a grounded player holding walk_action moves at walk_speed_scale of the weapon's
+## speed and gets the linear movement cone.
+func walking() -> bool:
+	var act := String(X["walk_action"])
+	return InputMap.has_action(act) and Input.is_action_pressed(act) and main.player != null and main.player.grounded
+
+## walk_action from input.json when it binds one, else walk_key (CS2's default +speed key) added here.
+func _walk_bind() -> void:
+	var act := String(X["walk_action"])
+	if InputMap.has_action(act):
+		return
+	InputMap.add_action(act)
+	var ev := InputEventKey.new()
+	ev.physical_keycode = OS.find_keycode_from_string(String(X["walk_key"]))
+	InputMap.action_add_event(act, ev)
 
 ## CS's movement share of the move cone: speed remapped over move_inacc_start..end of the max speed, raised to
 ## move_inacc_power unless walking (a run is nearly fully inaccurate well before top speed).
@@ -945,7 +993,7 @@ func _on_jump() -> void:
 	if id == "" or id == "knife" or float(X["jump_takeoff_penalty"]) <= 0.0:
 		return
 	_decay_to(id, _now())
-	_inaccuracy += _jump_inacc(id) * float(X["jump_takeoff_penalty"])
+	_penalty = maxf(_penalty, base_inacc(id)) + _jump_inacc(id) * float(X["jump_takeoff_penalty"])
 
 ## CS's airborne inaccuracy: remapped on the square root of the vertical speed (units/s); none below
 ## air_inacc_apex_share of sqrt(jump impulse) (the apex), the full value at take-off speed, up to
@@ -960,7 +1008,7 @@ func _on_land(fall_speed: float) -> void:
 	var id := held()
 	if id == "" or id == "knife":
 		return
-	_inaccuracy += land_penalty(id, fall_speed / u)
+	_penalty = maxf(_penalty, base_inacc(id)) + land_penalty(id, fall_speed / u)
 
 func land_penalty(id: String, fall_units: float) -> float:
 	return mstat(id, "inaccuracy land") * fall_units * float(X["land_velocity_scale"])
@@ -971,10 +1019,18 @@ func _spread(id: String) -> float:
 		return 0.0
 	return mstat(id, "spread") + _inacc(id)
 
-## CS2 moves you at the held weapon's max player speed (its alt value while scoped).
+## CS2 moves you at the held weapon's max player speed (its alt value while scoped), on the ground scaled by
+## duck_speed_scale while ducked or walk_speed_scale while walking. Air strafing keeps the full value (the
+## air acceleration reads it), so a crouched surf is not slowed.
 func _speed(id: String) -> void:
+	var p: SurfPlayer = main.player
+	p.M["max_ground_speed"] = move_speed(id, p.grounded and p.ducked, walking()) * u
+
+func move_speed(id: String, ducked: bool, walk: bool) -> float:
 	var v := mstat(id if id != "" else "knife", "max player speed")
-	main.player.M["max_ground_speed"] = v * u
+	if ducked:
+		return v * float(X["duck_speed_scale"])
+	return v * float(X["walk_speed_scale"]) if walk else v
 
 ## Scope level 0 (off), 1 or 2: the zoom fov (Source horizontal at 4:3), scoped mouse sensitivity, the lens
 ## overlay, and the viewmodel and crosshair hidden like CS2.
@@ -988,6 +1044,8 @@ func _set_zoom(level: int) -> void:
 			_base_fov = p.cam.fov  # an unscope still easing out keeps the fov it is easing back to
 		_base_sens = p.input.sensitivity
 	var fov := _base_fov
+	if level > 0 and _zoom == 0:
+		_zoom_full_at = _now() + (zoom_time(id, level) if float(X["scope_accuracy_wait"]) > 0.0 else 0.0)
 	if level > 0:
 		var zf := stat(id, "zoom fov %d" % level)
 		fov = Sheets.vfov_43(zf)
@@ -1009,11 +1067,20 @@ func _set_zoom(level: int) -> void:
 
 ## The scope stays on under the Esc menu: a sensitivity the player sets there is the new unscoped base, and the
 ## scope's own value is worked out again from it.
+## A zoom_sensitivity_ratio changed there (Settings writes X) is applied to the scope at once as well.
 func _sens_follow() -> void:
 	var p: SurfPlayer = main.player
-	if _zoom <= 0 or _scoped_sens < 0.0 or is_equal_approx(p.input.sensitivity, _scoped_sens):
+	if _zoom <= 0 or _scoped_sens < 0.0:
 		return
-	_base_sens = p.input.sensitivity
+	if not is_equal_approx(p.input.sensitivity, _scoped_sens):
+		_base_sens = p.input.sensitivity
+	refresh_zoom_sens()
+
+## The scoped sensitivity worked out again from the unscoped base and the current zoom_sensitivity_ratio.
+func refresh_zoom_sens() -> void:
+	var p: SurfPlayer = main.player
+	if p == null or _zoom <= 0:
+		return
 	var zf := stat(held(), "zoom fov %d" % _zoom)
 	p.input.sensitivity = _base_sens * float(X["zoom_sensitivity_ratio"]) * zf / float(Sheets.movement()["fov_default"])
 	_scoped_sens = p.input.sensitivity
@@ -1028,6 +1095,10 @@ func zoom_time(id: String, level: int) -> float:
 
 func scoped() -> bool:
 	return _zoom > 0
+
+## The scope is fully zoomed: its scoped spread and inaccuracy apply (CS's m_zoomFullyActiveTime).
+func zoom_ready() -> bool:
+	return _zoom > 0 and _now() >= _zoom_full_at
 
 ## CS2 draws no crosshair while scoped, nor on an unscoped sniper rifle (AWP, SSG 08, SCAR-20, G3SG1).
 func crosshair_shown() -> bool:
@@ -1424,6 +1495,60 @@ func _selftest() -> void:
 	_inaccuracy = 30.0
 	_deploy_reset()
 	_check("cone_and_deploy", fired > still and _inaccuracy == 0.0 and _recoil_index == 0.0, "ak47 still=%.2f after3=%.2f, a draw resets the penalty and recoil index" % [still, fired])
+	# crouching: the penalty falls from the stand base to the crouch base over the recovery time; standing up
+	# lifts it at once (CS's UpdateAccuracyPenalty)
+	var keep_duck := p.ducked
+	var keep_ground := p.grounded
+	var keep_held: String = slots["primary"]
+	var keep_cur0 := current
+	slots["primary"] = "cs2_ak47"
+	current = "primary"
+	p.grounded = true
+	p.ducked = false
+	_inaccuracy = 0.0
+	_last_shot = -100.0
+	_decay("cs2_ak47", 0.016, 0.0)
+	var stand_b := base_inacc("cs2_ak47")
+	p.ducked = true
+	var crouch_b := base_inacc("cs2_ak47")
+	var tick0 := _inacc("cs2_ak47")
+	_decay("cs2_ak47", stat("cs2_ak47", "recovery time crouch"), 0.0)
+	var after_rec := _inacc("cs2_ak47")
+	_decay("cs2_ak47", 5.0, 0.0)
+	var settled := _inacc("cs2_ak47")
+	p.ducked = false
+	var stood := _inacc("cs2_ak47")
+	var want_rec := crouch_b + (stand_b - crouch_b) * float(X["recovery_decay_to"])
+	_check("crouch_penalty_lerp", stand_b > crouch_b and is_equal_approx(tick0, stand_b) and absf(after_rec - want_rec) < 0.001 and absf(settled - crouch_b) < 0.01 and is_equal_approx(stood, stand_b), "ak47 stand %.2f, crouch %.2f: the tick after ducking %.2f, one recovery time later %.2f (want %.2f), settled %.2f, standing up %.2f at once" % [stand_b, crouch_b, tick0, after_rec, want_rec, settled, stood])
+	# moving: ducked or walking on the ground slows the weapon's speed; the air keeps it whole for strafing
+	var full_spd := move_speed("cs2_ak47", false, false)
+	var duck_spd := move_speed("cs2_ak47", true, false)
+	var walk_spd := move_speed("cs2_ak47", false, true)
+	p.ducked = true
+	p.grounded = false
+	_speed("cs2_ak47")
+	var air_duck := float(p.M["max_ground_speed"]) / u
+	p.grounded = true
+	_speed("cs2_ak47")
+	var ground_duck := float(p.M["max_ground_speed"]) / u
+	p.ducked = keep_duck
+	p.grounded = keep_ground
+	_check("duck_walk_speed", is_equal_approx(duck_spd, full_spd * float(X["duck_speed_scale"])) and is_equal_approx(walk_spd, full_spd * float(X["walk_speed_scale"])) and is_equal_approx(air_duck, full_spd) and is_equal_approx(ground_duck, duck_spd) and InputMap.has_action(String(X["walk_action"])), "ak47 run %.0f, crouch %.0f, walk %.0f u/s; ducked in the air %.0f, on the ground %.0f; walk bound to %s" % [full_spd, duck_spd, walk_spd, air_duck, ground_duck, X["walk_action"]])
+	# view punch: the camera's extra shake runs along the shot's own kick, not straight up
+	_punch_reset(_now())
+	_recoil_index = 0.0
+	var kick0 := kick_at("cs2_ak47", 0.0)
+	_recoil("cs2_ak47")
+	var vk := _kick_view
+	var kr := deg_to_rad(kick0.x)
+	var want_vk := Vector2(cos(kr), -sin(kr)) * kick0.y * float(X["view_punch_extra"])
+	_punch_reset(_now())
+	_recoil_index = 0.0
+	_inaccuracy = 0.0
+	slots["primary"] = keep_held
+	current = keep_cur0
+	_speed(held())
+	_check("view_punch_along_kick", vk.is_equal_approx(want_vk) and (absf(kick0.x) < 0.01 or absf(vk.y) > 0.0), "ak47 shot 1 angle %.2f deg: view kick %s (want %s)" % [kick0.x, vk, want_vk])
 	# cadence: a held trigger keeps the exact cycletime; clicking never beats it
 	for wid in ["cs2_ak47", "cs2_deagle"]:
 		var cyc := stat(wid, "cycletime")
@@ -1462,11 +1587,16 @@ func _selftest() -> void:
 	var keep_cur := current
 	slots["primary"] = "cs2_awp"
 	current = "primary"
+	_inaccuracy = 0.0
 	var unscoped := _spread("cs2_awp")
 	_attack2("cs2_awp")
 	_speed("cs2_awp")
 	var lvl1 := _zoom
+	var quick := _spread("cs2_awp")  # the scope's own tick: not fully zoomed yet
+	var keep_full := _zoom_full_at
+	_zoom_full_at = 0.0
 	var cone1 := _spread("cs2_awp")
+	_zoom_full_at = keep_full
 	var spd1 := roundi(float(main.player.M["max_ground_speed"]) / u)
 	var sens1: float = p.input.sensitivity
 	_attack2("cs2_awp")
@@ -1478,12 +1608,21 @@ func _selftest() -> void:
 	await get_tree().create_timer(maxf(stat("cs2_awp", "zoom time 1"), 0.01) + 0.15).timeout
 	_speed("cs2_awp")
 	_check("scope_awp", lvl1 == 1 and lvl2 == 2 and _zoom == 0 and cone1 < unscoped and sens1 < sens0 and not _scope_layer.visible, "lvl1 cone %.2f (unscoped %.2f) sens %.3f speed %d, lvl2=%d, off=%d overlay=%s" % [cone1, unscoped, sens1, spd1, lvl2, _zoom, _scope_layer.visible])
+	var wait_on := float(X["scope_accuracy_wait"]) > 0.0
+	_check("quickscope_unscoped_cone", is_equal_approx(quick, unscoped) == wait_on, "awp shot on the scope's own tick: cone %.2f (unscoped %.2f, fully zoomed %.2f, scope_accuracy_wait=%s)" % [quick, unscoped, cone1, wait_on])
 	_check("scope_fov_restored", is_equal_approx(p.cam.fov, fov0) and is_equal_approx(p.input.sensitivity, sens0), "fov %.3f -> %.3f after a fast re-scope, sens %.3f -> %.3f" % [fov0, p.cam.fov, sens0, p.input.sensitivity])
 	_next_fire = 0.0
 	_attack2("cs2_awp")
 	p.input.sensitivity = sens0 * 2.0  # the Esc menu's sensitivity slider while scoped
 	_sens_follow()
 	var rescoped: float = p.input.sensitivity
+	var ratio0 := float(X["zoom_sensitivity_ratio"])
+	X["zoom_sensitivity_ratio"] = ratio0 * 0.8  # the Esc menu's zoom_sensitivity_ratio while scoped
+	_sens_follow()
+	var reratio: float = p.input.sensitivity
+	X["zoom_sensitivity_ratio"] = ratio0
+	_sens_follow()
+	_check("zoom_ratio_follows_menu", is_equal_approx(reratio, rescoped * 0.8) and is_equal_approx(p.input.sensitivity, rescoped), "ratio x0.8 while scoped: scoped sens %.3f -> %.3f at once" % [rescoped, reratio])
 	_set_zoom(0)
 	var after_menu: float = p.input.sensitivity
 	p.input.sensitivity = sens0
@@ -1758,12 +1897,11 @@ func _selftest() -> void:
 	var vj := float(Sheets.movement()["jump_impulse"]) / u
 	var air := [air_inacc(jmp, 0.0), air_inacc(jmp, vj * 0.04), air_inacc(jmp, vj), air_inacc(jmp, vj * 100.0)]
 	_check("air_inaccuracy", air[0] == 0.0 and air[1] == 0.0 and is_equal_approx(air[2], jmp) and is_equal_approx(air[3], jmp * float(X["air_inacc_max_scale"])), "ak47 jump %.1f: apex %.1f, low %.1f, take-off %.1f, fast fall %.1f" % [jmp, air[0], air[1], air[2], air[3]])
-	_inaccuracy = 0.0
 	slots["primary"] = "cs2_ak47"
 	current = "primary"
+	_inaccuracy = 0.0
 	_on_land(vj * u)
 	var landed := _inaccuracy
-	_inaccuracy = 0.0
 	_inaccuracy = 0.0
 	_on_jump()
 	var took := _inaccuracy
@@ -1798,6 +1936,12 @@ func _selftest() -> void:
 	slots["primary"] = "cs2_ak47"
 	var xh_ak := crosshair_shown()
 	_check("sniper_no_crosshair", not xh_awp and xh_ak, "awp unscoped=%s ak=%s" % [xh_awp, xh_ak])
+	var keep_awp: Dictionary = _st.get("cs2_awp", {})
+	var uz := [unzoom_after_shot("cs2_awp"), unzoom_after_shot("cs2_ak47")]
+	_st["cs2_awp"] = keep_awp.merged({String(X["unzoom_key"]): 0.0}, true)
+	uz.append(unzoom_after_shot("cs2_awp"))  # the file's own attribute wins over the cycletime rule
+	_st["cs2_awp"] = keep_awp
+	_check("unzoom_after_shot", uz == [true, false, false], "awp, ak47, awp with the attribute set to 0 = %s" % str(uz))
 	# backstab: behind a +Z-facing target vs in front of it
 	var dummy := Node3D.new()
 	main.add_child(dummy)
@@ -1841,6 +1985,7 @@ func _selftest() -> void:
 	_ig = ""
 	_check("items_game_reader", kv.get("a") == "2" and kv.get("b") == 'say "hi"' and not kv.has("c") and not kv.has("blk") and kv.get("d", {}).get("y") == "8", str(kv))
 	_ig_parity()
+	_fixture_stats()
 	# movement: CS's power curve puts half the speed range at most of the move cone; walking stays linear
 	var ms := [move_share(0.0, 250.0, false), move_share(250.0 * (0.34 + 0.95) * 0.5, 250.0, false), move_share(250.0 * (0.34 + 0.95) * 0.5, 250.0, true), move_share(250.0, 250.0, false)]
 	_check("move_power_curve", ms[0] == 0.0 and is_equal_approx(ms[1], pow(0.5, float(X["move_inacc_power"]))) and is_equal_approx(ms[2], 0.5) and ms[3] == 1.0, "share at rest, mid run, mid walk, full = %s" % str(ms))
@@ -2007,13 +2152,44 @@ func _ig_item(item: String) -> Dictionary:
 	var rx := RegEx.create_from_string("\"name\"\\s+\"" + item + "\"")
 	var m := rx.search(_ig, at)
 	while m:
-		var b := _ig.rfind("{", m.get_start())
+		var b := _open_of(m.get_start())
 		if b > at:
 			var blk := _kv(b)
 			if String(blk.get("name", "")) == item:
 				return blk
 		m = rx.search(_ig, m.get_end())
 	return {}
+
+## The "{" of the block that holds index i: a backward walk that steps over every block closed before i
+## (an item's "visuals" or "attributes" ahead of its "name"), quoted strings and // comments aside. -1 at the top.
+func _open_of(i: int) -> int:
+	var depth := 0
+	var end := i
+	while end > 0:
+		var ls := _ig.rfind("\n", end - 1) + 1  # one line at a time, last line first (strings never span lines)
+		var braces: Array = []
+		var q := false
+		var k := ls
+		while k < end:
+			var ch := _ig[k]
+			if q and ch == "\\":
+				k += 1  # an escaped character inside a string
+			elif ch == "\"":
+				q = not q
+			elif not q and ch == "/" and k + 1 < end and _ig[k + 1] == "/":
+				break
+			elif not q and (ch == "{" or ch == "}"):
+				braces.append(k)
+			k += 1
+		for n in range(braces.size() - 1, -1, -1):
+			if _ig[braces[n]] == "}":
+				depth += 1
+			elif depth == 0:
+				return braces[n]
+			else:
+				depth -= 1
+		end = ls - 1
+	return -1
 
 ## --wtest: prep's own test fixture items_game.txt read by this reader and by prep/items_game.py (run with the
 ## machine's python) must give every weapon the same attributes. Skipped where either is missing (an exported
@@ -2022,7 +2198,7 @@ func _ig_parity() -> void:
 	var root := ProjectSettings.globalize_path("res://").path_join("..").simplify_path()
 	var fx := root.path_join("prep/tests/fixtures/items_game.txt")
 	var py := root.path_join("prep/items_game.py")
-	var names := ["weapon_ak47", "weapon_m4a1", "weapon_glock", "weapon_taser"]
+	var names := ["weapon_ak47", "weapon_m4a1", "weapon_glock", "weapon_taser", "weapon_deagle"]
 	if not FileAccess.file_exists(fx) or not FileAccess.file_exists(py):
 		_check("items_game_parity", true, "skipped: no prep/tests fixture beside this build")
 		return
@@ -2054,6 +2230,39 @@ func _ig_parity() -> void:
 	_ig = keep
 	_ig_prefabs = keep_p
 	_check("items_game_parity", bad.is_empty() and want.size() == names.size(), "%d weapons of prep's fixture: %s" % [want.size(), "identical" if bad.is_empty() else "; ".join(bad.slice(0, 6))])
+
+## --wtest: the whole stat path on prep's fixture items_game.txt (a CI run has no CS2 data, so every gun plays
+## on class rows there): the AK's own recoil seed drives its table, the Deagle's item block is found with
+## its sub-blocks ahead of "name", the Glock's burst comes from "has burst mode".
+func _fixture_stats() -> void:
+	var root := ProjectSettings.globalize_path("res://").path_join("..").simplify_path()
+	var fx := root.path_join("prep/tests/fixtures/items_game.txt")
+	if not FileAccess.file_exists(fx):
+		_check("fixture_stats", true, "skipped: no prep/tests fixture beside this build")
+		return
+	var keep_st := _st.duplicate()
+	var keep_stats := stats
+	var keep_ig := _ig
+	var keep_p := _ig_prefabs
+	stats = {}
+	_ig = FileAccess.get_file_as_string(fx)
+	_ig_prefabs = _ig.find("\"prefabs\"")
+	for id in ["cs2_ak47", "cs2_deagle", "cs2_glock"]:
+		_resolve(id)
+	_ig = keep_ig
+	_ig_prefabs = keep_p
+	_tables.clear()
+	var tab := pattern("cs2_ak47", 0)
+	var rs := SourceRandom.new()
+	rs.set_seed(223)
+	var a0 := rs.rand_float(-70.0, 70.0)
+	var m0 := 30.0 + rs.rand_float(0.0, 0.0)
+	var got := [stat("cs2_ak47", "recoil seed"), stat("cs2_ak47", "max player speed"), stat("cs2_deagle", "cycletime"), stat("cs2_deagle", "damage"), alt_kind("cs2_glock"), stat("cs2_glock", "cycletime alt")]
+	var ok := got == [223.0, 215.0, 0.225, 63.0, "burst", 0.5] and tab.size() > 0 and is_equal_approx(tab[0].x, a0) and is_equal_approx(tab[0].y, m0)
+	_st = keep_st
+	stats = keep_stats
+	_tables.clear()
+	_check("fixture_stats", ok, "ak47 seed, speed / deagle cycletime, damage / glock alt, cooldown = %s; ak47 shot 1 (%.3f, %.2f) want seed-223 (%.3f, %.2f)" % [str(got), tab[0].x if tab.size() > 0 else -1.0, tab[0].y if tab.size() > 0 else -1.0, a0, m0])
 
 ## Just the prefab chain of one items_game entry: its "prefab" parents first, its own attributes on top.
 func _ig_chain(name: String, seen: Dictionary) -> Dictionary:

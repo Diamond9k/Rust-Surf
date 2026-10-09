@@ -24,6 +24,13 @@ const KP := {"KP_INS": KEY_KP_0, "KP_END": KEY_KP_1, "KP_DOWNARROW": KEY_KP_2, "
 	"APP": KEY_MENU}
 const SIDED := {"RCTRL": [KEY_CTRL, KEY_LOCATION_RIGHT], "RSHIFT": [KEY_SHIFT, KEY_LOCATION_RIGHT],
 	"RALT": [KEY_ALT, KEY_LOCATION_RIGHT], "LWIN": [KEY_META, KEY_LOCATION_LEFT], "RWIN": [KEY_META, KEY_LOCATION_RIGHT]}
+# the preview frame's background: the screen at 1:1 around its centre, wherever the frame sits
+const VIEW := """shader_type canvas_item;
+uniform sampler2D screen_tex : hint_screen_texture, filter_nearest;
+uniform vec2 size = vec2(256.0);
+void fragment() {
+	COLOR = vec4(texture(screen_tex, vec2(0.5) + (UV - 0.5) * size * SCREEN_PIXEL_SIZE).rgb, 1.0);
+}"""
 const BLUR := """shader_type canvas_item;
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
 uniform float vignette = 0.0;
@@ -113,7 +120,8 @@ func toggle() -> void:
 		_was_frozen = main.player.frozen
 		main.player.frozen = true
 	else:
-		main.player.frozen = _was_frozen
+		if main.player.frozen:  # something that unfroze the player while the menu was open keeps its say
+			main.player.frozen = _was_frozen
 		_flush()
 	if main.timer: main.timer.set_process(not is_open)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if is_open else Input.MOUSE_MODE_CAPTURED
@@ -245,8 +253,13 @@ func _save() -> void:
 	if f == null:
 		main.hud.message("could not save settings: %s" % error_string(FileAccess.get_open_error()), 3.0)
 		return
-	f.store_string(JSON.stringify({"values": out, "keys": keys}, "\t"))
+	var wrote := f.store_string(JSON.stringify({"values": out, "keys": keys}, "\t"))
+	var ferr := f.get_error()
 	f.close()
+	if not wrote or ferr != OK:  # a short write (full disk) never goes over the good file
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))
+		main.hud.message("could not save settings: %s" % error_string(ferr if ferr != OK else ERR_FILE_CANT_WRITE), 3.0)
+		return
 	var err := DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), ProjectSettings.globalize_path(FILE))
 	if err != OK:
 		main.hud.message("could not save settings: %s" % error_string(err), 3.0)
@@ -276,6 +289,11 @@ func _apply(k: String) -> void:
 			var w: Variant = main.get("weapons")
 			if w != null and w.get("X") is Dictionary:
 				w.X["zoom_sensitivity_ratio"] = v  # Weapons._set_zoom reads it on the next scope
+				if w.has_method("scoped") and w.scoped() and float(w.get("_base_sens")) > 0.0:
+					# scoped under the menu: the scope's sensitivity follows at once, not on the next scope
+					var zf := float(w.stat(w.held(), "zoom fov %d" % int(w.get("_zoom"))))
+					main.player.input.sensitivity = float(w._base_sens) * float(v) * zf / float(Sheets.movement()["fov_default"])
+					w._scoped_sens = main.player.input.sensitivity
 		"invert_mouse": main.player.input.m_pitch = -absf(main.player.input.m_pitch) if v else absf(main.player.input.m_pitch)
 		"volume":
 			AudioServer.set_bus_mute(0, v <= 0.0)
@@ -517,9 +535,9 @@ func _theme() -> Theme:
 	t.set_color("font_hover_color", "Button", Color.WHITE)
 	t.set_color("font_pressed_color", "Button", Color.WHITE)
 	t.set_color("font_hover_color", "OptionButton", Color.WHITE)
-	t.set_stylebox("normal", "OptionButton", _sb(Color(1, 1, 1, 0.075), 1))
-	t.set_stylebox("hover", "OptionButton", _sb(Color(1, 1, 1, 0.14), 1))
-	t.set_stylebox("pressed", "OptionButton", _sb(Color(1, 1, 1, 0.18), 1))
+	t.set_stylebox("normal", "OptionButton", _sb(Color(1, 1, 1, 0.075), 1, Color(1, 1, 1, 0.08)))
+	t.set_stylebox("hover", "OptionButton", _sb(Color(1, 1, 1, 0.14), 1, Color(1, 1, 1, 0.22)))
+	t.set_stylebox("pressed", "OptionButton", _sb(Color(1, 1, 1, 0.18), 1, Color(1, 1, 1, 0.3)))
 	t.set_stylebox("focus", "OptionButton", StyleBoxEmpty.new())
 	t.set_icon("arrow", "OptionButton", _caret(_px(10)))
 	t.set_stylebox("panel", "PopupMenu", _sb(Color(0.09, 0.1, 0.11, 0.98), 2, Color(1, 1, 1, 0.15)))
@@ -815,17 +833,13 @@ func _show_tab(t: String) -> void:
 	(_tab_btns[t] as Button).set_pressed_no_signal(true)
 	_fit_area.call_deferred()
 
-## The panel ends under the open tab's last row (scrolling only when the rows outgrow the window).
+## The panel runs the full height of the window under the tabs, like CS2's settings page; the rows scroll
+## inside it when they outgrow it.
 func _fit_area() -> void:
-	if _area == null or not is_instance_valid(_area) or not _lists.has(_tab):
+	if _area == null or not is_instance_valid(_area):
 		return
-	var h: float = (_lists[_tab] as Control).get_combined_minimum_size().y
-	var host := _pages[_tab] as Control
-	if host is HBoxContainer:
-		h = maxf(h, host.get_combined_minimum_size().y)
-	var room := get_viewport().get_visible_rect().size.y - _area.offset_top - _px(float(main.hud.H["menu_margin"]))
-	_area.anchor_bottom = 0.0
-	_area.offset_bottom = _area.offset_top + minf(h, room)
+	_area.anchor_bottom = 1.0
+	_area.offset_bottom = -_px(float(main.hud.H["menu_margin"]))
 
 func _page(tab: String, w: float) -> Control:
 	var host: Control
@@ -1133,11 +1147,25 @@ func _preview_panel(w: float) -> Control:
 	l.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
 	_spaced(l)
 	v.add_child(l)
+	var frame := Control.new()
+	frame.custom_minimum_size = Vector2(w, w * 0.8)
+	frame.clip_contents = true
+	v.add_child(frame)
+	# the game itself behind it: the middle of the live view at 1:1 (the screen copy taken before the menu's blur)
+	var scene := ColorRect.new()
+	scene.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scene.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var mat := ShaderMaterial.new()
+	mat.shader = Shader.new()
+	mat.shader.code = VIEW
+	scene.material = mat
+	scene.resized.connect(func() -> void: mat.set_shader_parameter("size", scene.size))
+	frame.add_child(scene)
 	_preview = Control.new()
-	_preview.custom_minimum_size = Vector2(w, w * 0.8)
-	_preview.clip_contents = true
+	_preview.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_preview.draw.connect(_draw_preview.bind(_preview))  # bound: an old preview freed by a resize draws itself only
-	v.add_child(_preview)
+	frame.add_child(_preview)
 	var note := Label.new()
 	note.text = "Dynamic styles open and close as if moving and firing."
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1149,12 +1177,6 @@ func _preview_panel(w: float) -> Control:
 
 func _draw_preview(pv: Control) -> void:
 	var sz := pv.size
-	var sky := [Color(0.52, 0.62, 0.72), Color(0.74, 0.78, 0.8)]
-	pv.draw_polygon(PackedVector2Array([Vector2.ZERO, Vector2(sz.x, 0), Vector2(sz.x, sz.y * 0.55), Vector2(0, sz.y * 0.55)]),
-		PackedColorArray([sky[0], sky[0], sky[1], sky[1]]))
-	pv.draw_rect(Rect2(0, sz.y * 0.55, sz.x, sz.y * 0.45), Color(0.27, 0.25, 0.22))
-	pv.draw_rect(Rect2(sz.x * 0.62, sz.y * 0.3, sz.x * 0.38, sz.y * 0.25), Color(0.36, 0.35, 0.33))
-	pv.draw_rect(Rect2(sz.x * 0.53, sz.y * 0.36, sz.x * 0.07, sz.y * 0.19), Color(0.08, 0.08, 0.08))  # a dark doorway: the right arm on dark
 	pv.draw_rect(Rect2(Vector2.ZERO, sz), Color(1, 1, 1, 0.15), false, 1.0)
 	var h := get_viewport().get_visible_rect().size.y
 	var t := Time.get_ticks_msec() / 1000.0
@@ -1273,6 +1295,23 @@ func _uitest() -> void:
 	main.hud.convars.erase("zoom_sensitivity_ratio")
 	_change("zoom_sensitivity_ratio", 0.818933, false)
 	ok.call(is_equal_approx(float(main.weapons.X["zoom_sensitivity_ratio"]), 0.818933), "zoom_sensitivity_ratio reaches Weapons")
+	# changed while scoped (the scope stays on under the menu), the scoped sensitivity follows at once
+	var zw: Node = main.weapons
+	var zs: Array = [zw.current, zw.slots["primary"], zw._zoom, zw._base_sens, zw._scoped_sens, main.player.input.sensitivity]
+	zw.current = "primary"
+	zw.slots["primary"] = "cs2_awp"
+	zw._zoom = 1
+	zw._base_sens = 2.0
+	_change("zoom_sensitivity_ratio", 0.5, false)
+	var zexp := 2.0 * 0.5 * float(zw.stat("cs2_awp", "zoom fov 1")) / float(Sheets.movement()["fov_default"])
+	ok.call(is_equal_approx(main.player.input.sensitivity, zexp) and is_equal_approx(float(zw._scoped_sens), zexp), "zoom ratio changed while scoped applies at once (%.4f, want %.4f)" % [main.player.input.sensitivity, zexp])
+	zw.current = zs[0]
+	zw.slots["primary"] = zs[1]
+	zw._zoom = zs[2]
+	zw._base_sens = zs[3]
+	zw._scoped_sens = zs[4]
+	main.player.input.sensitivity = zs[5]
+	_changed.erase("zoom_sensitivity_ratio")
 	for p in [FILE, FILE + ".tmp", FILE + ".bad"]:
 		DirAccess.remove_absolute(gp.call(p))
 	# leaving a number field untouched never rewrites the player's unrounded value
@@ -1294,6 +1333,12 @@ func _uitest() -> void:
 	toggle()
 	toggle()
 	ok.call(not main.player.frozen, "closing the menu unfreezes a player it froze")
+	main.player.frozen = true
+	toggle()
+	main.player.frozen = false
+	toggle()
+	ok.call(not main.player.frozen, "a player unfrozen by something else while the menu is open stays unfrozen")
+	main.player.frozen = false
 	for p in [FILE, FILE + ".tmp", FILE + ".bad"]:
 		DirAccess.remove_absolute(gp.call(p))
 	# a repeated message is not cut short by the first one's timer
@@ -1383,7 +1428,7 @@ func _uitest() -> void:
 	main.hud.update(0.0, 0.0, 0.0, false)
 	ok.call(main.hud.speed_label.text == "", "speed readout empty at rest")
 	main.hud.update(250.0, 0.0, 0.0, false)
-	ok.call(main.hud.speed_label.text == "250", "speed readout shows 250")
+	ok.call(main.hud.speed_label.text == "250 u/s", "speed readout shows 250 u/s (labelled, PC test)")
 	var cam := get_viewport().get_camera_3d()
 	var fov0 := cam.fov
 	var px0: float = main.hud.spread_to_px(0.01, 1080)

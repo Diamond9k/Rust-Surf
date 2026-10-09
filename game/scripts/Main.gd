@@ -99,6 +99,13 @@ func _lighting() -> void:
 	sun.shadow_bias = float(L["shadow_bias"])
 	sun.shadow_normal_bias = float(L["shadow_normal_bias"])
 	sun.light_angular_distance = float(L["sun_angular"])
+	# cascades packed toward the camera: the near ones carry crisp contact shadows, the last the far site
+	var sp: Array = L["shadow_splits"]
+	sun.directional_shadow_split_1 = float(sp[0])
+	sun.directional_shadow_split_2 = float(sp[1])
+	sun.directional_shadow_split_3 = float(sp[2])
+	RenderingServer.directional_shadow_atlas_set_size(int(L["shadow_atlas"]), true)
+	RenderingServer.directional_soft_shadow_filter_set_quality(int(L["shadow_quality"]) as RenderingServer.ShadowQuality)
 	add_child(sun)
 	# bounce: sunlit ground lighting the shaded faces from below, opposite the sun; no shadow, no
 	# specular, and kept out of the sky so the sky shader's LIGHT0 stays the sun

@@ -127,6 +127,10 @@ func _surface(m: Dictionary) -> Material:
 	sm.set_shader_parameter("panel", float(m["panel"]))
 	sm.set_shader_parameter("crease_ao", float(m["crease_ao"]))
 	sm.set_shader_parameter("normal_depth", float(m["normal_depth"]))
+	sm.set_shader_parameter("seam_lock", float(m["seam_lock"]))
+	sm.set_shader_parameter("panel_tone", float(m["panel_tone"]))
+	sm.set_shader_parameter("weather_crop", float(m["weather_crop"]))
+	sm.set_shader_parameter("tile_crop_v", float(m["tile_crop_v"]))
 	var tn: Array = m["tint"]
 	sm.set_shader_parameter("tint", Vector3(tn[0], tn[1], tn[2]))
 	var W: Dictionary = sheet["weathering"]
@@ -189,6 +193,8 @@ func _ramp(r: Dictionary) -> StaticBody3D:
 		var dx := Vector3(2 * L, 0, 0)
 		_tri(st, pa + dx, pr + dx, pl + dx, Vector3(1, 0, 0))
 		_quad(st, Vector3(-L, -H, -W), Vector3(-L, -H, W), Vector3(L, -H, W), Vector3(L, -H, -W), Vector3.DOWN, L * 2.0, W * 2.0, -1.0, -1.0, 0.0)
+	else:
+		_valley_shell(st, L, W, H)
 	st.generate_tangents()  # normal maps need tangents; without them shaded faces go black
 	var mesh := st.commit()
 	var body := StaticBody3D.new()
@@ -209,6 +215,32 @@ func _ramp(r: Dictionary) -> StaticBody3D:
 	tm.material_override = _trim_material()
 	body.add_child(tm)  # scenery only: the collision stays the bare prism
 	return body
+
+## course.json shell: a valley is a solid cast block, not a folded sheet: a flat coping shell.coping metres
+## wide outside each rim, outer walls down to shell.skirt metres below the crease, a base, and end caps
+## cut in the V. Part of the collision, so what looks solid is solid.
+func _valley_shell(st: SurfaceTool, L: float, W: float, H: float) -> void:
+	var c := float(sheet["shell"]["coping"])
+	var y0 := -H - float(sheet["shell"]["skirt"])
+	var o := W + c
+	for s: float in [-1.0, 1.0]:
+		_quad(st, Vector3(-L, H, W * s), Vector3(L, H, W * s), Vector3(L, H, o * s), Vector3(-L, H, o * s), Vector3.UP, L * 2.0, c, -1.0, -1.0, 0.0)
+		_quad(st, Vector3(-L, H, o * s), Vector3(L, H, o * s), Vector3(L, y0, o * s), Vector3(-L, y0, o * s), Vector3(0, 0, s), L * 2.0, H - y0, -1.0, -1.0, 0.0)
+	_quad(st, Vector3(-L, y0, -o), Vector3(-L, y0, o), Vector3(L, y0, o), Vector3(L, y0, -o), Vector3.DOWN, L * 2.0, o * 2.0, -1.0, -1.0, 0.0)
+	# end caps: the block's cross-section (z, y) less the V, triangulated
+	var poly := PackedVector2Array([Vector2(-o, H), Vector2(-W, H), Vector2(0, -H), Vector2(W, H), Vector2(o, H), Vector2(o, y0), Vector2(-o, y0)])
+	var tris := Geometry2D.triangulate_polygon(poly)
+	for x: float in [-L, L]:
+		var n := Vector3(signf(x), 0, 0)
+		for i in range(0, tris.size(), 3):
+			var p: Array[Vector3] = []
+			for k in 3:
+				var q := poly[tris[i + k]]
+				p.append(Vector3(x, q.y, q.x))
+			if (p[1] - p[0]).cross(p[2] - p[0]).dot(n) > 0.0:
+				_tri(st, p[0], p[2], p[1], n)
+			else:
+				_tri(st, p[0], p[1], p[2], n)
 
 ## course.json trim: a steel flat trim.width metres wide on the face, from the edge e0-e1 toward f1-f0,
 ## standing trim.offset proud of it, with its inner side face closed so the edge reads as a solid capping
@@ -353,6 +385,10 @@ uniform float roughness_val = 0.85;
 uniform float panel = 0.0;
 uniform float crease_ao = 0.0;
 uniform float normal_depth = 1.0;
+uniform float seam_lock = 0.0;
+uniform float panel_tone = 0.0;
+uniform float weather_crop = 0.0;
+uniform float tile_crop_v = 0.0;
 uniform float groove = 0.0;
 uniform float groove_width = 0.05;
 uniform float edge_wear = 0.0;
@@ -382,6 +418,11 @@ float fbm(vec2 p) {
 	for (int i = 0; i < 4; i++) { s += a * vnoise(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; }
 	return s / 0.9375;
 }
+// tile_crop_v trims the bevel a slab texture draws along its top and bottom edge, so the panels run on as
+// long strips instead of a grid; gradients from the unwrapped uv keep the mips seamless
+vec2 vcrop(vec2 p) { return vec2(p.x, fract(p.y) * (1.0 - 2.0 * tile_crop_v) + tile_crop_v); }
+vec3 ta(vec2 p) { return textureGrad(tex_a, vcrop(p), dFdx(p), dFdy(p)).rgb; }
+vec3 tn(vec2 p) { return textureGrad(nrm_a, vcrop(p), dFdx(p), dFdy(p)).rgb; }
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	wn = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
@@ -414,13 +455,18 @@ void fragment() {
 	}
 	vec2 mo = m + (world_map ? vec2(0.0) : face_off);  // texture space only; slab joints stay on m
 	vec2 uv = mo / scale_a;
-	vec3 c = texture(tex_a, uv).rgb;
-	vec3 nm = has_nrm ? texture(nrm_a, uv).rgb : vec3(0.5, 0.5, 1.0);
+	vec3 c = ta(uv);
+	vec3 nm = has_nrm ? tn(uv) : vec3(0.5, 0.5, 1.0);
 	// a second, larger sampling of the same texture over half the surface by noise: no visible repeat
 	vec2 uv3 = mo / (scale_a * 2.37) + vec2(0.21, 0.67);
+	if (seam_lock > 0.0) {
+		// a texture with cast panel seams baked in: the second sampling moves one whole panel along u, so
+		// its seams fall on the first's instead of crossing them
+		uv3 = uv + vec2(1.0 / seam_lock, 0.0);
+	}
 	float k3 = atlas ? 0.0 : 0.6 * smoothstep(0.35, 0.65, fbm(mo / (scale_a * 3.1) + vec2(8.0, 2.0)));
-	c = mix(c, texture(tex_a, uv3).rgb, k3);
-	if (has_nrm) { nm = mix(nm, texture(nrm_a, uv3).rgb, k3); }
+	c = mix(c, ta(uv3), k3);
+	if (has_nrm) { nm = mix(nm, tn(uv3), k3); }
 	float rough = roughness_val * mix(1.0, 0.72, smoothstep(0.5, 0.75, fbm(m / 9.0 + vec2(23.0, 5.0))));  // worn, smoother patches catch the sun
 	if (has_b) {
 		float w = smoothstep(1.0 - weather - 0.1, 1.0 - weather + 0.1, fbm(mo / (scale_a * 2.7) + vec2(5.3, 1.7)));
@@ -429,21 +475,30 @@ void fragment() {
 		vec2 uvb = mo / (scale_a * 1.3) + vec2(0.31, 0.77);
 		vec2 uvb2 = vec2(-mo.y, mo.x) / (scale_a * 1.87) + vec2(0.53, 0.19);
 		float kb = smoothstep(0.4, 0.6, fbm(mo / (scale_a * 1.9) + vec2(27.0, 13.0)));
-		vec3 cb = mix(texture(tex_b, uvb).rgb, texture(tex_b, uvb2).rgb, kb);
-		vec3 nb = mix(texture(nrm_b, uvb).rgb, texture(nrm_b, uvb2).rgb, kb);
+		// weather_crop trims the dark border some Rust textures carry round each tile (a grid of lines
+		// across the ramp otherwise); gradients from the unwrapped uv keep the mips seamless
+		vec2 cb1 = fract(uvb) * (1.0 - 2.0 * weather_crop) + weather_crop;
+		vec2 cb2 = fract(uvb2) * (1.0 - 2.0 * weather_crop) + weather_crop;
+		vec3 cb = mix(textureGrad(tex_b, cb1, dFdx(uvb), dFdy(uvb)).rgb, textureGrad(tex_b, cb2, dFdx(uvb2), dFdy(uvb2)).rgb, kb);
+		vec3 nb = mix(textureGrad(nrm_b, cb1, dFdx(uvb), dFdy(uvb)).rgb, textureGrad(nrm_b, cb2, dFdx(uvb2), dFdy(uvb2)).rgb, kb);
 		c = mix(c, cb * mix(c, vec3(dot(c, vec3(0.333))), 0.5) / max(vec3(dot(c, vec3(0.333))), vec3(0.05)), w * 0.85);
 		nm = mix(nm, nb, w * 0.85);
 	}
 	float dist = length(wpos - CAMERA_POSITION_WORLD);
 	vec3 mean = textureLod(tex_a, vec2(0.5), 12.0).rgb;
-	vec3 dt = texture(tex_a, uv * 7.31 + vec2(0.13, 0.57)).rgb;
+	vec3 dt = ta(uv * 7.31 + vec2(0.13, 0.57));
 	float near = atlas ? 0.0 : detail * (1.0 - smoothstep(3.0, 18.0, dist));
 	c *= mix(vec3(1.0), dt / max(mean, vec3(0.04)), near);
 	if (has_nrm) {
-		vec3 dn = texture(nrm_a, uv * 7.31 + vec2(0.13, 0.57)).rgb;
+		vec3 dn = tn(uv * 7.31 + vec2(0.13, 0.57));
 		nm = vec3(nm.xy + (dn.xy - 0.5) * near * 1.2, nm.z);  // detail normal: fine grain under the player
 	}
 	c *= mix(0.8, 1.1, fbm(mo / 17.0 + vec2(11.0, 3.0)));
+	if (seam_lock > 0.0) {
+		// each cast panel its own pour: a tone per panel strip, a little lighter or darker than its neighbours
+		float strip = floor(uv.x * seam_lock);
+		c *= 1.0 + panel_tone * (hash(vec2(strip, face_off.x + 7.0)) * 2.0 - 1.0);
+	}
 	c *= tint;
 	float face = world_map ? 0.0 : step(0.0, UV2.y);  // boxes have no UV2: no edge wear
 	float top = max(UV2.x, 0.0);

@@ -20,7 +20,8 @@ var center := Vector3.ZERO
 var H := 1.3716
 var _state := "idle"   # idle | countdown | round | summary
 var _left := 0.0
-var _clock := 0.0      # round clock: stands still while the Esc menu is open
+var _clock := 0.0      # round clock: advances by the Weapons clock's step, so it stands still in menus
+var _step_at := -1.0   # Weapons clock at the last _process
 var _gen := 0
 var _quick := false    # --wtest / --shots / --lobbytest: no countdown, the round starts at once
 var _shots := 0
@@ -30,6 +31,7 @@ var _hit_shot := -1
 var _head_shot := false
 var _shot_frame := -1
 var _shot_ok := false
+var _stray_warned := false   # a hit outside its shot's frame was reported once
 var _shot_weapon := ""   # the weapon that fired the current shot: its hits use its armor ratio, not whatever is held later
 var _kills := 0
 var _hs_kills := 0
@@ -169,6 +171,7 @@ func toggle() -> void:
 func _enter(teleport: bool) -> void:
 	var p: SurfPlayer = main.player
 	active = true
+	_step_at = -1.0  # the clock steps from this frame, not from the last time the lobby was open
 	if teleport:
 		p.teleport(spawn_pos(), _f("spawn_yaw") + _f("range_yaw"))
 		p.pitch = 0.0
@@ -540,8 +543,8 @@ func _arena() -> void:
 	for i in n:
 		var x := _lane_x(i + 1)
 		_text3d(str(i + 1), Vector3(x, 0.012, fz - fnum * 1.2), Vector3(-90, 0, 0), fnum, Color(pc, _f("floor_paint_alpha")))
-		_box(Vector3(x, wh * 0.62, back + 0.06), Vector3(float(lp[0]), float(lp[1]), 0.08), plaque, false)
-		_text3d(str(i + 1), Vector3(x, wh * 0.62, back + 0.12), Vector3.ZERO, float(lp[2]), pc)
+		_box(Vector3(x, _f("lane_plaque_y"), back + 0.06), Vector3(float(lp[0]), float(lp[1]), 0.08), plaque, false)
+		_text3d(str(i + 1), Vector3(x, _f("lane_plaque_y"), back + 0.12), Vector3.ZERO, float(lp[2]), pc)
 	var edge := n * lw * 0.5
 	var dt: Array = V["distance_text"]
 	for d in V["distance_marks"]:
@@ -564,6 +567,8 @@ func _arena() -> void:
 		_crate(Vector3(a[0], a[1], a[2]), Vector3(a[3], a[4], a[5]), cm, tm)
 	for r in V["catwalks"]:
 		_catwalk(r, tm)
+	for r in V["platforms"]:
+		_platform(r, tm)
 	var cr: Array = V["bot_crate"]
 	for s in V["bot_spots"]:
 		var a: Array = s
@@ -677,6 +682,84 @@ func _crate(base: Vector3, size: Vector3, mat: Material, frame: Material) -> voi
 		_box(base + Vector3(sx * (size.x * 0.5 - e * 0.5 + 0.01), size.y - e * 0.5 + 0.005, 0), Vector3(e, e, size.z + 0.02), frame, false)
 	for sz in [-1.0, 1.0]:
 		_box(base + Vector3(0, size.y - e * 0.5 + 0.005, sz * (size.z * 0.5 - e * 0.5 + 0.01)), Vector3(size.x + 0.02, e, e), frame, false)
+
+## A raised concrete stage bots stand on: [x, near m, depth m (from the firing line), width, height, stair
+## 0/1, stair x offset, rails]. A metal deck with a yellow edge on the near side, a stair down toward the
+## player, rails (bit 1 near edge, 2 back, 4 sides; the near rail leaves the stair open) and a floor shade.
+func _platform(r: Array, metal: Material) -> void:
+	var fz := _f("firing_line_z")
+	var x := float(r[0])
+	var z0 := fz - float(r[1])
+	var dep := float(r[2])
+	var w := float(r[3])
+	var h := float(r[4])
+	var zc := z0 - dep * 0.5
+	var z1 := z0 - dep
+	_box(Vector3(x, (h - 0.12) * 0.5, zc), Vector3(w, h - 0.12, dep), _mat(String(V["platform_material"])))
+	_box(Vector3(x, h - 0.06, zc), Vector3(w + 0.1, 0.12, dep + 0.1), metal)
+	_box(Vector3(x, h + 0.004, z0 - 0.1), Vector3(w, 0.008, 0.14), _flat(_col("color_line"), 0.0, 0.8), false)
+	var sx := x + float(r[6])
+	var sw := _f("platform_stair_w")
+	if int(r[5]) == 1:
+		var steps := int(ceil(h / 0.3))
+		for i in steps:
+			var sh := h * float(i + 1) / steps
+			_box(Vector3(sx, sh * 0.5, z0 + 0.225 + (steps - 1 - i) * 0.35), Vector3(sw, sh, 0.35), metal)
+	var rails := int(r[7])
+	var l := x - w * 0.5 + 0.05
+	var rt := x + w * 0.5 - 0.05
+	if rails & 1:
+		if int(r[5]) == 1:
+			_rail(Vector3(l, h, z0 - 0.05), Vector3(sx - sw * 0.5 - 0.05, h, z0 - 0.05), metal)
+			_rail(Vector3(sx + sw * 0.5 + 0.05, h, z0 - 0.05), Vector3(rt, h, z0 - 0.05), metal)
+		else:
+			_rail(Vector3(l, h, z0 - 0.05), Vector3(rt, h, z0 - 0.05), metal)
+	if rails & 2:
+		_rail(Vector3(l, h, z1 + 0.05), Vector3(rt, h, z1 + 0.05), metal)
+	if rails & 4:
+		_rail(Vector3(l, h, z0 - 0.05), Vector3(l, h, z1 + 0.05), metal)
+		_rail(Vector3(rt, h, z0 - 0.05), Vector3(rt, h, z1 + 0.05), metal)
+	if rails & 8:  # a sheet-metal awning on posts at the near edge, sloping down toward the player
+		var ro: Array = V["platform_roof"]
+		var top := h + float(ro[0])
+		var n := maxi(1, int(ceil(w / float(ro[1]))))
+		for i in n + 1:
+			_box(Vector3(lerpf(l, rt, float(i) / n), (h + top) * 0.5, z0 - 0.12), Vector3(0.14, top - h, 0.14), metal)
+		var over := dep + float(ro[2])
+		var drop := float(ro[3])
+		var roof := StaticBody3D.new()
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(w + 0.4, 0.08, sqrt(over * over + drop * drop))
+		mi.mesh = bm
+		mi.material_override = _mat(String(V["roof_material"]))
+		roof.add_child(mi)
+		roof.position = center + Vector3(x, top + 0.04 + drop * 0.5, z1 + over * 0.5 - 0.05)
+		roof.rotation.x = atan2(drop, over)
+		add_child(roof)
+		_box(Vector3(x, top - 0.1, z0 - 0.12), Vector3(w + 0.2, 0.2, 0.2), metal, false)
+	var ao: Array = V["wall_ao"]
+	var d := float(ao[0]) * 0.6
+	_floor_shade(Vector3(x, 0, z0 + d * 0.5), Vector3(0, 0, 1), w, d, float(ao[1]))
+	_floor_shade(Vector3(x - w * 0.5 - d * 0.5, 0, zc), Vector3(-1, 0, 0), dep, d, float(ao[1]))
+	_floor_shade(Vector3(x + w * 0.5 + d * 0.5, 0, zc), Vector3(1, 0, 0), dep, d, float(ao[1]))
+	if z1 - d > -float(V["arena_size"][1]) * 0.5:  # a balcony against the back wall has no floor behind it
+		_floor_shade(Vector3(x, 0, z1 - d * 0.5), Vector3(0, 0, -1), w, d, float(ao[1]))
+
+## A straight rail on a deck from a to b (deck level, along x or z): posts about every 1.8 m, a top and a mid bar.
+func _rail(a: Vector3, b: Vector3, metal: Material) -> void:
+	var post := _f("catwalk_rail")
+	var span := a.distance_to(b)
+	if span < 0.2:
+		return
+	var n := maxi(1, int(ceil(span / 1.8)))
+	for i in n + 1:
+		var p := a.lerp(b, float(i) / n)
+		_box(p + Vector3(0, post * 0.5, 0), Vector3(0.06, post, 0.06), metal, false)
+	var along_x := absf(b.x - a.x) > absf(b.z - a.z)
+	var c := (a + b) * 0.5
+	_box(c + Vector3(0, post, 0), Vector3(span, 0.07, 0.07) if along_x else Vector3(0.07, 0.07, span), metal, false)
+	_box(c + Vector3(0, post * 0.5, 0), Vector3(span, 0.04, 0.04) if along_x else Vector3(0.04, 0.04, span), metal, false)
 
 ## A raised walkway along a side wall: [side -1/1, near m, far m (from the firing line), width, height].
 ## Concrete under a metal deck, a rail on the open edge, and a stair down at the near end.
@@ -1013,7 +1096,9 @@ func _process(dt: float) -> void:
 		_leave("left the aim lobby, round not saved")  # restart or checkpoint teleported the player away
 		return
 	_capture_idle()
+	var step := _step(dt)
 	if not _paused():
+		dt = step
 		_clock += dt
 		if Input.is_action_just_pressed("surf_lobby_mode"):
 			var i := 0
@@ -1131,9 +1216,16 @@ func _save_best() -> void:
 	if f == null:
 		main.hud.message("could not save the best score: %s" % error_string(FileAccess.get_open_error()), 3.0)
 		return
-	f.store_string(JSON.stringify(_best))
+	var text := JSON.stringify(_best)
+	var wrote := f.store_string(text)
 	f.flush()
+	var werr := f.get_error()
 	f.close()
+	# a short or failed write (a full disk) never replaces the good file: the torn temp is dropped instead
+	if not wrote or (werr != OK and werr != ERR_FILE_EOF) or FileAccess.get_file_as_string(p + ".tmp") != text:
+		DirAccess.remove_absolute(p + ".tmp")
+		main.hud.message("could not save the best score: the write failed, the old bests are kept", 3.0)
+		return
 	var err := DirAccess.rename_absolute(p + ".tmp", p)
 	if err != OK:
 		main.hud.message("could not save the best score: %s" % error_string(err), 3.0)
@@ -1143,6 +1235,17 @@ func _save_best() -> void:
 func _t() -> float:
 	var w: Node = main.weapons
 	return float(w._now()) if w != null and w.has_method("_now") else _clock
+
+## This frame's step on the Weapons clock, so the round clock, respawns and heals run on the same clock as the
+## engagement times (a frozen player or a menu stops both); the frame's dt when there is no Weapons clock.
+func _step(dt: float) -> float:
+	var w: Node = main.weapons
+	if w == null or not w.has_method("_now"):
+		return dt
+	var now := float(w._now())
+	var d := maxf(now - _step_at, 0.0) if _step_at >= 0.0 else 0.0  # unclamped: a slow frame never stretches the round
+	_step_at = now
+	return d
 
 ## The current shot's time: a gun's round its slot time (Weapons stamps _last_shot before calling here), a
 ## knife swing now.
@@ -1169,13 +1272,23 @@ func register_hit(unit: Node3D, dmg: float, head: bool, _at: Vector3, group: Str
 	if not active or _state != "round" or not is_instance_valid(unit) or not _targets.has(unit):
 		return
 	if _shot_frame != Engine.get_process_frames() or not _shot_ok:
+		if _shots > 0 and _shot_ok and not _stray_warned:
+			_stray_warned = true  # the contract: a shot's hits arrive in the frame Weapons calls on_shot_fired
+			push_warning("aim lobby: a hit arrived %d frame(s) after its shot and was not counted" % (Engine.get_process_frames() - _shot_frame))
 		return
 	match mode:
 		"flick":
+			# the orb is down at its first hit: later pellets and catch-up rounds of this frame find nothing, and
+			# the next orb appears once the frame's shots are all resolved
+			if unit.get_meta("down", false):
+				return
+			unit.set_meta("down", true)
+			(unit as CollisionObject3D).collision_layer = 0
+			unit.visible = false
 			_count(false)
 			_flick_sum += _last_shot_at - _spawned_at
 			_flick_n += 1
-			_spawn_mode()
+			_respawn_flick.call_deferred(_gen)
 		"track":
 			_count(head)  # accuracy only: time on target is sampled every physics tick (_track_tick)
 			(unit as Bot).kick = _f("bot_flinch") * 0.5
@@ -1419,13 +1532,35 @@ func _spawn_flick() -> void:
 	var yr: Array = V["flick_y"]
 	var hx := _f("lane_count") * _f("lane_width") * 0.5 - 1.0
 	var r := _f("flick_radius")
-	var z := _f("firing_line_z") - _rng.randf_range(float(dr[0]), float(dr[1]))
-	var at := center + Vector3(_rng.randf_range(-hx, hx), _rng.randf_range(float(yr[0]), float(yr[1])), z)
+	# the orb is always in plain sight from the spawn: a spot inside or behind a stage, crate or catwalk is drawn again
+	var eye := spawn_pos() + Vector3.UP * float(M["eye_height"])
+	var at := Vector3.ZERO
+	for i in 24:
+		var z := _f("firing_line_z") - _rng.randf_range(float(dr[0]), float(dr[1]))
+		at = center + Vector3(_rng.randf_range(-hx, hx), _rng.randf_range(float(yr[0]), float(yr[1])), z)
+		if _clear_view(eye, to_global(at), r):
+			break
 	var shape := SphereShape3D.new()
 	shape.radius = r
 	var t := _target(null, shape, _sphere(r), _flat(_col("color_flick"), 1.0), Transform3D(Basis(), at), false, "head", self)
 	_targets.append(t)
 	_spawned_at = _t()
+
+## The next flick orb, after the frame that hit the last one (only for the round that hit it).
+func _respawn_flick(gen: int) -> void:
+	if active and gen == _gen and _state == "round" and mode == "flick":
+		_spawn_mode()
+
+## True when nothing solid stands between from and a ball of radius r at to (both global).
+func _clear_view(from: Vector3, to: Vector3, r: float) -> bool:
+	for off in [Vector3.ZERO, Vector3.UP * r * 0.8, Vector3.DOWN * r * 0.8]:
+		var q := PhysicsRayQueryParameters3D.create(from, to + off)
+		if main.player:
+			q.exclude = [main.player.get_rid()]
+		var hit := get_world_3d().direct_space_state.intersect_ray(q)
+		if not hit.is_empty() and (hit["position"] as Vector3).distance_to(to + off) > r:
+			return false
+	return true
 
 func _spawn_track() -> void:
 	_targets.append(_bot(Vector3(0, 0, _f("firing_line_z") - _f("track_distance")), 0.0, 0, "BOT"))
@@ -1573,6 +1708,7 @@ uniform sampler2D weave : filter_linear_mipmap, repeat_enable;
 uniform bool cloth = false;
 uniform sampler2D tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform bool has_tex = false;
+uniform float tex_desat = 0.0;
 uniform float weave_scale = 6.0;
 uniform float rough = 0.9;
 uniform float spec = 0.4;
@@ -1599,7 +1735,8 @@ void fragment() {
 	b /= max(b.x + b.y + b.z, 0.0001);
 	if (has_tex) {
 		vec2 s = vec2(weave_scale * 0.25);
-		c *= texture(tex, lp.yz * s).rgb * b.x + texture(tex, lp.xz * s).rgb * b.y + texture(tex, lp.xy * s).rgb * b.z;
+		vec3 t = texture(tex, lp.yz * s).rgb * b.x + texture(tex, lp.xz * s).rgb * b.y + texture(tex, lp.xy * s).rgb * b.z;
+		c *= mix(t, vec3(dot(t, vec3(0.333))), tex_desat);
 	}
 	if (cloth) {
 		float w = texture(weave, lp.yz * weave_scale).r * b.x + texture(weave, lp.xz * weave_scale).r * b.y + texture(weave, lp.xy * weave_scale).r * b.z;
@@ -1645,6 +1782,7 @@ func _slot_mat(outfit: int, slot: String) -> Material:
 	if src and src.albedo_texture:  # kit metal (masks, plates, kilt signs) wears the course's rusty trim metal
 		m.set_shader_parameter("has_tex", true)
 		m.set_shader_parameter("tex", src.albedo_texture)
+		m.set_shader_parameter("tex_desat", _f("bot_metal_desat"))
 	m.set_shader_parameter("weave_scale", _f("bot_weave_scale"))
 	m.set_shader_parameter("rough", float(k[0]))
 	m.set_shader_parameter("spec", float(k[1]))
@@ -1921,6 +2059,31 @@ func _selftest() -> void:
 		ok = _check("buy menu found", false, buy) and ok
 	_on_target += 1.0  # a full second on target, so the miss cost shows above the floor of 0
 	ok = _check("track: misses cost points", _score() == maxi(0, int(_on_target * _f("points_track_s")) - (_shots - _hits) * int(_f("points_miss"))) and _shots > _hits, _score()) and ok
+	# flick: every pellet of a pull and a catch-up round in the same frame resolve against the orb they were
+	# fired at; one hit, one flick time, and the next orb appears after the frame
+	mode = "flick"
+	_start_round()
+	await get_tree().process_frame
+	var orb := _targets[0] as AimTarget
+	_fire()
+	orb.hit(20.0, false, Vector3.ZERO)
+	orb.hit(20.0, false, Vector3.ZERO)
+	_fire()
+	orb.hit(20.0, false, Vector3.ZERO)
+	var same_frame := _targets.size() == 1 and _targets[0] == orb
+	await get_tree().process_frame
+	ok = _check("flick: pellets and a same-frame round on a hit orb count once, next orb after the frame", same_frame and _hits == 1 and _flick_n == 1 and _shots == 2 and _targets.size() == 1 and _targets[0] != orb, _stats_line()) and ok
+	# a hit that arrives a frame after its shot is not counted (Weapons must deliver hits in the shot's frame)
+	_fire()
+	await get_tree().process_frame
+	(_targets[0] as AimTarget).hit(20.0, false, Vector3.ZERO)
+	ok = _check("a hit a frame after its shot is not counted", _hits == 1 and _stray_warned, _stats_line()) and ok
+	# one clock: the round clock steps with the Weapons clock, the one engagement times use
+	var c0 := _t()
+	var l0 := _left
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ok = _check("round clock runs on the Weapons clock", absf((l0 - _left) - (_t() - c0)) < 0.05, "round %.3f s, weapons %.3f s" % [l0 - _left, _t() - c0]) and ok
 	# bots: one shot that kills two bots adds one time-to-kill, not a zero
 	mode = "bots"
 	_start_round()
@@ -1987,6 +2150,28 @@ func _selftest() -> void:
 			n += 1
 		sb.free()
 		ok = _check("shots to kill: %s" % r["id"], n == int(r["shots"]), "%d (want %d)" % [n, int(r["shots"])]) and ok
+	# the same table through the loaded weapon stats (the player's items_game on the PC): the sheet's numbers
+	# must be the game's, and the lobby's own damage path must give CS2's shots to kill
+	var real := 0
+	for r in S["stk_checks"]:
+		var id := String(r["weapon"])
+		if not (w.has_method("_has") and w._has(id, "damage") and w._has(id, "armor ratio")):
+			continue
+		real += 1
+		var hd := String(r["group"]) == "head"
+		var hs := float(w.stat(id, "headshot multiplier")) if w._has(id, "headshot multiplier") else float(r["hs_mult"])
+		var same := is_equal_approx(float(w.stat(id, "damage")), float(r["damage"])) and is_equal_approx(float(w.stat(id, "armor ratio")), float(r["armor_ratio"])) and is_equal_approx(hs, float(r["hs_mult"]))
+		var sb := Bot.new()
+		sb.kevlar = float(r["kevlar"])
+		sb.helmet = bool(r["helmet"])
+		var n := 0
+		while sb.hp > 0.0 and n < 30:
+			sb.hp -= minf(_hit_damage(sb, float(w.stat(id, "damage")) * (hs if hd else 1.0), hd, String(r["group"]), id), sb.hp)
+			n += 1
+		sb.free()
+		ok = _check("shots to kill from the loaded stats: %s" % r["id"], same and n == int(r["shots"]), "%d (want %d), sheet stats match the files: %s" % [n, int(r["shots"]), same]) and ok
+	if real == 0:
+		print("LTEST SKIP shots to kill from the loaded stats (no CS2 weapon stats in this data folder; the PC run checks them)")
 	ok = _check("sheet: bots wear kevlar and helmet", ba.helmet == bool(V["bot_helmet"]) and (_targets[5] as Bot).kevlar == _f("bot_armor"), _f("bot_armor")) and ok
 	# best file: whole-file save through a temp file; an unparsable file is set aside, not silently lost
 	var keep := String(V["best_file"])

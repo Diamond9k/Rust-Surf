@@ -645,6 +645,12 @@ func _fix(m: Material) -> Material:
 		b.alpha_scissor_threshold = float(A["scissor"])
 	elif key in A["blend"]:
 		b.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	# prep exports every material at metallic 0, roughness 0.9: course.json terrain.sheen gives the steel
+	# its own [metallic, roughness] so the towers, trims and vents catch the sun as metal
+	var sh: Dictionary = T["sheen"]["materials"]
+	if sh.has(key):
+		b.metallic = float(sh[key][0])
+		b.roughness = float(sh[key][1])
 	if key != "":
 		mats[key] = b
 	return b
