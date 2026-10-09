@@ -1,6 +1,6 @@
 {
   "_sheet": "aim_lobby",
-  "_doc": "The aim-train arena far above and away from the surf course. Lengths in metres, positions relative to 'center' unless noted (x right, y up, z toward the spawn; the back wall is at -z). track_speed_u is Hammer units/s (CS2 run speed) converted with movement.json unit_to_m. Bot size comes from movement.json hull_height/hull_width.",
+  "_doc": "The aim-train range far above the surf course. Lengths in metres, positions relative to 'center' (x right, y up, z toward the spawn; lanes run toward -z). Distances are measured from the firing line. Bot size is movement.json hull_height (72 u), so 'parts' and 'props' positions are fractions of that height in the bot's own frame (x to its left as you face it, z toward the player). A part is a hittable body in a hitgroup; a prop is a mesh riding on a part (when: always, face = any outfit but the burlap sack, wrap / can / plate / hood = that outfit gear). A sphere's 'b', when not zero, stretches its mesh by b.y in height (the hitbox stays the sphere of radius r).",
   "columns": [
     "id",
     "value",
@@ -16,245 +16,469 @@
         600
       ],
       "what": "world position of the arena floor centre (course.json spans x -270..630, y 0..92, z -450..450, so this never overlaps)",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "arena_size",
       "value": [
         60,
-        40
+        64
       ],
       "what": "floor x and z extent",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "wall_height",
-      "value": 10,
+      "value": 9,
       "what": "wall height above the floor",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "wall_thickness",
       "value": 1,
       "what": "wall thickness",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "wall_trim_height",
+      "value": 0.45,
+      "what": "metal skirting at the foot of every wall",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "ground_size",
       "value": 400,
       "what": "terrain slab under and around the arena",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "spawn_offset",
       "value": [
         0,
         0.05,
-        17
+        27
       ],
       "what": "player feet relative to center",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "spawn_yaw",
       "value": 0,
-      "what": "degrees; 0 faces -z, the back wall",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "what": "degrees; 0 faces -z, down the lanes",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "firing_line_z",
+      "value": 24,
+      "what": "z of the yellow firing line relative to center; shots from past it never count",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "rail_height",
+      "value": 0.12,
+      "what": "height of the low concrete curb along the firing line (no railing in the way of the view)",
+      "verified": "2026-10-09 design value: rendered in lobby_r1 renders and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "lane_count",
+      "value": 5,
+      "what": "numbered lanes across the range, lane 1 on the left as seen from the spawn",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "lane_width",
+      "value": 11,
+      "what": "width of one lane",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "distance_marks",
+      "value": [
+        10,
+        20,
+        30,
+        40,
+        50
+      ],
+      "what": "metres from the firing line where a line is painted across the floor and plaques sit on the side walls",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "round_s",
-      "value": 30,
+      "value": 60,
       "what": "round length in seconds",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "countdown_s",
+      "value": 3,
+      "what": "seconds of 3-2-1 before each round; shots and hits in it never count",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "summary_s",
-      "value": 5,
-      "what": "seconds the round summary stays up before the next round starts",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "value": 6,
+      "what": "seconds the round summary stays up before the next countdown",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
-      "id": "points_hit",
+      "id": "points_kill",
+      "value": 100,
+      "what": "bots: score per kill",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "points_hs_kill",
+      "value": 50,
+      "what": "bots: bonus per kill whose killing blow was a headshot",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "points_flick",
+      "value": 100,
+      "what": "flick: score per orb hit",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "points_track_s",
+      "value": 100,
+      "what": "track: score per second on target with the trigger held",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "points_miss",
       "value": 10,
-      "what": "score per hit",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
-    },
-    {
-      "id": "points_head",
-      "value": 5,
-      "what": "bonus score per head hit",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "what": "every mode except track: score lost per shot that hit nothing; the score never goes below 0",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "best_file",
       "value": "user://aim_best.json",
-      "what": "best score per mode",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "what": "best score per mode and weapon",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "killfeed_n",
+      "value": 5,
+      "what": "kill-feed rows kept on screen",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "killfeed_s",
+      "value": 6,
+      "what": "seconds a kill-feed row stays",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "floor_material",
       "value": "pad",
       "what": "materials.json id",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "wall_material",
       "value": "ramp_concrete",
       "what": "materials.json id",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "trim_material",
+      "value": "metal",
+      "what": "materials.json id: wall skirting, railing, helmets and chest plates",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "cover_material",
       "value": "ramp_panels",
       "what": "materials.json id",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "ground_material",
       "value": "terrain",
       "what": "materials.json id",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "cover",
       "value": [
         [
-          -14,
-          3,
-          3,
-          1.2,
-          1
-        ],
-        [
+          1,
           14,
-          -5,
+          2.4,
+          0.75,
+          1.0
+        ],
+        [
           4,
-          1.1,
-          1
-        ],
-        [
-          -20,
-          -10,
-          2,
-          1,
-          2
-        ],
-        [
-          21,
-          8,
-          2,
-          1.3,
-          2
-        ],
-        [
-          -9,
-          -12,
-          3,
+          27,
+          2.0,
           0.9,
-          1
+          1.2
         ],
         [
-          10,
-          11,
-          3,
-          1,
-          1
+          2,
+          30,
+          3.0,
+          0.6,
+          1.0
+        ],
+        [
+          5,
+          36,
+          2.2,
+          1.0,
+          1.0
         ]
       ],
-      "what": "low cover boxes: x, z, size x, height, size z (relative to center)",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "what": "low crates: lane, distance in front of the bot spot, width, height, depth",
+      "verified": "2026-10-09 design value: rendered in lobby_r1 renders and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
-      "id": "flick_radius",
-      "value": 0.4,
-      "what": "flick target sphere radius",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
-    },
-    {
-      "id": "flick_margin",
-      "value": 3,
-      "what": "keep flick targets this far from the side walls",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
-    },
-    {
-      "id": "flick_y",
+      "id": "bot_spots",
       "value": [
-        1.0,
-        6.0
+        [
+          1,
+          8,
+          1.5,
+          0,
+          0
+        ],
+        [
+          1,
+          19,
+          -1,
+          2,
+          0
+        ],
+        [
+          1,
+          31,
+          0.5,
+          1,
+          1.2
+        ],
+        [
+          2,
+          12,
+          0,
+          3,
+          0
+        ],
+        [
+          2,
+          24,
+          1,
+          1,
+          0
+        ],
+        [
+          2,
+          36,
+          -1,
+          0,
+          2.4
+        ],
+        [
+          3,
+          7,
+          -1.5,
+          1,
+          0
+        ],
+        [
+          3,
+          15,
+          1.5,
+          0,
+          0
+        ],
+        [
+          3,
+          27,
+          0,
+          2,
+          1.2
+        ],
+        [
+          3,
+          40,
+          0,
+          3,
+          0
+        ],
+        [
+          4,
+          10,
+          -0.5,
+          2,
+          0
+        ],
+        [
+          4,
+          21,
+          0,
+          3,
+          1.2
+        ],
+        [
+          4,
+          33,
+          1,
+          0,
+          0
+        ],
+        [
+          5,
+          8,
+          -1,
+          3,
+          0
+        ],
+        [
+          5,
+          17,
+          0.5,
+          1,
+          0
+        ],
+        [
+          5,
+          29,
+          -0.5,
+          2,
+          2.4
+        ],
+        [
+          5,
+          42,
+          0,
+          0,
+          0
+        ]
       ],
-      "what": "flick target height range above the floor",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "what": "where bots stand: [lane, metres from the firing line, sideways offset m, outfit index, standing height m (0 = floor, else a crate of that height under the bot, like aim_botz's raised spots)]",
+      "verified": "2026-10-09 design value: rendered in lobby_r1 renders and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
-      "id": "flick_gap",
-      "value": 0.6,
-      "what": "flick target distance in front of the back wall",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "id": "bot_crate",
+      "value": [
+        1.6,
+        1.6
+      ],
+      "what": "footprint (x, z metres) of the crate a raised bot stands on",
+      "verified": "2026-10-09 design value: rendered in lobby_r1 renders and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
-      "id": "track_distance",
-      "value": 20,
-      "what": "tracking target distance from the spawn",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
-    },
-    {
-      "id": "track_half_range",
+      "id": "bot_yaw_jitter",
       "value": 12,
-      "what": "tracking target strafes x +- this",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
-    },
-    {
-      "id": "track_speed_u",
-      "value": 250,
-      "what": "strafe speed in Hammer units/s (CS2 run speed)",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
-    },
-    {
-      "id": "track_flip_s",
-      "value": [
-        0.6,
-        1.8
-      ],
-      "what": "min/max seconds before the target reverses",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
-    },
-    {
-      "id": "bot_distances",
-      "value": [
-        10,
-        20,
-        30
-      ],
-      "what": "bot distances from the spawn",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
-    },
-    {
-      "id": "bot_x",
-      "value": [
-        -4,
-        0,
-        4
-      ],
-      "what": "bot x offsets, same order as bot_distances",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "what": "degrees a bot may turn away from facing the firing line",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "bot_hp",
       "value": 100,
-      "what": "bot health; dead bots stand back up after bot_respawn_s",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
-    },
-    {
-      "id": "bot_head_radius",
-      "value": 0.14,
-      "what": "bot head sphere radius",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "what": "bot health, no armour; a downed bot stands back up after bot_respawn_s",
+      "verified": "2026-10-09 design value (100 hp is the CS2 player health; whether aim_botz bots wear armour is unverified)"
     },
     {
       "id": "bot_respawn_s",
-      "value": 0.8,
-      "what": "seconds a downed bot stays down",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "value": 2.0,
+      "what": "seconds a downed bot stays down (round clock: the Esc menu pauses it)",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "bot_fall_s",
+      "value": 0.35,
+      "what": "seconds a killed bot takes to tip over backwards",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "bot_flinch",
+      "value": 0.12,
+      "what": "radians a bot rocks back when hit, easing out",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "hitgroup_head",
+      "value": 4.0,
+      "what": "CS2 head multiplier; Weapons.gd already applies the weapon's own 'headshot multiplier', so the lobby does not apply it again",
+      "verified": "unverified: commonly documented CS:GO hitgroup value, not read from CS2 game files here; also design value for the lobby"
+    },
+    {
+      "id": "hitgroup_chest",
+      "value": 1.0,
+      "what": "chest and neck damage multiplier",
+      "verified": "unverified: commonly documented CS:GO hitgroup value, not read from CS2 game files here; also design value for the lobby"
+    },
+    {
+      "id": "hitgroup_stomach",
+      "value": 1.25,
+      "what": "stomach and pelvis damage multiplier",
+      "verified": "unverified: commonly documented CS:GO hitgroup value, not read from CS2 game files here; also design value for the lobby"
+    },
+    {
+      "id": "hitgroup_arms",
+      "value": 1.0,
+      "what": "arm and hand damage multiplier",
+      "verified": "unverified: commonly documented CS:GO hitgroup value, not read from CS2 game files here; also design value for the lobby"
+    },
+    {
+      "id": "hitgroup_legs",
+      "value": 0.75,
+      "what": "leg and foot damage multiplier",
+      "verified": "unverified: commonly documented CS:GO hitgroup value, not read from CS2 game files here; also design value for the lobby"
+    },
+    {
+      "id": "flick_radius",
+      "value": 0.18,
+      "what": "flick orb radius (about a head)",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "flick_dist",
+      "value": [
+        12,
+        45
+      ],
+      "what": "flick orb distance range from the firing line",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "flick_y",
+      "value": [
+        0.6,
+        3.5
+      ],
+      "what": "flick orb height range above the floor",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "track_distance",
+      "value": 22,
+      "what": "tracking bot distance from the firing line",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "track_half_range",
+      "value": 14,
+      "what": "tracking bot strafes x +- this",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "track_speed_u",
+      "value": 250,
+      "what": "strafe speed in Hammer units/s (CS2 knife run speed)",
+      "verified": "2026-10-09 250 u/s is the CS2 knife max speed (movement.json max_ground_speed); strafe pattern is a design value"
+    },
+    {
+      "id": "track_flip_s",
+      "value": [
+        0.4,
+        1.4
+      ],
+      "what": "min/max seconds before the tracking bot reverses",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "color_flick",
@@ -263,62 +487,1025 @@
         0.35,
         0.1
       ],
-      "what": "linear rgb",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "what": "rgb",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
-      "id": "color_track",
+      "id": "color_paint",
       "value": [
-        1.0,
-        0.8,
+        0.86,
+        0.85,
+        0.8
+      ],
+      "what": "white floor paint: lane dividers, distance lines, numbers",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "color_line",
+      "value": [
+        0.95,
+        0.72,
+        0.08
+      ],
+      "what": "yellow firing line",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "color_plaque",
+      "value": [
+        0.08,
+        0.09,
         0.1
       ],
-      "what": "linear rgb",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "what": "dark plaques behind wall numbers",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
-      "id": "color_bot",
+      "id": "color_gun_metal",
       "value": [
-        0.45,
-        0.4,
-        0.28
+        0.12,
+        0.12,
+        0.13
       ],
-      "what": "linear rgb",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "what": "bot rifle receiver and barrel",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
-      "id": "color_head",
+      "id": "color_gun_wood",
       "value": [
-        0.9,
-        0.15,
+        0.36,
+        0.2,
         0.1
       ],
-      "what": "linear rgb",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "what": "bot rifle stock and handguard",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
-      "id": "color_lane",
+      "id": "cloth_noise",
       "value": [
-        0.9,
-        0.75,
-        0.15
+        0.72,
+        1.0
       ],
-      "what": "distance marker stripes on the floor",
-      "verified": "2026-10-09 design value: arena rendered and ray hits counted headless; not yet playtested on the PC"
+      "what": "cloth weave brightness range (procedural texture, multiplied by the outfit colour)",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     }
   ],
   "modes": [
     {
       "id": "bots",
-      "label": "BOTS"
+      "label": "BOTS",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "flick",
-      "label": "FLICK"
+      "label": "FLICK",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "track",
-      "label": "TRACK"
+      "label": "TRACK",
+      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    }
+  ],
+  "parts_columns": [
+    "id",
+    "group",
+    "shape",
+    "a",
+    "b",
+    "r",
+    "slot"
+  ],
+  "parts": [
+    {
+      "id": "head",
+      "group": "head",
+      "shape": "sphere",
+      "a": [
+        0,
+        0.925,
+        0.01
+      ],
+      "b": [
+        1,
+        1.12,
+        1
+      ],
+      "r": 0.068,
+      "slot": "skin",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "neck",
+      "group": "chest",
+      "shape": "capsule",
+      "a": [
+        0,
+        0.83,
+        0
+      ],
+      "b": [
+        0,
+        0.875,
+        0.005
+      ],
+      "r": 0.034,
+      "slot": "skin",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "chest",
+      "group": "chest",
+      "shape": "box",
+      "a": [
+        0,
+        0.725,
+        0
+      ],
+      "b": [
+        0.235,
+        0.2,
+        0.125
+      ],
+      "r": 0,
+      "slot": "shirt",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "stomach",
+      "group": "stomach",
+      "shape": "box",
+      "a": [
+        0,
+        0.565,
+        0
+      ],
+      "b": [
+        0.205,
+        0.13,
+        0.112
+      ],
+      "r": 0,
+      "slot": "shirt",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "pelvis",
+      "group": "stomach",
+      "shape": "box",
+      "a": [
+        0,
+        0.48,
+        0
+      ],
+      "b": [
+        0.215,
+        0.075,
+        0.118
+      ],
+      "r": 0,
+      "slot": "pants",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "arm_upper_r",
+      "group": "arms",
+      "shape": "capsule",
+      "a": [
+        0.14,
+        0.8,
+        0
+      ],
+      "b": [
+        0.16,
+        0.645,
+        0.04
+      ],
+      "r": 0.04,
+      "slot": "shirt",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "arm_lower_r",
+      "group": "arms",
+      "shape": "capsule",
+      "a": [
+        0.16,
+        0.645,
+        0.04
+      ],
+      "b": [
+        0.07,
+        0.665,
+        0.2
+      ],
+      "r": 0.033,
+      "slot": "shirt",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "hand_r",
+      "group": "arms",
+      "shape": "sphere",
+      "a": [
+        0.06,
+        0.67,
+        0.215
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.03,
+      "slot": "skin",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "arm_upper_l",
+      "group": "arms",
+      "shape": "capsule",
+      "a": [
+        -0.14,
+        0.8,
+        0
+      ],
+      "b": [
+        -0.125,
+        0.665,
+        0.1
+      ],
+      "r": 0.04,
+      "slot": "shirt",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "arm_lower_l",
+      "group": "arms",
+      "shape": "capsule",
+      "a": [
+        -0.125,
+        0.665,
+        0.1
+      ],
+      "b": [
+        -0.03,
+        0.69,
+        0.3
+      ],
+      "r": 0.033,
+      "slot": "shirt",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "hand_l",
+      "group": "arms",
+      "shape": "sphere",
+      "a": [
+        -0.025,
+        0.695,
+        0.315
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.03,
+      "slot": "skin",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "thigh_r",
+      "group": "legs",
+      "shape": "capsule",
+      "a": [
+        0.062,
+        0.47,
+        0
+      ],
+      "b": [
+        0.068,
+        0.265,
+        0.012
+      ],
+      "r": 0.053,
+      "slot": "pants",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "shin_r",
+      "group": "legs",
+      "shape": "capsule",
+      "a": [
+        0.068,
+        0.265,
+        0.012
+      ],
+      "b": [
+        0.068,
+        0.06,
+        -0.005
+      ],
+      "r": 0.041,
+      "slot": "pants",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "foot_r",
+      "group": "legs",
+      "shape": "box",
+      "a": [
+        0.068,
+        0.026,
+        0.03
+      ],
+      "b": [
+        0.068,
+        0.052,
+        0.15
+      ],
+      "r": 0,
+      "slot": "boots",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "thigh_l",
+      "group": "legs",
+      "shape": "capsule",
+      "a": [
+        -0.062,
+        0.47,
+        0
+      ],
+      "b": [
+        -0.068,
+        0.265,
+        0.012
+      ],
+      "r": 0.053,
+      "slot": "pants",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "shin_l",
+      "group": "legs",
+      "shape": "capsule",
+      "a": [
+        -0.068,
+        0.265,
+        0.012
+      ],
+      "b": [
+        -0.068,
+        0.06,
+        -0.005
+      ],
+      "r": 0.041,
+      "slot": "pants",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "foot_l",
+      "group": "legs",
+      "shape": "box",
+      "a": [
+        -0.068,
+        0.026,
+        0.03
+      ],
+      "b": [
+        0.068,
+        0.052,
+        0.15
+      ],
+      "r": 0,
+      "slot": "boots",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    }
+  ],
+  "props": [
+    {
+      "id": "boot_r",
+      "on": "shin_r",
+      "shape": "capsule",
+      "a": [
+        0.068,
+        0.15,
+        -0.002
+      ],
+      "b": [
+        0.068,
+        0.055,
+        -0.005
+      ],
+      "r": 0.045,
+      "slot": "boots",
+      "when": "always",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "boot_l",
+      "on": "shin_l",
+      "shape": "capsule",
+      "a": [
+        -0.068,
+        0.15,
+        -0.002
+      ],
+      "b": [
+        -0.068,
+        0.055,
+        -0.005
+      ],
+      "r": 0.045,
+      "slot": "boots",
+      "when": "always",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "belt",
+      "on": "pelvis",
+      "shape": "box",
+      "a": [
+        0,
+        0.515,
+        0
+      ],
+      "b": [
+        0.222,
+        0.022,
+        0.124
+      ],
+      "r": 0,
+      "slot": "boots",
+      "when": "always",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "eye_r",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0.024,
+        0.935,
+        0.072
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.008,
+      "slot": "eyes",
+      "when": "face",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "eye_l",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        -0.024,
+        0.935,
+        0.072
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.008,
+      "slot": "eyes",
+      "when": "face",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "hair",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0,
+        0.945,
+        -0.012
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.064,
+      "slot": "hair",
+      "when": "face",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "sack",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0,
+        0.928,
+        0.008
+      ],
+      "b": [
+        1,
+        1.12,
+        1
+      ],
+      "r": 0.073,
+      "slot": "shirt",
+      "when": "wrap",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "sack_tie",
+      "on": "neck",
+      "shape": "capsule",
+      "a": [
+        0,
+        0.865,
+        0
+      ],
+      "b": [
+        0,
+        0.875,
+        0.004
+      ],
+      "r": 0.042,
+      "slot": "boots",
+      "when": "wrap",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "can",
+      "on": "head",
+      "shape": "cylinder",
+      "a": [
+        0,
+        0.975,
+        0.008
+      ],
+      "b": [
+        0,
+        0.06,
+        0
+      ],
+      "r": 0.074,
+      "slot": "metal",
+      "when": "can",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "plate",
+      "on": "chest",
+      "shape": "box",
+      "a": [
+        0,
+        0.73,
+        0.068
+      ],
+      "b": [
+        0.2,
+        0.17,
+        0.014
+      ],
+      "r": 0,
+      "slot": "metal",
+      "when": "plate",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "gun_body",
+      "on": "hand_r",
+      "shape": "box",
+      "a": [
+        0.035,
+        0.69,
+        0.22
+      ],
+      "b": [
+        0.035,
+        0.055,
+        0.3
+      ],
+      "r": 0,
+      "slot": "gun_metal",
+      "when": "always",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "gun_barrel",
+      "on": "hand_r",
+      "shape": "capsule",
+      "a": [
+        0.035,
+        0.705,
+        0.37
+      ],
+      "b": [
+        0.035,
+        0.705,
+        0.5
+      ],
+      "r": 0.008,
+      "slot": "gun_metal",
+      "when": "always",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "gun_mag",
+      "on": "hand_r",
+      "shape": "box",
+      "a": [
+        0.035,
+        0.635,
+        0.27
+      ],
+      "b": [
+        0.022,
+        0.08,
+        0.035
+      ],
+      "r": 0,
+      "slot": "gun_metal",
+      "when": "always",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "gun_stock",
+      "on": "hand_r",
+      "shape": "box",
+      "a": [
+        0.04,
+        0.68,
+        0.035
+      ],
+      "b": [
+        0.03,
+        0.06,
+        0.14
+      ],
+      "r": 0,
+      "slot": "gun_wood",
+      "when": "always",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "gun_guard",
+      "on": "hand_l",
+      "shape": "box",
+      "a": [
+        0.035,
+        0.69,
+        0.33
+      ],
+      "b": [
+        0.04,
+        0.045,
+        0.1
+      ],
+      "r": 0,
+      "slot": "gun_wood",
+      "when": "always",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in Gauntlet lobby renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "shoulders",
+      "on": "chest",
+      "shape": "capsule",
+      "a": [
+        -0.112,
+        0.8,
+        0
+      ],
+      "b": [
+        0.112,
+        0.8,
+        0
+      ],
+      "r": 0.045,
+      "slot": "shirt",
+      "when": "always",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "ear_r",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0.066,
+        0.925,
+        0.0
+      ],
+      "b": [
+        1,
+        1.3,
+        0.7
+      ],
+      "r": 0.014,
+      "slot": "skin",
+      "when": "face",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "ear_l",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        -0.066,
+        0.925,
+        0.0
+      ],
+      "b": [
+        1,
+        1.3,
+        0.7
+      ],
+      "r": 0.014,
+      "slot": "skin",
+      "when": "face",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "nose",
+      "on": "head",
+      "shape": "capsule",
+      "a": [
+        0,
+        0.93,
+        0.074
+      ],
+      "b": [
+        0,
+        0.91,
+        0.084
+      ],
+      "r": 0.009,
+      "slot": "skin",
+      "when": "face",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "brow",
+      "on": "head",
+      "shape": "box",
+      "a": [
+        0,
+        0.948,
+        0.068
+      ],
+      "b": [
+        0.07,
+        0.012,
+        0.02
+      ],
+      "r": 0,
+      "slot": "hair",
+      "when": "face",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "hood",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0,
+        0.935,
+        -0.016
+      ],
+      "b": [
+        1,
+        1.15,
+        1
+      ],
+      "r": 0.08,
+      "slot": "shirt",
+      "when": "hood",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "hood_hang",
+      "on": "chest",
+      "shape": "box",
+      "a": [
+        0,
+        0.83,
+        -0.07
+      ],
+      "b": [
+        0.14,
+        0.06,
+        0.03
+      ],
+      "r": 0,
+      "slot": "shirt",
+      "when": "hood",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "eyehole_r",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        0.025,
+        0.935,
+        0.073
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.012,
+      "slot": "eyes",
+      "when": "wrap",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+    },
+    {
+      "id": "eyehole_l",
+      "on": "head",
+      "shape": "sphere",
+      "a": [
+        -0.025,
+        0.935,
+        0.073
+      ],
+      "b": [
+        0,
+        0,
+        0
+      ],
+      "r": 0.012,
+      "slot": "eyes",
+      "when": "wrap",
+      "verified": "2026-10-09 design value: proportions from standard human ratios (head about 1/8 of height), rendered and checked in lobby_r1 renders; not a CS2 or Rust model"
+    }
+  ],
+  "outfits": [
+    {
+      "id": "burlap",
+      "shirt": [
+        0.58,
+        0.47,
+        0.31
+      ],
+      "pants": [
+        0.47,
+        0.38,
+        0.25
+      ],
+      "boots": [
+        0.2,
+        0.14,
+        0.09
+      ],
+      "skin": [
+        0.8,
+        0.6,
+        0.47
+      ],
+      "hair": [
+        0.2,
+        0.13,
+        0.08
+      ],
+      "eyes": [
+        0.05,
+        0.04,
+        0.04
+      ],
+      "metal": [
+        1,
+        1,
+        1
+      ],
+      "head": "wrap",
+      "chest": "none",
+      "verified": "2026-10-09 design value: colours chosen to read like Rust's burlap, hide, road-sign and hoodie clothing; not taken from Rust files"
+    },
+    {
+      "id": "hide",
+      "shirt": [
+        0.4,
+        0.27,
+        0.17
+      ],
+      "pants": [
+        0.31,
+        0.22,
+        0.15
+      ],
+      "boots": [
+        0.16,
+        0.11,
+        0.07
+      ],
+      "skin": [
+        0.62,
+        0.43,
+        0.31
+      ],
+      "hair": [
+        0.08,
+        0.06,
+        0.05
+      ],
+      "eyes": [
+        0.05,
+        0.04,
+        0.04
+      ],
+      "metal": [
+        1,
+        1,
+        1
+      ],
+      "head": "none",
+      "chest": "none",
+      "verified": "2026-10-09 design value: colours chosen to read like Rust's burlap, hide, road-sign and hoodie clothing; not taken from Rust files"
+    },
+    {
+      "id": "roadsign",
+      "shirt": [
+        0.3,
+        0.32,
+        0.26
+      ],
+      "pants": [
+        0.26,
+        0.25,
+        0.21
+      ],
+      "boots": [
+        0.14,
+        0.12,
+        0.1
+      ],
+      "skin": [
+        0.78,
+        0.57,
+        0.44
+      ],
+      "hair": [
+        0.3,
+        0.2,
+        0.1
+      ],
+      "eyes": [
+        0.05,
+        0.04,
+        0.04
+      ],
+      "metal": [
+        0.95,
+        0.9,
+        0.85
+      ],
+      "head": "can",
+      "chest": "plate",
+      "verified": "2026-10-09 design value: colours chosen to read like Rust's burlap, hide, road-sign and hoodie clothing; not taken from Rust files"
+    },
+    {
+      "id": "hoodie",
+      "shirt": [
+        0.16,
+        0.2,
+        0.28
+      ],
+      "pants": [
+        0.22,
+        0.22,
+        0.24
+      ],
+      "boots": [
+        0.12,
+        0.1,
+        0.08
+      ],
+      "skin": [
+        0.45,
+        0.31,
+        0.22
+      ],
+      "hair": [
+        0.05,
+        0.04,
+        0.04
+      ],
+      "eyes": [
+        0.03,
+        0.03,
+        0.03
+      ],
+      "metal": [
+        1,
+        1,
+        1
+      ],
+      "head": "hood",
+      "chest": "none",
+      "verified": "2026-10-09 design value: colours chosen to read like Rust's burlap, hide, road-sign and hoodie clothing; not taken from Rust files"
     }
   ]
 }

@@ -45,6 +45,12 @@ CS2 = [
     ("taser", "pistol", "taser", "weapon_pist_taser", "pistol/pistol_taser", "taser", "Zeus x27", "taser", "taser_shoot"),
 ]
 ACTIONS = ["draw", "idle", "shoot1", "reload", "lookat01"]
+# attack2 per weapon when items_game says nothing (its zoom levels / has silencer / has burst mode win)
+ALT = {"aug": "scope", "sg556": "scope", "awp": "scope", "ssg08": "scope", "scar20": "scope", "g3sg1": "scope",
+       "m4a1_silencer": "silencer", "usp_silencer": "silencer", "famas": "burst", "glock": "burst", "revolver": "revolver"}
+SHELL = {"nova", "xm1014", "sawedoff"}  # tube shotguns load shell by shell; the MAG-7 takes a magazine
+GEAR = {"taser"}  # the Zeus rides the knife slot in CS2
+ALT_NOTE = "; alt/reload/slot from CS2 play knowledge, unverified (items_game keys override alt)"
 
 
 def main():
@@ -53,7 +59,7 @@ def main():
     rows, report = [], []
     for wid, slot, mdir, stem, folder, suf, name, sdir, shot in CS2:
         model = "weapons/models/%s/%s.vmdl_c" % (mdir, stem)
-        row = {"id": "cs2_" + wid, "game": "cs2", "slot": slot, "name": name, "item": ITEM.get(wid, "weapon_" + wid),
+        row = {"id": "cs2_" + wid, "game": "cs2", "slot": "gear" if wid in GEAR else slot, "name": name, "item": ITEM.get(wid, "weapon_" + wid),
                "model": model if model in files else None}
         # clip folder: exact, else any folder starting with the same weapon stem
         base = "animation/anims/viewmodel/" + folder + "/"
@@ -72,18 +78,20 @@ def main():
                 hit = hits[0] if hits else None
             clips[a] = hit
         row["clips"] = clips
+        row["alt"] = ALT.get(wid, "none")
+        row["reload"] = "shell" if wid in SHELL else "magazine"
         sd = "sounds/weapons/%s/" % sdir
         snd = sorted(f for f in files if f.startswith(sd) and re.search(r"(_0?1|-1)\.vsnd_c$", f) and not re.search(r"(distant|draw|clip|bolt|inspect|silenced|sil_|unsil|empty|dry|slide|cock|zoom|hammer|reload|pump|insert|addammo|deploy)", f))
         row["sound_shot"] = snd[0] if snd else None
         if shot and sd + shot + ".vsnd_c" in files:
             row["sound_shot"] = sd + shot + ".vsnd_c"
         missing = [k for k in ("model", "sound_shot") if not row[k]] + [a for a in ACTIONS if not clips[a]]
-        row["verified"] = "paths found in the CS2 pak01_dir.vpk listing" + ("" if not missing else "; missing: " + ", ".join(missing))
+        row["verified"] = "paths found in the CS2 pak01_dir.vpk listing" + ("" if not missing else "; missing: " + ", ".join(missing)) + ALT_NOTE
         rows.append(row)
         report.append("%-16s %s" % (wid, "ok" if not missing else "missing " + ",".join(missing)))
     sheet = {"_sheet": "weapons",
-             "_doc": "Every weapon the player can hold. CS2 rows: model, viewmodel clips and shot sound are exact paths in the player's CS2 pak01_dir.vpk (checked against a listing by tools/gen_weapons.py); prep exports them to the data folder. Damage, fire rate, magazine, recoil and spread come from the player's own scripts/items/items_game.txt at runtime, never typed in. Rust rows are added by prep_weapons_rust.py.",
-             "columns": ["id", "game", "slot", "name", "item", "model", "clips", "sound_shot", "verified"],
+             "_doc": "Every weapon the player can hold. CS2 rows: model, viewmodel clips and shot sound are exact paths in the player's CS2 pak01_dir.vpk (checked against a listing by tools/gen_weapons.py); prep exports them to the data folder. Damage, fire rate, magazine, recoil and spread come from the player's own scripts/items/items_game.txt at runtime, never typed in. alt is attack2 (scope, silencer, burst, revolver fan, none), reload is magazine or shell (tube shotguns); slot gear is the Zeus, held with the knife. Rust weapons are not in this version.",
+             "columns": ["id", "game", "slot", "name", "item", "model", "clips", "sound_shot", "alt", "reload", "verified"],
              "rows": rows}
     json.dump(sheet, open(out, "w"), indent=1)
     # prep reads its own copy from the prep folder (it ships without sheets/): keep the two identical

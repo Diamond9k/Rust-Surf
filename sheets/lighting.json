@@ -10,15 +10,15 @@
   "rows": [
     {
       "id": "sun_pitch",
-      "value": -52,
-      "note": "sun elevation in degrees (negative points down)",
-      "tuned": "2026-10-08 by eye: early afternoon"
+      "value": -28,
+      "note": "sun elevation in degrees (negative points down): a low afternoon sun that sits inside the 'sun' Gauntlet view and throws long shadows",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
     },
     {
       "id": "sun_yaw",
-      "value": 140,
-      "note": "sun direction so the course runs across the light and ramps show both faces",
-      "tuned": "2026-10-08 by eye"
+      "value": -150,
+      "note": "sun azimuth: 30 deg left of the 'sun' view (yaw 0), clear of the floodlight tower; behind-left of a player facing down the course, so ramps show a lit and a shaded face",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
     },
     {
       "id": "sun_color",
@@ -41,6 +41,74 @@
       "value": 450,
       "note": "metres of directional shadow; the course is about 380 m long",
       "tuned": "2026-10-08 covers the course"
+    },
+    {
+      "id": "sun_angular",
+      "value": 0.5,
+      "note": "DirectionalLight3D angular diameter in degrees: softens shadow edges with distance (the real sun is about 0.53)",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
+    },
+    {
+      "id": "sun_disc_deg",
+      "value": 0.9,
+      "note": "visible sun disc radius in the sky, degrees (a game-sized disc, larger than the real 0.27)",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
+    },
+    {
+      "id": "sun_halo_deg",
+      "value": 6,
+      "note": "radius of the bright glow around the disc, degrees",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
+    },
+    {
+      "id": "sun_halo",
+      "value": 0.22,
+      "note": "glow strength around the disc, times the sun light",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
+    },
+    {
+      "id": "sun_disc_energy",
+      "value": 9,
+      "note": "disc brightness, times the sun light (blooms with glow on)",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
+    },
+    {
+      "id": "cloud_color",
+      "value": [
+        0.95,
+        0.95,
+        0.96
+      ],
+      "note": "sunlit cloud colour",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
+    },
+    {
+      "id": "cloud_shade",
+      "value": [
+        0.62,
+        0.66,
+        0.72
+      ],
+      "note": "colour of the thick, shaded cloud cores",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
+    },
+    {
+      "id": "cloud_cover",
+      "value": 0.42,
+      "note": "fraction of the sky with cloud, 0..1",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
+    },
+    {
+      "id": "cloud_scale",
+      "value": 1.1,
+      "note": "cloud size: higher is smaller clouds",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
+    },
+    {
+      "id": "cloud_height_fade",
+      "value": 0.06,
+      "note": "clouds fade out below this sky height (sine of elevation) so the horizon stays hazy",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
     },
     {
       "id": "sky_top",
@@ -89,6 +157,22 @@
       "tuned": "2026-10-08 by eye"
     },
     {
+      "id": "ambient_color",
+      "value": [
+        0.62,
+        0.6,
+        0.56
+      ],
+      "note": "neutral fill mixed with the sky light so shaded faces read grey concrete, not navy",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
+    },
+    {
+      "id": "ambient_sky_mix",
+      "value": 0.55,
+      "note": "share of the ambient light taken from the sky (the rest is ambient_color)",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
+    },
+    {
       "id": "fog_color",
       "value": [
         0.66,
@@ -106,9 +190,21 @@
     },
     {
       "id": "fog_sun_scatter",
-      "value": 0.25,
+      "value": 0.1,
       "note": "how much the haze glows toward the sun",
-      "tuned": "2026-10-08 by eye"
+      "tuned": "2026-10-09 world_r1 renders: 0.25 washed the sky round the sun white"
+    },
+    {
+      "id": "fog_aerial",
+      "value": 0.9,
+      "note": "how much the haze takes the sky colour behind it (1 = distant hills fade into the sky with no grey band)",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
+    },
+    {
+      "id": "fog_sky_affect",
+      "value": 0.35,
+      "note": "how much the haze covers the sky itself near the horizon",
+      "tuned": "2026-10-09 world_r1 renders, by eye"
     },
     {
       "id": "exposure",

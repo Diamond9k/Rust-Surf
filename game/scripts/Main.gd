@@ -98,21 +98,18 @@ func _lighting() -> void:
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	sun.directional_shadow_max_distance = float(L["shadow_distance"])
 	sun.shadow_blur = 0.6
+	sun.light_angular_distance = float(L["sun_angular"])
 	add_child(sun)
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
-	var sm := ProceduralSkyMaterial.new()
-	sm.sky_top_color = col.call("sky_top")
-	sm.sky_horizon_color = col.call("sky_horizon")
-	sm.ground_horizon_color = col.call("ground_horizon")
-	sm.ground_bottom_color = col.call("ground_bottom")
-	sm.sun_angle_max = 20.0
-	sky.sky_material = sm
+	sky.sky_material = Backdrop.sky_material(L)  # gradient, sun disc and clouds
 	e.sky = sky
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	e.ambient_light_energy = float(L["ambient_energy"])
+	e.ambient_light_color = col.call("ambient_color")
+	e.ambient_light_sky_contribution = float(L["ambient_sky_mix"])
 	e.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	e.tonemap_mode = Environment.TONE_MAPPER_ACES
 	e.tonemap_exposure = float(L["exposure"])
@@ -121,7 +118,8 @@ func _lighting() -> void:
 	e.fog_light_color = col.call("fog_color")
 	e.fog_density = float(L["fog_density"])
 	e.fog_sun_scatter = float(L["fog_sun_scatter"])
-	e.fog_aerial_perspective = 0.5
+	e.fog_aerial_perspective = float(L["fog_aerial"])
+	e.fog_sky_affect = float(L["fog_sky_affect"])
 	e.ssao_enabled = bool(L["ssao"])
 	e.ssao_radius = 1.5
 	e.ssao_intensity = 1.6
@@ -137,6 +135,13 @@ func _report() -> void:
 		lines.append("Missing extracted content: " + ", ".join(content.missing))
 	if not viewmodel.ok:
 		lines.append("Knife viewmodel off: " + viewmodel.why)
+	# prep's own verdict (prep.py finish): what did not export and why, so a partial install says so
+	var ps := content.dir.path_join("prep_status.json")
+	if FileAccess.file_exists(ps):
+		var st: Variant = JSON.parse_string(FileAccess.get_file_as_string(ps))
+		if st is Dictionary:
+			for l: Variant in st.get("player", []):
+				lines.append(str(l))
 	_err_lines = lines
 	hud.errors(lines)
 	hud.message("Binds: %s | sens %.2f" % [sinput.source, sinput.sensitivity], 4.0)

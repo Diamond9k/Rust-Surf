@@ -1,6 +1,6 @@
 {
   "_sheet": "course",
-  "_doc": "Course 'launch_linear': one row per piece. Godot metres, Y up, course runs along +X. ramps are triangular prisms the player surfs on ('ridge' = peak up, surf both faces; 'valley' = V, surf inside). pos is the piece centre; yaw/pitch in degrees (pitch < 0 slopes downhill along +X). material names a row in materials.json. 'tuned' is set after a real playtest, every row must reach tuned=true before release. Player-facing yaws (spawn, checkpoints) are Godot degrees: -90 faces +X along the course. kind 'decor' is scenery with no collision.",
+  "_doc": "Course 'launch_linear': one row per piece. Godot metres, Y up, course runs along +X. ramps are triangular prisms the player surfs on ('ridge' = peak up, surf both faces; 'valley' = V, surf inside). pos is the piece centre; yaw/pitch in degrees (pitch < 0 slopes downhill along +X). material names a row in materials.json. 'tuned' is set after a real playtest, every row must reach tuned=true before release. Player-facing yaws (spawn, checkpoints) are Godot degrees: -90 faces +X along the course. kind 'decor' is scenery with no collision. The ground itself is the 'terrain' block (Backdrop.gd).",
   "columns": [
     "id",
     "kind",
@@ -25,10 +25,10 @@
     "yaw": -90
   },
   "world_offset_rust": {
-    "_doc": "where the real Launch Site prefab root sits relative to the course origin, Godot metres (prefab spans x -227..207, z -93..114, ground y about 0)",
+    "_doc": "where the real Launch Site prefab root sits relative to the course origin, Godot metres. The prefab's main ground level is its y 3 (vents, warehouses and outbuildings stand at 2.9-3.3) and its west end is 6 m lower (floodlights and mounds at -3, range_terrain_slope climbs -3..2.9 over prefab x -153..-117); y -3 puts the main level at course y 0. The launch pad pit reaches prefab y -33 (course -36).",
     "pos": [
       180,
-      0,
+      -3,
       10
     ],
     "yaw": 0
@@ -215,42 +215,6 @@
       "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
     },
     {
-      "id": "site_slab",
-      "kind": "decor",
-      "shape": "box",
-      "pos": [
-        170,
-        -0.95,
-        20
-      ],
-      "yaw": 0,
-      "pitch": 0,
-      "length": 440,
-      "half_width": 105,
-      "height": 1,
-      "material": "ground",
-      "order": 97,
-      "tuned": "2026-10-09 matches the Launch Site prefab footprint"
-    },
-    {
-      "id": "ground",
-      "kind": "decor",
-      "shape": "box",
-      "pos": [
-        180,
-        -1.2,
-        0
-      ],
-      "yaw": 0,
-      "pitch": 0,
-      "length": 900,
-      "half_width": 450,
-      "height": 1,
-      "material": "terrain",
-      "order": 98,
-      "tuned": "2026-10-09 Gauntlet r3: the 900 m ground with a crisp horizon beat the 4 km one blind"
-    },
-    {
       "id": "kill_floor",
       "kind": "zone_kill",
       "shape": "box",
@@ -261,12 +225,75 @@
       ],
       "yaw": 0,
       "pitch": 0,
-      "length": 600,
-      "half_width": 300,
+      "length": 4800,
+      "half_width": 2400,
       "height": 4,
       "material": "none",
       "order": 99,
-      "tuned": "2026-10-08 bot run in release build: start->cp1->finish, PB 19.70 s, no stops"
+      "tuned": "2026-10-09 world_r1: covers the whole terrain (the ground has no collision); top at y 3 still under the end pad top 4.25"
     }
-  ]
+  ],
+  "terrain": {
+    "_doc": "Ground built by Backdrop.gd in course coordinates: the site levels, the launch pad pit (found at load time from the placed meshes, so it follows the player's Rust version) and hills outside site_rect. layers name materials.json rows: open ground, dirt (slopes, patches, pit floor), site concrete (patches inside site_rect).",
+    "layers": [
+      "terrain",
+      "dirt",
+      "ground"
+    ],
+    "base_y": 0,
+    "steps": [
+      {
+        "x0": 27,
+        "x1": 63,
+        "dy": -6,
+        "_doc": "west of x0 the ground is 6 m lower, rising to base_y at x1: matches the two range_terrain_slope meshes (course x 27..63, y -6..-0.1)"
+      }
+    ],
+    "site_rect": [
+      -100,
+      -150,
+      480,
+      150
+    ],
+    "cell": 2.0,
+    "extent": 2600,
+    "growth": 1.09,
+    "pit_lip": 0.4,
+    "pit_floor_y": -36,
+    "hills": {
+      "height": 70,
+      "ramp": 500,
+      "floor": 0.15,
+      "period": 420,
+      "seed": 11,
+      "far_height": 230,
+      "far_start": 700,
+      "far_end": 2000,
+      "far_period": 900,
+      "_doc": "height/ramp/floor/period/seed: rolling hills that start at the site_rect edge; far_*: ridged hills that rise between far_start and far_end metres out so the horizon is a skyline. A look, not Rust's terrain (unverified)"
+    },
+    "shading": {
+      "site_fade": 45,
+      "site_cover": 0.32,
+      "dirt_cover": 0.2,
+      "macro_period": 90,
+      "macro_strength": 0.22,
+      "far_start": 50,
+      "far_scale": 4,
+      "tint_a": [
+        0.8,
+        0.88,
+        0.66
+      ],
+      "tint_b": [
+        0.95,
+        0.9,
+        0.8
+      ],
+      "tint_period": 260,
+      "_doc": "terrain shader uniforms. site_shade darkens the site concrete patches (pale patches read as snow); tint_a/tint_b: olive and khaki colour patches over the open ground every ~tint_period metres (a look, unverified against Rust's biome colours)",
+      "site_shade": 0.8
+    },
+    "tuned": "2026-10-09 world_r1_3 renders: pit edges, slope, far ridgeline and ground tints checked by eye; hill heights and tints are a look, not Rust's terrain (unverified)"
+  }
 }

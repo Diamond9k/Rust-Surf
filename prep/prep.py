@@ -1,32 +1,32 @@
 """RustSurf prep: run once by Melty before the first start.
 Reads every content.json row from the Rust and CS2 installs of the player into --out.
-usage: prep.py --rust <Rust dir> --cs2 <CS2 dir> --out <data dir> --tools <dir> --version <v>"""
-import os, sys, json, argparse, subprocess, time, traceback
+usage: prep.py --rust <Rust dir> --cs2 <CS2 dir> --out <data dir> --tools <dir> --version <v>
+Writes done-<version>.txt only when every content.json row and every weapons.json weapon is in place;
+otherwise exits 1 with the reasons on screen, in prep.log and in prep_status.json (the game shows them)."""
+import os, sys, json, glob, argparse, time, traceback
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import lazybundle
-lazybundle.install()
-import UnityPy
-import prep_rust
-from prep_rust import load_env, material_files, decode_fsb, LOG
-import prep_scene
-import normals
-import items_game
+import prep_cs2
+LOG = print
 
 RUST_BUNDLES = ["content.bundle", "assetscenes.bundle", "audio.bundle",
                 "textures.0.bundle", "textures.1.bundle", "textures.2.bundle", "textures.3.bundle", "textures.4.bundle"]
-
-
-def rows(kind=None, game=None):
-    sheet = json.load(open(os.path.join(HERE, "content.json"), encoding="utf-8"))
-    return [r for r in sheet["rows"] if (kind is None or r["kind"] == kind) and (game is None or r["game"] == game)]
 
 
 def rust_step(a):
     for b in RUST_BUNDLES:
         p = os.path.join(a.rust, "Bundles", "shared", b)
         if not os.path.exists(p):
-            raise RuntimeError("Rust bundle missing: " + p)
+            raise prep_cs2.PrepError("Rust not found: no Bundles/shared/%s in %s (install or verify Rust in Steam)" % (b, a.rust))
+    if not os.path.isfile(a.vgm):
+        raise prep_cs2.PrepError("vgmstream-cli.exe is missing from %s (reinstall Rust Surf)" % os.path.dirname(a.vgm))
+    import lazybundle  # UnityPy only here, so the CS2 side and prep/tests run without it
+    lazybundle.install()
+    import UnityPy
+    import prep_scene, normals
+    import prep_rust
+    from prep_rust import load_env, material_files, decode_fsb
+    prep_rust.LOG = prep_scene.LOG = LOG
     env = load_env(UnityPy, a.rust, RUST_BUNDLES, lambda n: "monument.1" in n or not n.startswith("BuildPlayer-"))
     out = a.out
     tex_dir = os.path.join(out, "rust", "tex")
@@ -68,122 +68,90 @@ def rust_step(a):
     normals.fix_dir(tex_dir, LOG)
 
 
-def cs2_step(a):
-    vpk = os.path.join(a.cs2, "game", "csgo", "pak01_dir.vpk")
-    gi = os.path.join(a.cs2, "game", "csgo", "gameinfo.gi")
-    if not os.path.exists(vpk):
-        raise RuntimeError("CS2 pak01_dir.vpk missing: " + vpk)
-    outdir = os.path.join(a.out, "cs2")
-    os.makedirs(outdir, exist_ok=True)
-    plain, gltf = [], []
-    for r in rows(game="cs2"):
+def rows(kind=None, game=None):
+    return [r for r in prep_cs2.sheet("content")["rows"] if (kind is None or r["kind"] == kind) and (game is None or r["game"] == game)]
+
+
+def content_missing(out):
+    """content.json rows whose output is not in the data folder (a pattern needs one match, a {a,b} list all)."""
+    miss = []
+    for r in rows():
         if r["kind"] == "config":
             continue
-        src = r["source"].split(" ")[0]
-        if ".." in src:  # concrete_ct_01..04 -> four files
-            base, rng = src.split("_0")[0], src.split("_0")[1]
-            lo, hi = rng.split(".vsnd_c")[0].split("..")
-            for i in range(int(lo), int(hi) + 1):
-                plain.append("%s_%02d.vsnd_c" % (base, i))
-        elif r["kind"] in ("model", "animation"):
-            gltf.append(src)
-        else:
-            plain.append(src)
-    def run(args):
-        cmd = [a.vrf, "-i", vpk, "-o", outdir, "-d"] + args
-        r = subprocess.run(cmd, capture_output=True, text=True)
-        if r.returncode != 0:
-            LOG("VRF failed: " + (r.stderr or r.stdout)[-400:])
-        return r.returncode == 0
-    LOG("cs2 sounds: %d" % len(plain))
-    run(["-f", ",".join(plain)])
-    LOG("cs2 models+clips: %d" % len(gltf))
-    run(["-f", ",".join(gltf), "--gltf_export_format", "glb", "--gltf_export_materials", "--gltf_export_animations", "--game", gi])
-    weapons_step(a, run, gi)
+        pats = prep_cs2.expand(r["out"].split(" ")[0])
+        if not all(glob.glob(os.path.join(out, p)) if "*" in p else prep_cs2.file_ok(os.path.join(out, p)) for p in pats):
+            miss.append(r["id"])
+    return miss
 
 
-def weapons_step(a, run, gi):
-    """weapons.json: every CS2 weapon model, its viewmodel clips and shot sound, plus items_game.txt
-    for the stats. Same VRF calls as the knife rows; the output keeps the VPK paths."""
-    sheet = json.load(open(os.path.join(HERE, "weapons.json"), encoding="utf-8"))
-    models, sounds = [], ["scripts/items/items_game.txt"]
-    for w in sheet["rows"]:
-        if w.get("game") != "cs2":
-            continue
-        models.append(w["model"])
-        models += sorted(set(w["clips"].values()))
-        sounds.append(w["sound_shot"])
-    models = sorted(set(models))
-    LOG("cs2 weapons: %d models+clips, %d sounds+scripts" % (len(models), len(sounds)))
-    run(["-f", "scripts/items/items_game.txt"])  # alone, so a bad sound path cannot cost the stats
-    run(["-f", ",".join(sounds[1:])])
-    outdir = os.path.join(a.out, "cs2")
-    ig = os.path.join(outdir, "scripts", "items", "items_game.txt")
-    if os.path.exists(ig):
-        names = [w["item"] for w in sheet["rows"] if w.get("game") == "cs2"]
-        st = items_game.stats(ig, names)
-        json.dump(st, open(os.path.join(outdir, "weapon_stats.json"), "w"), indent=1)
-        LOG("weapon stats: %d of %d weapons from items_game.txt" % (len(st), len(names)))
-    else:
-        LOG("items_game.txt missing: weapons use weapon_defaults.json")
-    for i in range(0, len(models), 40):  # keep each command line well under the Windows limit
-        run(["-f", ",".join(models[i:i + 40]), "--gltf_export_format", "glb", "--gltf_export_materials", "--gltf_export_animations", "--game", gi])
+def finish(a, problems, warnings, log):
+    """done-<version>.txt only when nothing essential is missing; prep_status.json either way, which the
+    game shows on its error panel (Main._report), so a broken install never looks like a working one."""
+    status = {"version": a.version, "ok": not problems, "problems": problems, "warnings": warnings,
+              "player": ["Prep: " + p for p in problems] + ["Prep warning: " + w for w in warnings]}
+    with open(os.path.join(a.out, "prep_status.json"), "w", encoding="utf-8") as f:
+        json.dump(status, f, indent=1)
+    done = os.path.join(a.out, "done-%s.txt" % a.version)
+    if problems:
+        if os.path.exists(done):
+            os.remove(done)
+        log("")
+        log("RUST SURF SETUP DID NOT FINISH (%d problem(s)); Melty runs it again on the next start:" % len(problems))
+        for p in problems:
+            log("  - " + p)
+        log("Details: " + os.path.join(a.out, "prep.log"))
+        return 1
+    with open(done, "w", encoding="utf-8") as f:
+        f.write("ok %s warnings=%s\n" % (a.version, warnings))
+    log("RUST SURF SETUP OK (%s)%s" % (a.version, "; warnings: " + "; ".join(warnings) if warnings else ""))
+    return 0
 
 
-def weapons_missing(a):
-    """Weapons whose model, idle clip or shot sound did not export (the game greys these out)."""
-    sheet = json.load(open(os.path.join(HERE, "weapons.json"), encoding="utf-8"))
-    out = []
-    base = os.path.join(a.out, "cs2")
-    for w in sheet["rows"]:
-        if w.get("game") != "cs2":
-            continue
-        need = [os.path.splitext(w["model"])[0] + ".glb", os.path.splitext(w["clips"]["idle"])[0] + ".glb"]
-        snd = os.path.splitext(w["sound_shot"])[0]
-        ok = all(os.path.exists(os.path.join(base, p)) for p in need) and any(os.path.exists(os.path.join(base, snd + e)) for e in (".wav", ".mp3"))
-        if not ok:
-            out.append(w["id"])
-    if not os.path.exists(os.path.join(base, "weapon_stats.json")):
-        out.append("weapon_stats.json")
-    return out
-
-
-def main():
+def main(argv=None, steps=None, runner=None):
+    """Runs both games, then finish(); returns the exit code. steps/runner are for prep/tests."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--rust", required=True); ap.add_argument("--cs2", required=True)
     ap.add_argument("--out", required=True); ap.add_argument("--tools", default=HERE)
     ap.add_argument("--version", default="dev")
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     a.vrf = os.path.join(a.tools, "vrf", "Source2Viewer-CLI.exe")
     a.vgm = os.path.join(a.tools, "vgm", "vgmstream-cli.exe")
+    a.runner = runner
     os.makedirs(a.out, exist_ok=True)
-    log = open(os.path.join(a.out, "prep.log"), "a", encoding="utf-8")
-    def both(s):
-        print(s, flush=True); log.write(s + "\n"); log.flush()
-    prep_rust.LOG = both; prep_scene.LOG = both
-    global LOG; LOG = both
-    t = time.time()
-    try:
-        both("prep %s start; rust=%s cs2=%s" % (a.version, a.rust, a.cs2))
-        errors = []
-        for step in (cs2_step, rust_step):  # one game failing must not skip the other
-            try:
-                step(a)
-            except Exception:
-                both(traceback.format_exc())
-                errors.append(step.__name__)
-        missing = [r["id"] for r in rows() if r["kind"] != "config" and "{" not in r["out"] and "*" not in r["out"] and not os.path.exists(os.path.join(a.out, r["out"].split(" ")[0]))]
-        wmiss = weapons_missing(a)
-        both("done in %.0fs; missing rows: %s; weapons missing: %s" % (time.time() - t, missing or "none", wmiss or "none"))
-        missing += ["weapon:" + w for w in wmiss]
-        if errors:
-            both("prep failed in %s; no done file, so Melty runs it again" % errors)
-            sys.exit(1)
-        open(os.path.join(a.out, "done-%s.txt" % a.version), "w").write("ok %s missing=%s\n" % (a.version, missing))
-    except Exception:
-        both(traceback.format_exc())
-        sys.exit(1)
+    with open(os.path.join(a.out, "prep.log"), "a", encoding="utf-8") as log:
+        def both(s):
+            print(s, flush=True); log.write(s + "\n"); log.flush()
+        global LOG
+        LOG = prep_cs2.LOG = both
+        t = time.time()
+        problems, warnings = [], []
+        try:
+            both("prep %s start; rust=%s cs2=%s" % (a.version, a.rust, a.cs2))
+            for step in steps or (cs2_step, rust_step):  # one game failing must not skip the other
+                try:
+                    p = step(a)
+                    if p:
+                        problems += p[0]; warnings += p[1]
+                except prep_cs2.PrepError as e:
+                    both("%s: %s" % (step.__name__, e))
+                    problems.append(str(e))
+                except Exception as e:
+                    both(traceback.format_exc())
+                    problems.append("%s crashed (%s: %s)" % (step.__name__, type(e).__name__, e))
+            missing = content_missing(a.out)
+            if missing:
+                both("content rows missing: " + ", ".join(missing))
+                problems.append("content not extracted: " + prep_cs2.short(missing))
+            both("done in %.0fs" % (time.time() - t))
+        except Exception as e:
+            both(traceback.format_exc())
+            problems.append("prep crashed (%s: %s)" % (type(e).__name__, e))
+        return finish(a, problems, warnings, both)
+
+
+def cs2_step(a):
+    return prep_cs2.cs2_step(a)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

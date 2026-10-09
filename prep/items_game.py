@@ -1,77 +1,122 @@
 """Weapon stats from the player's own CS2 scripts/items/items_game.txt (KeyValues text).
 An item ("items" -> "7" -> name weapon_ak47) inherits its prefab chain ("prefab" "weapon_ak47_prefab",
 which names "rifle", ...); attributes merge with the item's own values winning.
-stats(path, names) -> {weapon_name: {attribute: value}} for the attributes the game uses."""
+Platform conditionals ([$WIN32], [!$X360]) are evaluated for Windows; escapes (\\" \\n \\\\) are decoded.
+stats(path, names) -> {weapon_name: {attribute: value}}, every attribute of the chain (Weapons.gd picks).
+The structure is the one CS:GO's items_game.txt used; the real CS2 file is unverified here (see MODLOG)."""
 import json, sys
 
-WANT = ["damage", "cycletime", "primary clip size", "primary reserve ammo max", "headshot multiplier",
-        "range modifier", "range", "armor ratio", "is full auto", "max player speed", "bullets",
-        "penetration", "spread", "inaccuracy stand", "inaccuracy crouch", "inaccuracy move",
-        "inaccuracy jump", "inaccuracy fire", "recoil angle", "recoil angle variance", "recoil magnitude",
-        "recoil magnitude variance", "recovery time stand", "zoom levels", "zoom fov 1", "zoom fov 2"]
+ESCAPES = {"n": "\n", "t": "\t", "\\": "\\", '"': '"'}
+# Platform defines KeyValues conditionals test: prep runs on Windows for the Windows CS2 build.
+DEFINES = {"$WIN32", "$WIN64", "$WINDOWS", "$PC"}
+
+
+def cond_true(expr):
+    """[$WIN32], [!$X360], [$WIN32||$OSX], [$WINDOWS&&!$X360] against DEFINES."""
+    def term(t):
+        t = t.strip()
+        neg = t.startswith("!")
+        return (t.lstrip("!").strip().upper() in DEFINES) != neg
+    return any(all(term(t) for t in alt.split("&&")) for alt in expr.split("||"))
 
 
 def tokens(text):
+    """("{",) ("}",) ("s", string) ("c", conditional) from KeyValues text."""
     i, n = 0, len(text)
     while i < n:
         c = text[i]
-        if c in " \t\r\n":
+        if c in " \t\r\n﻿":
             i += 1
         elif c == "/" and text.startswith("//", i):
             j = text.find("\n", i)
             i = n if j < 0 else j
         elif c in "{}":
-            yield c
+            yield (c,)
             i += 1
         elif c == '"':
             j = i + 1
             buf = []
             while j < n and text[j] != '"':
                 if text[j] == "\\" and j + 1 < n:
-                    buf.append(text[j + 1]); j += 2
+                    buf.append(ESCAPES.get(text[j + 1], "\\" + text[j + 1])); j += 2
                 else:
                     buf.append(text[j]); j += 1
             yield ("s", "".join(buf))
             i = j + 1
-        elif c == "[":  # platform conditionals like [$WIN32]
+        elif c == "[":
             j = text.find("]", i)
-            i = n if j < 0 else j + 1
+            j = n if j < 0 else j
+            yield ("c", text[i + 1:j])
+            i = j + 1
         else:
             j = i
-            while j < n and text[j] not in " \t\r\n{}\"":
+            while j < n and text[j] not in " \t\r\n{}\"[":
                 j += 1
             yield ("s", text[i:j])
             i = j
 
 
 def parse(text):
-    """Nested dicts; a key seen twice in one block merges when both are blocks, else the last wins."""
+    """Nested dicts. A key seen twice in one block merges when both are blocks, else the last wins.
+    A conditional after a value drops that value when false; after a key, it drops the block."""
     root, stack, key = {}, [], None
     cur = root
+    undo = None      # (block, key, previous value or _NONE) of the last key/value, for a trailing conditional
+    skip = False     # the next block belongs to a false conditional
     for t in tokens(text):
-        if t == "{":
-            child = cur.get(key) if isinstance(cur.get(key), dict) else {}
-            cur[key] = child
+        if t[0] == "{":
+            if skip:
+                child = {}
+            else:
+                child = cur.get(key) if isinstance(cur.get(key), dict) else {}
+                cur[key] = child
             stack.append(cur)
-            cur, key = child, None
-        elif t == "}":
+            cur, key, undo, skip = child, None, None, False
+        elif t[0] == "}":
             cur = stack.pop() if stack else root
-            key = None
+            key, undo, skip = None, None, False
+        elif t[0] == "c":
+            if key is not None:
+                skip = not cond_true(t[1])
+            elif undo is not None:
+                if not cond_true(t[1]):
+                    blk, k, old = undo
+                    if old is _NONE:
+                        blk.pop(k, None)
+                    else:
+                        blk[k] = old
+                undo = None
         elif key is None:
-            key = t[1]
+            key, undo = t[1], None
         else:
+            undo = (cur, key, cur.get(key, _NONE))
             cur[key] = t[1]
-            key = None
+            key, skip = None, False
     return root
 
 
+_NONE = object()
+
+
 def _attrs(block):
+    """An item's attributes: "damage" "36", or the block form "name" { "attribute_class" .. "value" "36" }."""
     a = block.get("attributes", {})
-    return {k: v for k, v in a.items() if not isinstance(v, dict)} if isinstance(a, dict) else {}
+    if not isinstance(a, dict):
+        return {}
+    out = {}
+    for k, v in a.items():
+        if isinstance(v, dict):
+            if "value" in v and not isinstance(v["value"], dict):
+                out[k] = v["value"]
+        else:
+            out[k] = v
+    return out
 
 
 def stats(path, names):
-    root = parse(open(path, encoding="utf-8", errors="replace").read())
+    """{weapon_name: every attribute of its prefab chain} for the names found (missing names are left out)."""
+    with open(path, encoding="utf-8", errors="replace") as f:
+        root = parse(f.read())
     ig = root.get("items_game", root)
     prefabs = ig.get("prefabs", {})
     items = ig.get("items", {})
@@ -94,7 +139,7 @@ def stats(path, names):
         if it is None:
             continue
         a = chain(it, set())
-        res[n] = {k: a[k] for k in WANT if k in a}
+        res[n] = dict(sorted(a.items()))
     return res
 
 

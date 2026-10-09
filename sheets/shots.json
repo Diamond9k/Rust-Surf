@@ -94,13 +94,13 @@
       "pos": [
         0,
         300.05,
-        617
+        627
       ],
       "yaw": 0,
-      "pitch": 0,
-      "frames": 30,
-      "what": "aim lobby spawn looking at the back wall targets",
-      "verified": "2026-10-09 rendered in Gauntlet round 1 (g1)"
+      "pitch": -4,
+      "frames": 60,
+      "what": "aim lobby spawn: the numbered lanes and bots down range, with the round HUD",
+      "verified": "2026-10-09 rendered in lobby_r1_7 (Gauntlet round 1): lanes, raised and floor bots, round HUD"
     }
   ]
 }

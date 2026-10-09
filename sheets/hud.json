@@ -1,0 +1,209 @@
+{
+  "_sheet": "hud",
+  "_doc": "Numbers for the HUD (Hud.gd) and the Esc menu layout (Settings.gd). HUD sizes are pixels at ref_height and scale with the window height; crosshair maths follows the Source crosshair (YRES = h / 480).",
+  "columns": [
+    "id",
+    "value",
+    "unit",
+    "note",
+    "verified"
+  ],
+  "rows": [
+    {
+      "id": "ref_height",
+      "value": 1080,
+      "unit": "px",
+      "note": "window height the HUD pixel sizes below are written for; everything scales by height/ref_height",
+      "verified": "design value: CS2 HUD scales with window height, exact rule unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "font_health",
+      "value": 40,
+      "unit": "px",
+      "note": "health and armor numbers",
+      "verified": "design value matched by eye to CS2 at 1080p, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "font_clip",
+      "value": 40,
+      "unit": "px",
+      "note": "ammo in the clip",
+      "verified": "design value matched by eye to CS2 at 1080p, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "font_reserve",
+      "value": 22,
+      "unit": "px",
+      "note": "'/ reserve' after the clip",
+      "verified": "design value, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "font_weapon",
+      "value": 16,
+      "unit": "px",
+      "note": "weapon name above the ammo",
+      "verified": "design value, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "font_timer",
+      "value": 34,
+      "unit": "px",
+      "note": "surf run timer, top centre like the CS2 round clock",
+      "verified": "design value, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "font_pb",
+      "value": 15,
+      "unit": "px",
+      "note": "PB under the timer",
+      "verified": "design value"
+    },
+    {
+      "id": "font_speed",
+      "value": 30,
+      "unit": "px",
+      "note": "speed readout, bottom centre (surf servers)",
+      "verified": "design value"
+    },
+    {
+      "id": "font_msg",
+      "value": 34,
+      "unit": "px",
+      "note": "centre message",
+      "verified": "design value"
+    },
+    {
+      "id": "bar_height",
+      "value": 64,
+      "unit": "px",
+      "note": "bottom-left and bottom-right HUD strips",
+      "verified": "design value matched by eye to CS2, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "bar_width",
+      "value": 420,
+      "unit": "px",
+      "note": "width of each bottom strip before it fades out",
+      "verified": "design value, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "health",
+      "value": 100,
+      "unit": "hp",
+      "note": "shown health: surf and the aim lobby have no damage to the player",
+      "verified": "fixed by design (no player damage in the mashup)"
+    },
+    {
+      "id": "armor",
+      "value": 100,
+      "unit": "ap",
+      "note": "shown armor (Kevlar), fixed",
+      "verified": "fixed by design (no player damage in the mashup)"
+    },
+    {
+      "id": "low_ammo_frac",
+      "value": 0.2,
+      "unit": "of clip",
+      "note": "clip turns red at or under this share of a full clip (min 1)",
+      "verified": "kept from Hud.gd v0.2; CS2 threshold unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "yres_base",
+      "value": 480,
+      "unit": "px",
+      "note": "crosshair length/thickness px = convar x height / yres_base (Source YRES)",
+      "verified": "Source/CS:GO crosshair code as remembered, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "gap_base",
+      "value": 4,
+      "unit": "units",
+      "note": "static crosshair distance = (gap_base + cl_crosshairgap) x height / gap_ref_height",
+      "verified": "Source/CS:GO crosshair code as remembered, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "gap_ref_height",
+      "value": 1200,
+      "unit": "px",
+      "note": "see gap_base",
+      "verified": "Source/CS:GO crosshair code as remembered, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "spread_units",
+      "value": 320,
+      "unit": "units",
+      "note": "dynamic distance += (spread + inaccuracy in rad) x spread_units / tan(fov/2), in YRES units: the arms sit on the edge of the spread cone",
+      "verified": "Source/CS:GO crosshair code as remembered, unverified: not checked against the CS2 client; the maths puts the arm tips on the 4:3 fov 90 spread circle (checked by hand)"
+    },
+    {
+      "id": "dynamic_rate",
+      "value": 12,
+      "unit": "1/s",
+      "note": "how fast the dynamic gap eases toward the current spread",
+      "verified": "design value, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "hit_inner",
+      "value": 9,
+      "unit": "px",
+      "note": "hit marker: inner end of each diagonal",
+      "verified": "design value, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "hit_outer",
+      "value": 20,
+      "unit": "px",
+      "note": "hit marker: outer end",
+      "verified": "design value, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "hit_width",
+      "value": 2.5,
+      "unit": "px",
+      "note": "hit marker line width",
+      "verified": "design value"
+    },
+    {
+      "id": "hit_time",
+      "value": 0.15,
+      "unit": "s",
+      "note": "hit marker fade",
+      "verified": "kept from Hud.gd v0.2"
+    },
+    {
+      "id": "hit_sound",
+      "value": "hitmarker",
+      "unit": "sounds.json id",
+      "note": "played on every hit when sounds.json has this row; there is none yet (no CS2 hit sound in content.json), so hits are silent",
+      "verified": "checked: sounds.json has no 'hitmarker' row on 2026-10-09"
+    },
+    {
+      "id": "menu_ref_height",
+      "value": 720,
+      "unit": "px",
+      "note": "the Esc menu is laid out for this height and scales by height/menu_ref_height",
+      "verified": "design value; rendered at 960x540 and 1920x1080 (ui_r1 renders)"
+    },
+    {
+      "id": "menu_font",
+      "value": 16,
+      "unit": "px",
+      "note": "menu body text",
+      "verified": "design value"
+    },
+    {
+      "id": "menu_row",
+      "value": 34,
+      "unit": "px",
+      "note": "menu row height",
+      "verified": "design value"
+    },
+    {
+      "id": "menu_width",
+      "value": 900,
+      "unit": "px",
+      "note": "settings column width (clamped to the window)",
+      "verified": "design value"
+    }
+  ]
+}

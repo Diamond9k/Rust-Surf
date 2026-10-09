@@ -1,0 +1,39 @@
+{
+  "_sheet": "prep",
+  "_doc": "The numbers prep.py runs on: how it batches, retries and times out the Source2Viewer-CLI (VRF) exports from the player's CS2 VPK. Read from prep/prep.json (a copy of this sheet) on the player's PC. None of these are game facts; they are this build's choices.",
+  "columns": ["id", "value", "unit", "used_by", "note", "verified"],
+  "rows": [
+    {
+      "id": "vrf_batch_files",
+      "value": 40,
+      "unit": "files",
+      "used_by": "prep_cs2.export: most VPK paths in one VRF -f call",
+      "note": "fewer calls means less VRF start-up time (it opens the 30+ GB VPK index each run)",
+      "verified": "build choice; 40 used since 0.2.0"
+    },
+    {
+      "id": "vrf_batch_chars",
+      "value": 6000,
+      "unit": "characters",
+      "used_by": "prep_cs2.export: longest comma-joined -f list in one VRF call",
+      "note": "Windows CreateProcess caps a command line at 32767 characters; this keeps a call far under it with long install paths",
+      "verified": "build choice; the 32767 limit is the documented Windows CreateProcess limit"
+    },
+    {
+      "id": "vrf_retries",
+      "value": 2,
+      "unit": "rounds",
+      "used_by": "prep_cs2.export: after the batched calls, each file that still failed the output check is exported again on its own this many times",
+      "note": "one file per call on a retry, so one bad path cannot cost the rest of its batch",
+      "verified": "build choice; tested with a fake VRF that drops files (prep/tests/test_export.py)"
+    },
+    {
+      "id": "vrf_timeout_s",
+      "value": 1800,
+      "unit": "seconds",
+      "used_by": "prep_cs2.run_vrf: a VRF call that runs longer is killed and its files count as failed (then retried)",
+      "note": "the 0.1.0 install exported 5 models and clips in one call well inside this; 40 weapon models per call is unmeasured",
+      "verified": "build choice, unverified against a real 40-model call"
+    }
+  ]
+}

@@ -103,6 +103,26 @@
       "verified": "2026-10-09 present in this PC's 0.1.0 data folder (exported with the backdrop materials)"
     },
     {
+      "id": "tex_land_slide",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material land_slide_blend (Launch Site, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/land_slide_blend_{albedo,normal}.png",
+      "used_by": "materials.dirt (terrain slopes, dirt patches, launch pad pit floor)",
+      "verified": "2026-10-09 present in the local prep output (exported with the backdrop materials, listed in launch_site_placements.json materials); seen in world_r1 renders"
+    },
+    {
+      "id": "tex_concrete_d_chute",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material concrete_d_chute (Launch Site, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/concrete_d_chute_{albedo,normal}.png",
+      "used_by": "materials (cracked weathering layer on concrete ramps)",
+      "verified": "2026-10-09 present in the local prep output (exported with the backdrop materials, listed in launch_site_placements.json materials); seen in world_r1 renders"
+    },
+    {
       "id": "amb_wind_rust",
       "game": "rust",
       "kind": "audio",

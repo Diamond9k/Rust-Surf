@@ -1,4 +1,5 @@
-## systems.viewmodel: the CS2 arms + default CT knife with its real draw / idle / inspect clips.
+## systems.viewmodel: the CS2 arms + default CT knife with its real draw / idle / inspect clips, any
+## CS2 gun with its clips, and a procedural kick for the actions a weapon has no clip for.
 ## The clip glb carries the viewmodel skeleton (56 bones) with the animation keyed on it. The arms
 ## mesh is skinned to a bigger skeleton (82 bones) by index, so its Skin gets bind names and the
 ## missing bones are added to the clip skeleton before the mesh is re-parented onto it.
@@ -18,6 +19,8 @@ var _arms_skel: Skeleton3D
 var _knife_skel: Skeleton3D
 var _wpn := -1
 var _weapon_rest := Transform3D.IDENTITY
+var _kick := ""          # procedural move when a weapon has no clip for it: shot, slash, stab
+var _kick_t := 1.0
 
 ## The arms keep CS2's viewmodel_fov while the world uses fov 90. Squeezing the rig in the camera
 ## plane by k = tan(fov/2) / tan(viewmodel_fov/2) (both Source fovs, horizontal at 4:3) projects it
@@ -162,6 +165,45 @@ func play(clip: String) -> bool:
 	anim.stop()
 	anim.play(_clips[clip])
 	return true
+
+## Our clip name playing now ("" when none of ours is).
+func current() -> String:
+	if anim == null or not anim.is_playing():
+		return ""
+	for k in _clips:
+		if _clips[k] == anim.current_animation:
+			return k
+	return ""
+
+## A short procedural move of the whole rig for actions the extracted clips do not cover (the default
+## knife ships no attack clips here): shot kicks back and up, slash sweeps right to left, stab thrusts.
+func kick(kind: String) -> void:
+	_kick = kind
+	_kick_t = 0.0
+
+func _process(dt: float) -> void:
+	if rig == null or _kick == "":
+		return
+	var dur := 0.12 if _kick == "shot" else (0.35 if _kick == "slash" else 0.5)
+	_kick_t += dt / dur
+	if _kick_t >= 1.0:
+		_kick = ""
+		rig.transform = Transform3D.IDENTITY
+		return
+	var w := sin(_kick_t * PI)  # out and back
+	var pos := Vector3.ZERO
+	var rot := Vector3.ZERO
+	match _kick:
+		"shot":
+			pos = Vector3(0, 0.004, 0.025) * w
+			rot = Vector3(deg_to_rad(2.5), 0, 0) * w
+		"slash":
+			pos = Vector3(lerpf(0.05, -0.08, _kick_t), 0.02, -0.04) * w
+			rot = Vector3(0, deg_to_rad(lerpf(-25.0, 35.0, _kick_t)), deg_to_rad(30.0)) * w
+		"stab":
+			pos = Vector3(-0.03, 0.03, -0.12) * w
+			rot = Vector3(deg_to_rad(-12.0), deg_to_rad(10.0), 0) * w
+	rig.transform = Transform3D(Basis.from_euler(rot), pos)
 
 func clip_length(clip: String) -> float:
 	if anim == null or not _clips.has(clip):

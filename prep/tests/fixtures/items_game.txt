@@ -1,0 +1,241 @@
+// Synthetic items_game.txt for prep/tests. Written by hand, not copied from CS2.
+// Its structure follows CS:GO's items_game.txt (prefabs with nested "attributes", items that name a
+// prefab, prefab chains, [$WIN32]-style conditionals, escaped quotes); the numbers are test values
+// chosen so a wrong merge shows up, not CS2 facts.
+#base "items_game_cdn.txt"
+"items_game"
+{
+	"game_info"
+	{
+		"first_valid_class"		"2"
+		"last_valid_class"		"3"
+		"first_valid_item_slot"		"0"
+	}
+	"rarities"
+	{
+		"default"
+		{
+			"value"		"0"
+			"loc_key"		"Rarity_Default"
+			"color"		"desc_default"
+		}
+	}
+	"prefabs"
+	{
+		"weapon_base"
+		{
+			"item_class"		"weapon_base"
+			"craft_class"		"weapon"
+			"attributes"
+			{
+				"max player speed"		"250"
+				"in game price"		"0"
+				"heat per shot"		"0.300000"
+				"range"		"4096"
+				"primary clip size"		"1"
+			}
+		}
+		"primary"
+		{
+			"prefab"		"weapon_base"
+			"item_slot"		"primary"
+			"attributes"
+			{
+				"range"		"8192"
+			}
+		}
+		"secondary"
+		{
+			"prefab"		"weapon_base"
+			"item_slot"		"secondary"
+		}
+		"statted_item_base"
+		{
+			"attributes"
+			{
+				"kill eater score type"
+				{
+					"attribute_class"		"kill_eater_score_type"
+					"value"		"0"
+				}
+			}
+		}
+		"rifle"
+		{
+			"prefab"		"primary"
+			"item_type_name"		"#CSGO_Type_Rifle"
+			"attributes"
+			{
+				"is full auto"		"1"
+				"headshot multiplier"		"4"
+				"primary reserve ammo max"		"90"
+				"penetration"		"2"
+			}
+		}
+		"pistol"
+		{
+			"prefab"		"secondary"
+			"item_type_name"		"#CSGO_Type_Pistol"
+			"attributes"
+			{
+				"is full auto"		"0"
+				"headshot multiplier"		"4"
+				"penetration"		"1"
+			}
+		}
+		"weapon_ak47_prefab"
+		{
+			"prefab"		"rifle statted_item_base"
+			"item_class"		"weapon_ak47"
+			"item_name"		"#SFUI_WPNHUD_AK47"
+			"item_description"		"#CSGO_Item_Desc_AK47"
+			"image_inventory"		"econ/weapons/base_weapons/weapon_ak47"
+			"model_player"		"weapons/models/ak47/weapon_rif_ak47.vmdl"
+			"attributes"
+			{
+				"primary clip size"		"30"
+				"damage"		"36"
+				"cycletime"		"0.100000"
+				"cycletime"		"0.200000"		[$X360]
+				"armor ratio"		"1.550000"
+				"range modifier"		"0.980000"
+				"spread"		"0.600000"
+				"inaccuracy fire"		"7.800000"
+				"recoil angle"		"0"
+				"recoil angle variance"		"70"
+				"recoil magnitude"		"30"
+				"recoil magnitude variance"		"0"
+				"recoil seed"		"223"
+				"max player speed"		"215"
+				"max player speed"		"200"		[!$WIN32]
+				"in game price"		"2700"
+				"in game price"		"2500"		[$WIN32||$OSX]
+			}
+			"inventory_image_data"
+			{
+				"camera_angles"		"-2.0 -129.0 0.0"
+				"camera_offset"		"12.0 -0.3 1.2"
+			}
+			"visuals"
+			{
+				"weapon_type"		"Rifle"
+				"sound_single_shot"		"Weapon_AK47.Single"
+				"tracer_frequency"		"3"
+			}
+			"console_only" [$X360]
+			{
+				"attributes"
+				{
+					"damage"		"99"
+				}
+			}
+		}
+		"weapon_m4a1_prefab"
+		{
+			"prefab"		"rifle"
+			"item_class"		"weapon_m4a1"
+			"item_name"		"#SFUI_WPNHUD_M4A1"
+			"attributes"
+			{
+				"primary clip size"		"30"
+				"damage"		"33"
+				"cycletime"		"0.090000"
+				"primary reserve ammo max"		"90"
+				"zoom levels"		"0"
+			}
+		}
+	}
+	"prefabs"
+	{
+		// a second "prefabs" section: blocks of the same name merge, as in the real file's include order
+		"weapon_glock_prefab"
+		{
+			"prefab"		"pistol"
+			"item_class"		"weapon_glock"
+			"attributes"
+			{
+				"primary clip size"		"20"
+				"primary reserve ammo max"		"120"
+				"damage"		"30"
+				"cycletime"		"0.150000"
+				"cycletime alt"		"0.500000"
+				"has burst mode"		"1"
+			}
+		}
+		// a weapon with no entry under "items": stats() falls back to <name>_prefab
+		"weapon_taser_prefab"
+		{
+			"prefab"		"pistol"
+			"attributes"
+			{
+				"damage"		"500"
+				"primary clip size"		"1"
+			}
+		}
+	}
+	"items"
+	{
+		"default"
+		{
+			"name"		"default"
+			"prefab"		""
+			"hidden"		"1"
+		}
+		"4"
+		{
+			"name"		"weapon_glock"
+			"prefab"		"weapon_glock_prefab"
+			"item_quality"		"normal"
+			"baseitem"		"1"
+			"item_description"		"Fires in \"burst\" mode; path C:\\csgo\\{not a block}"
+		}
+		"7"
+		{
+			"name"		"weapon_ak47"
+			"prefab"		"weapon_ak47_prefab"
+			"item_quality"		"normal"
+			"baseitem"		"1"
+		}
+		"16"
+		{
+			"name"		"weapon_m4a1"
+			"prefab"		"weapon_m4a1_prefab"
+			"item_quality"		"normal"
+			"baseitem"		"1"
+			"attributes"
+			{
+				// the item's own attribute wins over its prefab chain
+				"damage"		"34"
+				"tournament event id"
+				{
+					"attribute_class"		"tournament_event_id"
+					"value"		"5"
+				}
+			}
+		}
+		"500"
+		{
+			"name"		"weapon_bayonet"
+			"prefab"		"melee_unusual"
+			"item_name"		"#SFUI_WPNHUD_KnifeBayonet"
+		}
+	}
+	"attributes"
+	{
+		"1"
+		{
+			"name"		"always tradable"
+			"attribute_class"		"always_tradable"
+			"stored_as_integer"		"1"
+		}
+	}
+	"sticker_kits"
+	{
+		"1"
+		{
+			"name"		"dhw2014_test"
+			"item_name"		"#StickerKit_test"
+			"description_string"		"Signed \"The \\\"Best\\\"\" // not a comment"
+		}
+	}
+}

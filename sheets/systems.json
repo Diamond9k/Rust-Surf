@@ -101,18 +101,18 @@
     {
       "id": "hud",
       "script": "game/scripts/Hud.gd",
-      "does": "speed (u/s like surf servers), timer, PB, checkpoint, CS2-style crosshair drawn from convars, error overlay",
-      "reads": "content.json cfg_user_convars",
+      "does": "CS2-style HUD scaled by window height: health/armor bottom-left (fixed 100), ammo bottom-right, surf timer top centre, speed, messages, white hit marker (+ hud.json hit_sound row when sounds.json has it), the player's cl_crosshair* crosshair with styles 0-5, T, outline, alpha, custom RGB and a dynamic gap from Weapons._spread",
+      "reads": "hud.json, movement.json, content.json cfg_user_convars",
       "status": "tested",
-      "evidence": "tested: speed, timer, PB, crosshair from convars"
+      "evidence": "2026-10-09: rendered at 960x540 and 1920x1080 (ui_r1 renders): HUD strips, timer and crosshair scale with height; --wtest runs clean; dynamic gap maths checked by hand against the spread cone edge (3.96 px for 5.5 mrad at 1080p)"
     },
     {
       "id": "prep",
       "script": "prep/prep.py",
-      "does": "run once by Melty before first start: extracts every content.json row from the player's Rust and CS2 installs into the data folder, writes done-<version>.txt; logs to prep.log; never copies anything it doesn't need",
-      "reads": "content.json",
+      "does": "run by Melty until it succeeds: extracts every content.json row and every weapons.json weapon from the player's Rust and CS2 installs into the data folder (prep_cs2.py: each VRF output checked, failures retried one by one, whole files skipped on a rerun), writes done-<version>.txt only when nothing is missing, else exits 1 with the reasons on screen, in prep.log and in prep_status.json (Main._report shows them)",
+      "reads": "content.json, weapons.json, prep.json",
       "status": "tested",
-      "evidence": "tested: clean install from RustSurf-0.1.0.zip, bundled Python, 75 s, missing none; game then completed the course from that install"
+      "evidence": "tested: clean install from RustSurf-0.1.0.zip, bundled Python, 75 s, missing none; 2026-10-09 prep/tests (54 unit tests: synthetic items_game.txt, fake VRF that drops, truncates and poisons batches, done-file gating, package checks) pass; content check passes on this PC's data folder; the 0.2.0 weapon export itself not yet run on Windows"
     },
     {
       "id": "weapons",
@@ -133,10 +133,10 @@
     {
       "id": "settings",
       "script": "game/scripts/Settings.gd",
-      "does": "Esc menu: pause, sensitivity, fov, viewmodel, volume, crosshair; saves only what the player changed",
-      "reads": "movement.json",
+      "does": "Esc menu like CS2 settings: tab bar (Game, Keyboard / Mouse, Audio, Video, Crosshair) over the blurred game, slider + number field or dropdown per settings.json row, input.json rebinds, live crosshair preview; values start from the player's CS2 convars; HUD hidden while open; only changes saved",
+      "reads": "settings.json, input.json, hud.json, sounds.json",
       "status": "tested",
-      "evidence": "2026-10-09: menu rendered with --menu; values applied through Viewmodel.set_view and Hud convars"
+      "evidence": "2026-10-09: every tab rendered with --menu --menu-tab at 960x540 and the crosshair tab at 1920x1080 (ui_r1 renders), no clipping; parse check clean"
     }
   ]
 }

@@ -1,7 +1,8 @@
 """Preflight: lay every sheet over every other and list what will fail.
 
 Checks, per sheet: every row has every column filled; every cross-sheet reference
-resolves; every 'verified'/'tuned'/'status' cell is actually checked. Exit 1 if
+resolves; every 'verified'/'tuned'/'status' cell is actually checked; game/data/ and prep/
+copies are byte-identical to their sheet. Exit 1 if
 anything is unfinished, so a build only runs on a clean preflight.
 """
 import json, os, sys, glob
@@ -63,6 +64,11 @@ for r in sheets["systems"]["rows"]:
     script = os.path.join(ROOT, r["script"])
     if not os.path.exists(script):
         problems.append(f"systems.{r['id']}: script {r['script']} does not exist")
+# 3. copies: game/data/ and prep/ ship byte-identical copies of the sheets (tools/package.py checks the same)
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import package
+problems += package.check_copies(ROOT)
+
 lst = sheets["credits"].get("listing", {})
 for k, v in lst.items():
     if isinstance(v, str) and v.upper().startswith("TBD"):
