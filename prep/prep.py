@@ -128,6 +128,45 @@ def weapons_step(a, run, gi):
         LOG("items_game.txt missing: weapons use weapon_defaults.json")
     for i in range(0, len(models), 40):  # keep each command line well under the Windows limit
         run(["-f", ",".join(models[i:i + 40]), "--gltf_export_format", "glb", "--gltf_export_materials", "--gltf_export_animations", "--game", gi])
+    repair_pngs(a, models, outdir, gi)
+
+
+def repair_pngs(a, models, outdir, gi):
+    """A batch can write a texture shared by two models at once and corrupt it (seen on the AK-47 colour map):
+    re-export each model with a broken PNG on its own, straight to its own path."""
+    for m in [m for m in models if m.endswith(".vmdl_c")]:
+        d = os.path.join(outdir, os.path.dirname(m))
+        bad = [f for f in (os.listdir(d) if os.path.isdir(d) else []) if f.endswith(".png") and not png_ok(os.path.join(d, f))]
+        if bad:
+            LOG("re-exporting %s alone (corrupt %s)" % (m, ", ".join(bad)))
+            for f in bad:
+                os.remove(os.path.join(d, f))
+            cmd = [a.vrf, "-i", os.path.join(os.path.dirname(gi), "pak01_dir.vpk"), "-o", os.path.join(outdir, os.path.splitext(m)[0] + ".glb"),
+                   "-d", "-f", m, "--gltf_export_format", "glb", "--gltf_export_materials", "--gltf_export_animations", "--game", gi]
+            subprocess.run(cmd, capture_output=True, text=True)
+            still = [f for f in bad if not png_ok(os.path.join(d, f))]
+            if still:
+                LOG("still corrupt after re-export: " + ", ".join(still))
+
+
+def png_ok(p):
+    """True when every PNG chunk's CRC matches (a torn write fails here; Godot then drops the texture)."""
+    import zlib, struct
+    try:
+        b = open(p, "rb").read()
+    except OSError:
+        return False
+    if b[:8] != b"\x89PNG\r\n\x1a\n":
+        return False
+    i = 8
+    while i + 12 <= len(b):
+        n = struct.unpack(">I", b[i:i + 4])[0]
+        if i + 12 + n > len(b) or zlib.crc32(b[i + 4:i + 8 + n]) & 0xffffffff != struct.unpack(">I", b[i + 8 + n:i + 12 + n])[0]:
+            return False
+        if b[i + 4:i + 8] == b"IEND":
+            return True
+        i += 12 + n
+    return False
 
 
 def weapons_missing(a):

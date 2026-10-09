@@ -16,6 +16,12 @@ parts = [(os.path.join(R, "dist", "RustSurf"), ""), (os.path.join(R, ".work", "p
 for base, _ in parts:
     if not os.path.isdir(base):
         sys.exit("missing " + base + " (export the game to dist/RustSurf and build .work/prepbundle first)")
+# the game reads res://data/<sheet>.json: refuse to package a build exported with stale sheets (run tools/export.py)
+import filecmp
+for f in os.listdir(os.path.join(R, "sheets")):
+    g = os.path.join(R, "game", "data", f)
+    if f.endswith(".json") and not (os.path.exists(g) and filecmp.cmp(os.path.join(R, "sheets", f), g, shallow=False)):
+        sys.exit("game/data/%s differs from sheets/ (export with tools/export.py)" % f)
 # our own prep sources and sheets always come from the repo, so the bundle never ships a stale copy
 import shutil
 for f in os.listdir(os.path.join(R, "prep")):

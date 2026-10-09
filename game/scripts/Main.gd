@@ -131,6 +131,11 @@ func _lighting() -> void:
 	env.environment = e
 	add_child(env)
 
+## Gauntlet capture hook (Shots.gd): a shots.json row may name a weapon to hold for its picture.
+func shot_setup(r: Dictionary) -> void:
+	if r.has("weapon"):
+		weapons.give(String(r["weapon"]))
+
 func _report() -> void:
 	var lines: PackedStringArray = []
 	if content.missing.size() > 0:
