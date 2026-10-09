@@ -25,6 +25,24 @@ var _weapon_rest := Transform3D.IDENTITY
 ## (A SubViewport camera was tried first: Godot did not light the viewmodel layer in it.)
 const LAYER := 1 << 19
 var _main_cam: Camera3D
+var world_fov := 90.0
+
+## Settings menu hook: any of viewmodel_fov / viewmodel_offset_x/y/z (CS2 units) and world_fov.
+func set_view(vals: Dictionary) -> void:
+	for k in vals:
+		if k == "world_fov":
+			world_fov = float(vals[k])
+		else:
+			V[k] = float(vals[k])
+	_place()
+
+func _place() -> void:
+	var u: float = Sheets.movement()["unit_to_m"]
+	var k := tan(deg_to_rad(world_fov) * 0.5) / tan(deg_to_rad(V["viewmodel_fov"]) * 0.5)
+	var squeeze := Basis.from_scale(Vector3(k, k, 1.0))
+	var rig_basis := Basis.from_euler(Vector3(0, deg_to_rad(V["yaw"]), 0)).scaled(Vector3.ONE * V["scale"])
+	var off := Vector3(V["offset_x"] + V["viewmodel_offset_x"] * u, V["offset_y"] + V["viewmodel_offset_z"] * u, V["offset_z"] - V["viewmodel_offset_y"] * u)
+	transform = Transform3D(squeeze * rig_basis, squeeze * off)
 
 func setup(c: Content, cam: Camera3D, convars: Dictionary = {}) -> void:
 	content = c
@@ -36,13 +54,8 @@ func setup(c: Content, cam: Camera3D, convars: Dictionary = {}) -> void:
 		if convars.has(k) and str(convars[k]).is_valid_float():
 			V[k] = float(convars[k])
 	cam.add_child(self)
-	var u: float = Sheets.movement()["unit_to_m"]
-	var world_fov: float = Sheets.movement()["fov_default"]
-	var k := tan(deg_to_rad(world_fov) * 0.5) / tan(deg_to_rad(V["viewmodel_fov"]) * 0.5)
-	var squeeze := Basis.from_scale(Vector3(k, k, 1.0))
-	var rig_basis := Basis.from_euler(Vector3(0, deg_to_rad(V["yaw"]), 0)).scaled(Vector3.ONE * V["scale"])
-	var off := Vector3(V["offset_x"] + V["viewmodel_offset_x"] * u, V["offset_y"] + V["viewmodel_offset_z"] * u, V["offset_z"] - V["viewmodel_offset_y"] * u)
-	transform = Transform3D(squeeze * rig_basis, squeeze * off)
+	world_fov = Sheets.movement()["fov_default"]
+	_place()
 	_build()
 	for mi in _all(self, "MeshInstance3D"):
 		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -50,93 +63,134 @@ func setup(c: Content, cam: Camera3D, convars: Dictionary = {}) -> void:
 
 const ARMS_SKEL := "animation_skeletons_characters_viewmodel_vnmskel"
 const KNIFE_SKEL := "animation_skeletons_weapons_knife_default_ct_vnmskel"
+var _weapon_name := ""   # skeleton container name of the held weapon under rig
+var _clips := {}         # our clip name (draw, idle, shoot1, reload, inspect) -> animation name
 
-## The arms and knife keep their own imported skeletons and skins. Their skeleton containers are
-## renamed to the names the clip rig uses, so the clip AnimationPlayer (moved under the same root)
-## drives them with its track paths untouched.
+## The arms stay for the whole session; equip() swaps the held weapon and the clip set.
 func _build() -> void:
 	rig = Node3D.new()
 	rig.name = "vmroot"
 	add_child(rig)
-	var got := 0
-	for pair in [["model_arms", ARMS_SKEL], ["model_knife_ct", KNIFE_SKEL]]:
-		var s := content.glb_of(pair[0])
-		if s == null:
-			continue
-		var inner := _skeleton_container(s)
-		if inner == null:
-			s.queue_free()
-			continue
-		inner.get_parent().remove_child(inner)
-		inner.name = pair[1]
-		rig.add_child(inner)
-		got += 1
-		s.queue_free()
-	if got == 0:
-		why = "arms and knife glb missing"
+	var s := content.glb_of("model_arms")
+	var inner := _skeleton_container(s) if s else null
+	if inner == null:
+		why = "arms glb missing"
+		if s: s.queue_free()
 		return
-	var clip := content.glb_of("clip_knife_idle")
-	if clip == null:
-		why = "clip_knife_idle missing"
-		return
-	anim = _find(clip, "AnimationPlayer") as AnimationPlayer
-	if anim == null:
-		why = "idle clip has no AnimationPlayer"
-		clip.queue_free()
-		return
-	_idle_name = anim.get_animation_list()[0]
-	for name in [ARMS_SKEL, KNIFE_SKEL]:
+	inner.get_parent().remove_child(inner)
+	inner.name = ARMS_SKEL
+	rig.add_child(inner)
+	s.queue_free()
+	_arms_skel = _find(inner, "Skeleton3D") as Skeleton3D
+	equip(content.path_of("model_knife_ct"), {"draw": content.path_of("clip_knife_draw"), "idle": content.path_of("clip_knife_idle"), "inspect": content.path_of("clip_knife_inspect")})
+
+## Any CS2 weapon: its model glb and its viewmodel clip glbs (absolute paths; idle is required).
+## The idle clip carries the arms skeleton and, for guns, the weapon skeleton with its tracks: the
+## weapon container is renamed to the name the clip uses so the tracks find it. Returns false and
+## keeps the current weapon when a file is missing.
+func equip(model_path: String, clip_paths: Dictionary) -> bool:
+	if _arms_skel == null:
+		return false
+	var model := content.glb(model_path)
+	var clip := content.glb(String(clip_paths.get("idle", "")))
+	var wc := _skeleton_container(model) if model else null
+	var ap := _find(clip, "AnimationPlayer") as AnimationPlayer if clip else null
+	if wc == null or ap == null:
+		why = "missing " + (model_path.get_file() if wc == null else String(clip_paths.get("idle", "")).get_file())
+		for n in [model, clip]:
+			if n: n.queue_free()
+		return false
+	var wname := KNIFE_SKEL if model_path.contains("knife") else String(wc.name)
+	for ch in clip.get_children():
+		if ch is Node3D and ch.name != ARMS_SKEL and _find(ch, "Skeleton3D") != null:
+			wname = String(ch.name)
+	# out with the old weapon and clips
+	if _arms_skel.skeleton_updated.is_connected(_attach_weapon):
+		_arms_skel.skeleton_updated.disconnect(_attach_weapon)
+	if _weapon_name != "" and rig.get_node_or_null(_weapon_name):
+		var old := rig.get_node(_weapon_name)
+		rig.remove_child(old)
+		old.queue_free()
+	if anim:
+		rig.remove_child(anim)
+		anim.queue_free()
+	wc.get_parent().remove_child(wc)
+	wc.name = wname
+	rig.add_child(wc)
+	model.queue_free()
+	_weapon_name = wname
+	_knife_skel = _find(wc, "Skeleton3D") as Skeleton3D
+	for name in [ARMS_SKEL, wname]:
 		var cn := clip.get_node_or_null(name)
 		var mn := rig.get_node_or_null(name)
 		if cn and mn:
 			_copy_rest(_find(cn, "Skeleton3D") as Skeleton3D, _find(mn, "Skeleton3D") as Skeleton3D)
-	clip.remove_child(anim)
-	rig.add_child(anim)
+	clip.remove_child(ap)
+	rig.add_child(ap)
 	clip.queue_free()
-	_wire_knife()
-	for pair in [["clip_knife_draw", "draw"], ["clip_knife_inspect", "inspect"]]:
-		var s := content.glb_of(pair[0])
+	anim = ap
+	_clips = {"idle": anim.get_animation_list()[0]}
+	_idle_name = _clips["idle"]
+	for k in clip_paths:
+		if k == "idle":
+			continue
+		var s := content.glb(String(clip_paths[k]))
 		if s:
-			var ap := _find(s, "AnimationPlayer") as AnimationPlayer
-			if ap:
-				var a := ap.get_animation(ap.get_animation_list()[0]).duplicate() as Animation
-				anim.get_animation_library("").add_animation(pair[1], a)
-				if pair[1] == "draw": _draw_name = "draw"
-				else: _inspect_name = "inspect"
+			var p2 := _find(s, "AnimationPlayer") as AnimationPlayer
+			if p2:
+				anim.get_animation_library("").add_animation(k, p2.get_animation(p2.get_animation_list()[0]).duplicate() as Animation)
+				_clips[k] = k
 			s.queue_free()
+	_draw_name = _clips.get("draw", "")
+	_inspect_name = _clips.get("inspect", _clips.get("lookat01", ""))
+	for mi in _all(wc, "MeshInstance3D"):
+		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_fix_materials(mi as MeshInstance3D)
+	_wire_weapon()
 	ok = true
-	if _draw_name != "":
-		anim.play(_draw_name)
-		anim.animation_finished.connect(func(_n: String) -> void: idle())
-	else:
+	why = ""
+	anim.animation_finished.connect(func(n: String) -> void:
+		if n != _idle_name: idle())
+	if not play("draw"):
 		idle()
+	return true
 
-## CS2 hangs the weapon off the wpn bone of the arms; the clip has no knife tracks, so every time
-## the arms skeleton updates, the knife container is moved so its weapon bone sits on wpn.
-func _wire_knife() -> void:
-	var an := rig.get_node_or_null(ARMS_SKEL)
-	var kn := rig.get_node_or_null(KNIFE_SKEL)
-	if an == null or kn == null:
-		return
-	_arms_skel = _find(an, "Skeleton3D") as Skeleton3D
-	_knife_skel = _find(kn, "Skeleton3D") as Skeleton3D
-	if _arms_skel == null or _knife_skel == null:
+## Plays one of our clip names (draw, idle, shoot1, reload, inspect); false when this weapon has none.
+func play(clip: String) -> bool:
+	if anim == null or not _clips.has(clip):
+		return false
+	anim.stop()
+	anim.play(_clips[clip])
+	return true
+
+func clip_length(clip: String) -> float:
+	if anim == null or not _clips.has(clip):
+		return 0.0
+	return anim.get_animation(_clips[clip]).length
+
+## CS2 hangs the weapon off the wpn bone of the arms: every time the arms skeleton updates, the
+## weapon container is moved so the rest pose of its root bone sits on wpn.
+func _wire_weapon() -> void:
+	var wn := rig.get_node_or_null(_weapon_name)
+	if wn == null or _knife_skel == null:
 		return
 	_wpn = _arms_skel.find_bone("wpn")
 	var w := _knife_skel.find_bone("weapon")
-	if _wpn < 0 or w < 0:
+	if w < 0:
+		w = 0
+	if _wpn < 0:
 		return
 	_weapon_rest = _knife_skel.transform * _knife_skel.get_bone_global_rest(w)
-	_arms_skel.skeleton_updated.connect(_attach_knife)
-	_attach_knife()
+	_arms_skel.skeleton_updated.connect(_attach_weapon)
+	_attach_weapon()
 
-func _attach_knife() -> void:
-	var kn := rig.get_node_or_null(KNIFE_SKEL) as Node3D
+func _attach_weapon() -> void:
+	var wn := rig.get_node_or_null(_weapon_name) as Node3D
 	var an := rig.get_node_or_null(ARMS_SKEL) as Node3D
-	if kn == null or an == null:
+	if wn == null or an == null:
 		return
 	var wpn_rig := an.transform * _arms_skel.transform * _arms_skel.get_bone_global_pose(_wpn)
-	kn.transform = wpn_rig * _weapon_rest.affine_inverse()
+	wn.transform = wpn_rig * _weapon_rest.affine_inverse()
 
 ## The model skeleton takes the global rest pose of the clip skeleton for every shared bone, so the
 ## bones the clip leaves untracked (arm_upper, clavicles) sit where CS2 keeps them.
@@ -189,6 +243,8 @@ func idle() -> void:
 func inspect() -> void:
 	if ok and _inspect_name != "" and anim.current_animation != _inspect_name:
 		anim.play(_inspect_name)
+	elif ok and _clips.has("lookat01") and anim.current_animation != "lookat01":
+		anim.play("lookat01")
 
 func _find(n: Node, cls: String) -> Node:
 	if n.get_class() == cls:

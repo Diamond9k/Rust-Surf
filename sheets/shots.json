@@ -8,6 +8,7 @@
     {"id": "valley2", "pos": [110, 70, 0], "yaw": -90, "pitch": -12, "frames": 20, "what": "inside the first valley"},
     {"id": "site_overview", "pos": [160, 60, 40], "yaw": -150, "pitch": -20, "frames": 20, "what": "the Launch Site buildings from the checkpoint"},
     {"id": "floor", "pos": [360, 4.8, 0], "yaw": -60, "pitch": -35, "frames": 20, "what": "end pad and ground texture at foot level"},
-    {"id": "sun", "pos": [200, 45, 0], "yaw": 0, "pitch": 5, "frames": 20, "what": "sky, sun and haze toward the horizon"}
+    {"id": "sun", "pos": [200, 45, 0], "yaw": 0, "pitch": 5, "frames": 20, "what": "sky, sun and haze toward the horizon"},
+    {"id": "lobby", "pos": [0, 300.05, 617], "yaw": 0, "pitch": 0, "frames": 30, "what": "aim lobby spawn looking at the back wall targets"}
   ]
 }

@@ -12,7 +12,11 @@ var sounds: Sounds
 var ghost: Ghost
 var viewmodel: Viewmodel
 var backdrop: Backdrop
+var weapons: Weapons
+var lobby: AimLobby
+var settings: Settings
 var _in_start := false
+var shots_running := false
 var _err_lines: PackedStringArray = []
 var _debug := OS.get_cmdline_user_args().has("--debug")
 
@@ -26,7 +30,7 @@ func _ready() -> void:
 		return
 	content = Content.new(paths.data_dir)
 	sinput = SurfInput.new(paths)
-	hud.setup(sinput.convars)
+	hud.setup(sinput.convars, paths.cs2_dir)
 	_lighting()
 	course = Course.new()
 	add_child(course)
@@ -51,6 +55,15 @@ func _ready() -> void:
 	sounds.setup(content)
 	viewmodel = Viewmodel.new()
 	viewmodel.setup(content, player.cam, sinput.convars)
+	weapons = Weapons.new()
+	add_child(weapons)
+	weapons.setup(self)
+	lobby = AimLobby.new()
+	add_child(lobby)
+	lobby.build(content, self)
+	settings = Settings.new()
+	add_child(settings)
+	settings.setup(self)
 	course.entered_zone.connect(_on_zone)
 	player.jumped.connect(func() -> void: sounds.play("jump"))
 	player.landed.connect(func(_v: float) -> void: sounds.play("land"))
@@ -62,8 +75,11 @@ func _ready() -> void:
 	if si >= 0 and si + 1 < ua.size():
 		var shots := Shots.new()
 		shots.main = self
+		shots_running = true
 		shots.out_dir = ua[si + 1]
 		add_child(shots)
+	if OS.get_cmdline_user_args().has("--wtest"):
+		add_child(load("res://TestWeapons.gd").new())
 	if OS.get_cmdline_user_args().has("--autosurf"):
 		add_child(load("res://TestDrive.gd").new())
 
@@ -131,11 +147,11 @@ func _exit_tree() -> void:
 
 ## Click or alt-tab back in: the mouse is captured again so look keeps working.
 func _input(ev: InputEvent) -> void:
-	if ev is InputEventMouseButton and ev.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+	if ev is InputEventMouseButton and ev.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not (settings and settings.is_open):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_FOCUS_IN and player != null:
+	if what == NOTIFICATION_APPLICATION_FOCUS_IN and player != null and not (settings and settings.is_open):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _on_zone(kind: String, id: String) -> void:
@@ -158,7 +174,9 @@ func _on_finished(t: float, is_pb: bool) -> void:
 func _physics_process(_dt: float) -> void:
 	if player == null:
 		return
-	if _in_start and not _inside_start():
+	if lobby.active or (shots_running and lobby.center.distance_to(player.global_position) < 80.0):
+		_in_start = false
+	elif _in_start and not _inside_start():
 		_in_start = false
 		timer.start()
 		ghost.start_run()
@@ -187,4 +205,6 @@ func _process(_dt: float) -> void:
 	if Input.is_action_just_pressed("surf_inspect"):
 		viewmodel.inspect()
 	if Input.is_action_just_pressed("surf_menu"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED else Input.MOUSE_MODE_CAPTURED
+		settings.toggle()
+	if Input.is_action_just_pressed("surf_lobby"):
+		lobby.toggle()

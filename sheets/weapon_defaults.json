@@ -1,0 +1,13 @@
+{
+  "_sheet": "weapon_defaults",
+  "_doc": "Fallback stats per slot, used only for a value the player's items_game.txt (prep -> cs2/weapon_stats.json) does not give. Rough CS2 class averages, not any one gun: every value here is unverified and loses to the real file.",
+  "columns": ["id", "damage", "cycletime", "clip", "reserve", "headshot", "range_modifier", "full_auto", "bullets", "verified"],
+  "rows": [
+    {"id": "rifle", "damage": 33, "cycletime": 0.1, "clip": 30, "reserve": 90, "headshot": 4, "range_modifier": 0.97, "full_auto": true, "bullets": 1, "verified": "unverified class average"},
+    {"id": "sniper", "damage": 90, "cycletime": 1.25, "clip": 10, "reserve": 30, "headshot": 4, "range_modifier": 0.99, "full_auto": false, "bullets": 1, "verified": "unverified class average"},
+    {"id": "smg", "damage": 27, "cycletime": 0.08, "clip": 30, "reserve": 120, "headshot": 4, "range_modifier": 0.85, "full_auto": true, "bullets": 1, "verified": "unverified class average"},
+    {"id": "heavy", "damage": 26, "cycletime": 0.88, "clip": 8, "reserve": 32, "headshot": 4, "range_modifier": 0.7, "full_auto": false, "bullets": 9, "verified": "unverified class average"},
+    {"id": "pistol", "damage": 35, "cycletime": 0.17, "clip": 13, "reserve": 26, "headshot": 4, "range_modifier": 0.85, "full_auto": false, "bullets": 1, "verified": "unverified class average"},
+    {"id": "knife", "damage": 40, "cycletime": 0.5, "clip": -1, "reserve": -1, "headshot": 1, "range_modifier": 1, "full_auto": true, "bullets": 1, "verified": "unverified; knife reach 1.5 m"}
+  ]
+}
