@@ -269,38 +269,44 @@ static func xh_color(cv: Dictionary, hv: Dictionary) -> Color:
 		c.a = clampf(num(cv, "cl_crosshairalpha", 200) / 255.0, 0.0, 1.0)
 	return c
 
-## The cl_crosshair* crosshair at the origin of ci for a window h px tall. spread_px is how far the
-## dynamic styles move out (spread + inaccuracy), fire_px the firing-only part (style 5), wgap the gun's own gap
-## (cl_crosshairgap_useweaponvalue; NAN for none). The menu preview uses it too.
-static func draw_xh(ci: CanvasItem, cv: Dictionary, h: float, hv: Dictionary, spread_px: float, fire_px: float, wgap: float = NAN) -> void:
+## One arm's pips as [distance from centre, length, alpha mod] in whole pixels (see draw_xh for the arguments).
+static func xh_segs(cv: Dictionary, h: float, hv: Dictionary, spread_px: float, fire_px: float, wgap: float = NAN) -> Array:
 	var m := xh_px(cv, h, hv, wgap)
 	var yres := h / float(hv["yres_base"])
 	var style := int(num(cv, "cl_crosshairstyle", 2))
 	var size: float = m["size"]
-	var th: float = m["thickness"]
 	var gap: float = m["gap"]
 	var move := 0.0
 	if style in [0, 2, 3]:
 		move = roundf(spread_px)
 	elif style == 5:
 		move = roundf(fire_px)
+	var segs: Array = []
+	if style == 2:
+		# Classic: the whole arm opens with the spread up to splitdist; past it the inner pip stays at splitdist and
+		# the outer pip (splitratio of the length) keeps moving, each at its alpha mod (unverified against CS2 captures)
+		var ratio := clampf(num(cv, "cl_crosshair_dynamic_maxdist_splitratio", 0.35), 0.0, 1.0)
+		var split := roundf(maxf(num(cv, "cl_crosshair_dynamic_splitdist", 7), 0.0) * yres)
+		var inner := roundf(size * (1.0 - ratio))
+		var apart := move > split
+		segs.append([gap + minf(move, split), inner, num(cv, "cl_crosshair_dynamic_splitalpha_innermod", 1) if apart else 1.0])
+		segs.append([gap + move + inner, size - inner, num(cv, "cl_crosshair_dynamic_splitalpha_outermod", 0.5) if apart else 1.0])
+	else:
+		segs.append([gap + move, size, 1.0])
+	return segs
+
+## The cl_crosshair* crosshair at the origin of ci for a window h px tall. spread_px is how far the
+## dynamic styles move out (spread + inaccuracy), fire_px the firing-only part (style 5), wgap the gun's own gap
+## (cl_crosshairgap_useweaponvalue; NAN for none). The menu preview uses it too.
+static func draw_xh(ci: CanvasItem, cv: Dictionary, h: float, hv: Dictionary, spread_px: float, fire_px: float, wgap: float = NAN) -> void:
+	var m := xh_px(cv, h, hv, wgap)
+	var th: float = m["thickness"]
 	var c := xh_color(cv, hv)
 	var ot: float = m["outline"]
 	var arms: Array = [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1)]
 	if not on(cv, "cl_crosshair_t", "false"):
 		arms.append(Vector2(0, -1))
-	var segs: Array = []  # [distance from centre, length, alpha mod]
-	if style == 2:
-		var ratio := clampf(num(cv, "cl_crosshair_dynamic_maxdist_splitratio", 0.35), 0.0, 1.0)
-		var split := num(cv, "cl_crosshair_dynamic_splitdist", 7) * yres
-		var inner := roundf(size * (1.0 - ratio))
-		if move > split:
-			segs.append([gap, inner, num(cv, "cl_crosshair_dynamic_splitalpha_innermod", 1)])
-			segs.append([gap + inner + move, size - inner, num(cv, "cl_crosshair_dynamic_splitalpha_outermod", 0.5)])
-		else:
-			segs.append([gap, size, 1.0])
-	else:
-		segs.append([gap + move, size, 1.0])
+	var segs := xh_segs(cv, h, hv, spread_px, fire_px, wgap)
 	var half := floorf(th * 0.5)
 	for pass_i in 2:
 		if pass_i == 0 and ot <= 0.0:

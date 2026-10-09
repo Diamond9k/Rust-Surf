@@ -535,7 +535,7 @@
       "value": [
         [
           1,
-          6,
+          4.5,
           0.5,
           0,
           0,
@@ -543,15 +543,15 @@
         ],
         [
           2,
-          6,
+          4.5,
           -1,
-          0,
+          1,
           0,
           0
         ],
         [
           3,
-          6,
+          4.5,
           1.5,
           0,
           0,
@@ -559,15 +559,15 @@
         ],
         [
           4,
-          6,
+          4.5,
           -0.5,
-          0,
+          2,
           0,
           0
         ],
         [
           5,
-          6,
+          4.5,
           1,
           0,
           0,
@@ -577,7 +577,7 @@
           1,
           15,
           -1,
-          0,
+          2,
           0,
           0
         ],
@@ -593,7 +593,7 @@
           3,
           15,
           0,
-          0,
+          1,
           0,
           0
         ],
@@ -633,7 +633,7 @@
           3,
           24,
           -1,
-          0,
+          2,
           0,
           0
         ],
@@ -641,7 +641,7 @@
           4,
           24,
           0.5,
-          0,
+          1,
           0,
           0
         ],
@@ -657,7 +657,7 @@
           1,
           36,
           0,
-          0,
+          1,
           0,
           0
         ],
@@ -681,7 +681,7 @@
           4,
           36,
           -1,
-          0,
+          2,
           0,
           0
         ],
@@ -705,7 +705,7 @@
           3,
           46,
           -0.5,
-          0,
+          1,
           0,
           0
         ],
@@ -713,8 +713,32 @@
           5,
           46,
           0,
+          2,
           0,
+          0
+        ],
+        [
+          2,
+          19.5,
+          1.5,
           0,
+          0.85,
+          0
+        ],
+        [
+          4,
+          30,
+          -1.5,
+          1,
+          1.25,
+          0
+        ],
+        [
+          3,
+          41,
+          1.5,
+          0,
+          1.7,
           0
         ],
         [
@@ -729,7 +753,7 @@
           1,
           38,
           -5.5,
-          0,
+          2,
           2.0,
           1
         ],
@@ -745,13 +769,13 @@
           5,
           40,
           5.5,
-          0,
+          1,
           2.0,
           1
         ]
       ],
       "what": "where bots stand: [lane, metres from the firing line, sideways offset m, outfit index, standing height m, on a catwalk 0/1]; a raised spot that is not on a catwalk gets a crate of that height under the bot",
-      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): set out in aim_botz-style rows across the five lanes at 6, 15, 24, 36 and 46 m with small sideways offsets, plus the four catwalk spots; crate stands removed after round 2 critics read them as bots on flat crates; every bot wears outfit 0; rows keep clear of the cover crates"
+      "verified": "2026-10-09 design value (Gauntlet round 1 of the lobby, lobby_r1 renders): aim_botz-style rows across the five lanes at 4.5, 15, 24, 36 and 46 m with small sideways offsets (the near row moved in from 6 m so the closest bots read at their real size), three bots on crates at 0.85, 1.25 and 1.7 m between the rows, and the four catwalk spots; outfits mix the fullmetal kit with its charcoal and sand colourways, mostly fullmetal; rows keep clear of the cover crates; not taken from aim_botz files"
     },
     {
       "id": "bot_crate",
@@ -1125,9 +1149,18 @@
     },
     {
       "id": "ui_alpha",
-      "value": 0.55,
+      "value": 0.68,
       "what": "HUD panel background opacity",
-      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+      "verified": "2026-10-09 design value (Gauntlet round 1 of the lobby, lobby_r1 renders): raised from 0.55 so the panels read as black over the bright sky rather than blue; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "ui_team_box",
+      "value": [
+        0.55,
+        0.72
+      ],
+      "what": "top bar side boxes: how far the team colour (ui_ct for kills, ui_t for score) is darkened for the box fill, and the fill's opacity; the digits are white",
+      "verified": "2026-10-09 design value (Gauntlet round 1 of the lobby, lobby_r1 renders): team-tinted score boxes chosen by eye after critics asked for a team-coloured score bar; not taken from CS2 files"
     },
     {
       "id": "ui_panel_w",
@@ -3104,6 +3137,137 @@
         "cargo"
       ],
       "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files"
+    },
+    {
+      "id": "fullmetal_charcoal",
+      "shirt": [
+        0.15,
+        0.16,
+        0.16
+      ],
+      "pants": [
+        0.2,
+        0.2,
+        0.19
+      ],
+      "boots": [
+        0.12,
+        0.1,
+        0.08
+      ],
+      "gloves": [
+        0.09,
+        0.09,
+        0.09
+      ],
+      "rig": [
+        0.13,
+        0.13,
+        0.12
+      ],
+      "skin": [
+        0.66,
+        0.48,
+        0.36
+      ],
+      "hair": [
+        0.08,
+        0.06,
+        0.05
+      ],
+      "eyes": [
+        0.015,
+        0.015,
+        0.015
+      ],
+      "metal": [
+        0.78,
+        0.74,
+        0.68
+      ],
+      "accent": [
+        0.72,
+        0.7,
+        0.64
+      ],
+      "sign": [
+        0.58,
+        0.47,
+        0.2
+      ],
+      "gear": [
+        "hood",
+        "facemask",
+        "plate",
+        "kilt",
+        "cargo"
+      ],
+      "verified": "2026-10-09 design value (Gauntlet round 1 of the lobby, lobby_r1 renders): a charcoal colourway of the fullmetal kit; the same hood, facemask and plate silhouette as fullmetal so the range still reads as one team the way aim_botz bots share one agent; built by eye, not taken from Rust or CS2 files"
+    },
+    {
+      "id": "fullmetal_sand",
+      "shirt": [
+        0.4,
+        0.35,
+        0.26
+      ],
+      "pants": [
+        0.26,
+        0.24,
+        0.19
+      ],
+      "boots": [
+        0.12,
+        0.1,
+        0.08
+      ],
+      "gloves": [
+        0.09,
+        0.09,
+        0.09
+      ],
+      "rig": [
+        0.3,
+        0.27,
+        0.2
+      ],
+      "skin": [
+        0.66,
+        0.48,
+        0.36
+      ],
+      "hair": [
+        0.08,
+        0.06,
+        0.05
+      ],
+      "eyes": [
+        0.015,
+        0.015,
+        0.015
+      ],
+      "metal": [
+        0.78,
+        0.74,
+        0.68
+      ],
+      "accent": [
+        0.72,
+        0.7,
+        0.64
+      ],
+      "sign": [
+        0.58,
+        0.47,
+        0.2
+      ],
+      "gear": [
+        "hood",
+        "facemask",
+        "plate",
+        "cargo"
+      ],
+      "verified": "2026-10-09 design value (Gauntlet round 1 of the lobby, lobby_r1 renders): a sand colourway of the fullmetal kit without the road sign kilt; the same hood, facemask and plate silhouette as fullmetal so the range still reads as one team the way aim_botz bots share one agent; built by eye, not taken from Rust or CS2 files"
     }
   ],
   "stk_checks_columns": [

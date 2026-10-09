@@ -219,6 +219,22 @@
 				}
 			}
 		}
+		"1"
+		{
+			// blocks before "name": a reader that finds the item by the brace nearest its "name" picks the wrong block
+			"visuals"
+			{
+				"weapon_type"		"Pistol"
+			}
+			"attributes"
+			{
+				"damage"		"63"
+				"cycletime"		"0.225000"
+			}
+			"name"		"weapon_deagle"
+			"prefab"		"pistol"
+			"item_quality"		"normal"
+		}
 		"500"
 		{
 			"name"		"weapon_bayonet"

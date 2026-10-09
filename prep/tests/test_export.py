@@ -1,9 +1,9 @@
 """prep_cs2: output checks, batching, per-file retries, skip-if-exported, and the real subprocess runner."""
-import os, sys, shutil, stat, tempfile, unittest
+import os, sys, shutil, stat, tempfile, unittest, zlib
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE)); sys.path.insert(0, HERE)
 import prep_cs2
-from fakevrf import FakeVRF, glb_bytes, wav_bytes, png_bytes
+from fakevrf import FakeVRF, glb_bytes, wav_bytes, png_bytes, png_chunk, garbled_png
 
 prep_cs2.LOG = lambda s: None
 CFG = {"vrf_batch_files": 3, "vrf_batch_chars": 10000, "vrf_retries": 2, "vrf_timeout_s": 5}
@@ -78,6 +78,30 @@ class Helpers(Tmp):
         self.assertFalse(prep_cs2.png_ok(self.put("c.png", png_bytes() + b"x")))  # bytes after IEND
         self.assertFalse(prep_cs2.png_ok(self.put("d.png", b"GIF89a")))
 
+    def test_png_pixel_stream(self):
+        """CRCs alone pass a texture whose pixels are wrong; the inflated stream must match IHDR row for row."""
+        self.assertTrue(prep_cs2.png_ok(self.put("rgba.png", png_bytes(37, 5, ctype=6, split=7))))   # IDAT in many chunks
+        self.assertTrue(prep_cs2.png_ok(self.put("grey.png", png_bytes(3, 3, ctype=0))))
+        self.assertTrue(prep_cs2.png_ok(self.put("adam7.png", png_bytes(5, 3, raw=b"\0" * prep_cs2.png_raw_size(5, 3, 8, 2, 1), interlace=1))))
+        self.assertEqual(prep_cs2.png_raw_size(2048, 2048, 8, 6, 0), 2048 * (1 + 2048 * 4))
+        self.assertFalse(prep_cs2.png_ok(self.put("g.png", garbled_png())))
+        self.assertFalse(prep_cs2.png_ok(self.put("short.png", png_bytes(4, 4, raw=b"\0" * 20))))       # fewer rows than IHDR says
+        self.assertFalse(prep_cs2.png_ok(self.put("long.png", png_bytes(1, 1, raw=b"\0" * 9))))         # more data than IHDR says
+        self.assertFalse(prep_cs2.png_ok(self.put("filt.png", png_bytes(2, 2, raw=b"\0\0\0\0\0\0\0\x05\0\0\0\0\0\0"))))  # row filter 5
+        good = png_bytes(2, 2)
+        no_head = good[:8] + good[8 + 25:]                                                            # IDAT before IHDR
+        self.assertFalse(prep_cs2.png_ok(self.put("nohead.png", no_head)))
+        cut_z = good[:8] + good[8:33] + png_chunk(b"IDAT", zlib.compress(b"\0" * 14)[:-6]) + png_chunk(b"IEND", b"")
+        self.assertFalse(prep_cs2.png_ok(self.put("cutz.png", cut_z)))                                  # zlib stream never ends
+
+    def test_glb_with_garbled_texture_fails(self):
+        self.put("t_color.png", garbled_png())
+        self.assertFalse(prep_cs2.glb_ok(self.put("t.glb", glb_bytes("mesh", ["t_color.png"])), "meshes"))
+        self.put("t%20b.png", png_bytes())
+        self.assertFalse(prep_cs2.glb_ok(self.put("u.glb", glb_bytes("mesh", ["t%20b.png"])), "meshes"))   # uri is percent-encoded
+        os.replace(os.path.join(self.d, "t%20b.png"), os.path.join(self.d, "t b.png"))
+        self.assertTrue(prep_cs2.glb_ok(os.path.join(self.d, "u.glb"), "meshes"))
+
     def test_real_vrf_output_passes(self):
         """VRF 20 exports of the arms, knife and knife clips from a real CS2 install, when this machine has them."""
         data = os.environ.get("RS_DATA", "")
@@ -140,6 +164,25 @@ class Export(Tmp):
         v = FakeVRF()
         self.assertEqual(self.go(v), [])
         self.assertEqual(v.calls, [(["s/s1.vsnd_c"], [])])
+
+    def test_texture_garbled_in_batch_is_redone(self):
+        """A batch export that garbles one model's colour texture (CRCs fine): the model fails its check, its damaged
+        glb and texture are deleted, and the export on its own writes them whole, even from a VRF that never
+        overwrites an existing file."""
+        v = FakeVRF(batchtex=["a/m4.vmdl_c"], noclobber=True)
+        self.assertEqual(self.go(v), [])
+        self.assertTrue(prep_cs2.present(self.d, "a/m4.vmdl_c"))
+        self.assertIn((["a/m4.vmdl_c"], []), v.calls)
+        self.assertTrue(prep_cs2.png_ok(os.path.join(self.d, "a", "m4_color_psd_0.png")))
+
+    def test_discard_keeps_whole_outputs(self):
+        self.go(FakeVRF())
+        prep_cs2.discard(self.d, "a/m1.vmdl_c")
+        self.assertTrue(prep_cs2.present(self.d, "a/m1.vmdl_c"))
+        self.put("a/m2_color_psd_0.png", garbled_png())
+        prep_cs2.discard(self.d, "a/m2.vmdl_c")
+        self.assertFalse(os.path.exists(os.path.join(self.d, "a", "m2.glb")))
+        self.assertFalse(os.path.exists(os.path.join(self.d, "a", "m2_color_psd_0.png")))
 
     def test_never_exports(self):
         v = FakeVRF(bad=["s/s0.vsnd_c", "a/m0.vmdl_c"])

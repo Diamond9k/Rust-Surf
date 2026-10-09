@@ -108,10 +108,10 @@
       ],
       "crease_ao": 0.6,
       "normal_depth": 2.0,
-      "leaks": 0.75,
+      "leaks": 0.9,
       "debris": 0,
       "filter": "aniso",
-      "verified": "2026-10-09 world_r3_1x renders (gauntlet 3): 6 m tiles (was 10: r2 critics saw a smeared low-res ramp), normal_depth 2 and a neutral tint (was 0.8, read brown), by eye; 2026-10-09 world_r3 renders: Launch Site panel concrete instead of the beige concrete_d_site (r2 critics: untextured beige ramp), by eye; world_r1 (gauntlet 2): leaks/debris from Rust dirt_stains_leaks decals, by eye in renders"
+      "verified": "2026-10-09 world_r1x renders (gauntlet round 1, batch 3): leaks 0.75 -> 0.9 now a third of the drip tiles hang none and the rest vary in length, by eye; 2026-10-09 world_r3_1x renders (gauntlet 3): 6 m tiles (was 10: r2 critics saw a smeared low-res ramp), normal_depth 2 and a neutral tint (was 0.8, read brown), by eye; 2026-10-09 world_r3 renders: Launch Site panel concrete instead of the beige concrete_d_site (r2 critics: untextured beige ramp), by eye; world_r1 (gauntlet 2): leaks/debris from Rust dirt_stains_leaks decals, by eye in renders"
     },
     {
       "id": "ramp_panels",
@@ -141,23 +141,23 @@
       "albedo": "tex_site_steel_trims",
       "normal": "tex_site_steel_trims",
       "uv_scale": 3.0,
-      "roughness": 0.55,
+      "roughness": 0.8,
       "weather": "(none)",
       "weather_cover": 0,
       "grime": 0,
       "detail": 0,
       "panel": 0,
       "tint": [
-        0.78,
-        0.78,
-        0.8
+        0.62,
+        0.62,
+        0.64
       ],
       "crease_ao": 0,
       "normal_depth": 1.5,
       "leaks": 0,
       "debris": 0,
       "filter": "aniso",
-      "verified": "2026-10-09 world_r3_14 renders (gauntlet 3): tint 0.55 -> 0.78 for the light riveted band, by eye; 2026-10-09 world_r3 renders: ramp edge trims (r2 critics: no edge trim), by eye"
+      "verified": "2026-10-09 world_r1x renders (gauntlet round 1, batch 3): roughness 0.55 -> 0.8, tint 0.78 -> 0.62 (critics: over-bright white strip along the ridge), by eye; 2026-10-09 world_r3_14 renders (gauntlet 3): tint 0.55 -> 0.78 for the light riveted band, by eye; 2026-10-09 world_r3 renders: ramp edge trims (r2 critics: no edge trim), by eye"
     },
     {
       "id": "pad",

@@ -1,12 +1,14 @@
 """CS2 side of prep: the content.json cs2 rows (arms, knife, clips, sounds) and every weapons.json row,
 exported from the player's pak01_dir.vpk by Source2Viewer-CLI (VRF). Every output file is checked: a glb
-against its own length field, its JSON chunk, its BIN chunk and every PNG texture it names (each PNG chunk
-CRC), a model must hold a mesh and a clip an animation; wav against its RIFF size, mp3 frame sync, text
-files must parse whole. A file that fails is exported again on its own. Whole files are skipped on a rerun,
+against its own length field, its JSON chunk, its BIN chunk and every PNG texture it names (each chunk CRC and
+the pixel stream inflating to the size its header gives), a model must hold a mesh and a clip an animation;
+wav against its RIFF size, mp3 frame sync, text files must parse whole. A file that fails has its damaged
+outputs (and damaged textures) deleted and is exported again on its own. Whole files are skipped on a rerun,
 except the stats files, which are always exported fresh so a CS2 update reaches weapon_stats.json.
 No UnityPy here, so prep/tests can run all of it against a fake VRF.
 cs2_step(a) -> (problems, warnings) as player-facing sentences; no problems means every CS2 file is in place."""
 import os, re, json, struct, subprocess, zlib
+from urllib.parse import unquote
 import items_game, kv3
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -55,23 +57,72 @@ def outputs(src):
     return [src]
 
 
+_PNG_SEEN = {}  # (path, size, mtime) -> verdict, so a texture shared by several models is decoded once per run
+_CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}  # PNG colour type -> samples per pixel
+
+
+def png_raw_size(w, h, depth, ctype, interlace):
+    """Bytes the IDAT stream must inflate to: one filter byte per row plus the packed samples, for each of the
+    seven Adam7 passes when interlaced."""
+    bits = depth * _CHANNELS[ctype]
+    rows = lambda pw, ph: 0 if pw == 0 or ph == 0 else ph * (1 + (pw * bits + 7) // 8)
+    if not interlace:
+        return rows(w, h)
+    return sum(rows((w - x0 + dx - 1) // dx if w > x0 else 0, (h - y0 + dy - 1) // dy if h > y0 else 0)
+               for x0, y0, dx, dy in ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)))
+
+
 def png_ok(path):
-    """A whole PNG: signature, every chunk's CRC, ending in IEND (a texture cut or garbled by a batch export fails)."""
+    """A whole PNG: signature, IHDR first with a valid size and format, every chunk's CRC, ending in IEND, and
+    the IDAT stream inflating to exactly the pixel data IHDR describes with a valid filter byte on every row (a
+    texture cut, garbled or mixed up by a batch export fails, even when its chunk CRCs were written over the
+    garbage)."""
     try:
+        st = os.stat(path)
+        key = (os.path.abspath(path), st.st_size, st.st_mtime_ns)
+        if key in _PNG_SEEN:
+            return _PNG_SEEN[key]
         with open(path, "rb") as f:
             data = f.read()
     except OSError:
         return False
+    ok = _png_check(data)
+    if len(_PNG_SEEN) > 4096:
+        _PNG_SEEN.clear()
+    _PNG_SEEN[key] = ok
+    return ok
+
+
+def _png_check(data):
     if data[:8] != b"\x89PNG\r\n\x1a\n":
         return False
-    i = 8
+    i, head, z, out, stride, filters_ok = 8, None, zlib.decompressobj(), 0, 0, True
     while i + 12 <= len(data):
         n, kind = struct.unpack(">I4s", data[i:i + 8])
         end = i + 12 + n
         if end > len(data) or zlib.crc32(data[i + 4:i + 8 + n]) & 0xFFFFFFFF != struct.unpack(">I", data[end - 4:end])[0]:
             return False
-        if kind == b"IEND":
-            return end == len(data)
+        body = data[i + 8:i + 8 + n]
+        if head is None:
+            if kind != b"IHDR" or n != 13:
+                return False
+            w, h, depth, ctype, comp, filt, interlace = struct.unpack(">IIBBBBB", body)
+            if w == 0 or h == 0 or ctype not in _CHANNELS or depth not in (1, 2, 4, 8, 16) or comp or filt or interlace > 1:
+                return False
+            head = png_raw_size(w, h, depth, ctype, interlace)
+            stride = 0 if interlace else 1 + (w * depth * _CHANNELS[ctype] + 7) // 8
+        elif kind == b"IDAT":
+            try:
+                chunk = z.decompress(body, max(1, head - out + 1))
+            except zlib.error:
+                return False
+            if stride:  # every row starts with a filter type 0..4
+                filters_ok = filters_ok and max(chunk[(stride - out % stride) % stride::stride], default=0) <= 4
+            out += len(chunk)
+            if out > head:
+                return False
+        elif kind == b"IEND":
+            return end == len(data) and head is not None and z.eof and out == head and filters_ok
         i = end
     return False
 
@@ -101,12 +152,35 @@ def glb_ok(path, need=None):
         return False
     if need and not doc.get(need):
         return False
+    return all(png_ok(p) for p in glb_images(path, doc))
+
+
+def glb_images(path, doc=None):
+    """The PNG files beside a glb that its images name by uri (embedded data: images are inside the glb)."""
+    if doc is None:
+        try:
+            with open(path, "rb") as f:
+                head = f.read(20)
+                doc = json.loads(f.read(struct.unpack("<I", head[12:16])[0]).decode("utf-8"))
+        except (OSError, ValueError, UnicodeDecodeError, struct.error):
+            return []
     d = os.path.dirname(path)
-    for im in doc.get("images") or []:
-        u = im.get("uri")
-        if u and not u.startswith("data:") and not png_ok(os.path.join(d, u.replace("%20", " "))):
-            return False
-    return True
+    return [os.path.join(d, unquote(im["uri"])) for im in doc.get("images") or []
+            if isinstance(im, dict) and isinstance(im.get("uri"), str) and im["uri"] and not im["uri"].startswith("data:")]
+
+
+def discard(outdir, src):
+    """Deletes what a failed export of src left behind: its outputs that fail the check, and for a glb every
+    texture it names that is not a whole PNG, so the retry writes them fresh rather than leaving a bad one in place."""
+    for o in outputs(src):
+        p = os.path.join(outdir, o)
+        if not os.path.isfile(p) or file_ok(p, need_of(src)):
+            continue
+        for t in glb_images(p) if p.endswith(".glb") else []:
+            if os.path.isfile(t) and not png_ok(t):
+                os.remove(t)
+                LOG("  removed damaged texture " + os.path.relpath(t, outdir).replace(os.sep, "/"))
+        os.remove(p)
 
 
 def file_ok(path, need=None):
@@ -181,7 +255,8 @@ def export(run, outdir, files, extra, cfg, fresh=False, retries=None):
         if not todo:
             break
         LOG("  retry %d: %d file(s) failed the output check: %s" % (attempt + 1, len(todo), ", ".join(todo[:6]) + (" ..." if len(todo) > 6 else "")))
-        for f in todo:  # one per call, so one bad path cannot cost the others
+        for f in todo:  # one per call, so one bad path cannot cost the others; a damaged output goes first
+            discard(outdir, f)
             run([f], extra)
     lost = [f for f in todo if not present(outdir, f)]
     for f in lost:

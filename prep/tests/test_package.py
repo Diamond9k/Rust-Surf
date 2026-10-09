@@ -225,6 +225,17 @@ class Build(unittest.TestCase):
         self.assertEqual(package.sync_copies(self.r), [])
         self.assertFalse(os.path.exists(os.path.join(self.r, "prep", "hud.json")))  # prep only gets the sheets it reads
 
+    def test_sync_flag_before_an_editor_export(self):
+        """--sync alone: a game/data/ left from an older version (not in git) is brought in step, nothing else runs."""
+        with open(os.path.join(self.r, "game", "data", "weapons.json"), "w", encoding="utf-8") as f:
+            f.write('{"version": "0.1.0"}')
+        buf = io.StringIO()
+        with unittest.mock.patch.object(package, "R", self.r), contextlib.redirect_stdout(buf):
+            self.assertEqual(package.main(["--sync"]), 0)
+        self.assertIn("synced game/data/weapons.json from sheets/", buf.getvalue())
+        self.assertEqual(package.check_copies(self.r), [])
+        self.assertTrue(os.path.isfile(os.path.join(self.r, "dist", "RustSurf", "RustSurf.pck")))  # no build, no gate
+
     def test_failed_gate_blocks_the_zip(self):
         out, errs = self.build(gate=lambda v: (["Godot --wtest: exit 1, pass line present"], 3))
         self.assertIsNone(out)
@@ -314,6 +325,11 @@ if "--wtest" in a:
         sys.exit(0)  # ended before the self-test printed its verdict
     if mode == "werr":
         print("SCRIPT ERROR: Invalid call. Nonexistent function 'x'")
+    if mode in ("engerr", "srcengerr"):  # an engine error the self-test itself does not see
+        print("ERROR: Failed loading resource: /data/cs2/weapons/models/ak47/weapon_rif_ak47.glb.")
+        print("   at: _load (core/io/resource_loader.cpp:343)")
+    if mode in ("missing", "srcmissing"):  # what an empty data folder prints for each texture it lacks
+        print("ERROR: Error opening file '%s/rust/tex/tarmac_albedo.png'." % a[a.index("--data") + 1])
     fails = {"srccontent": ["viewmodel_inside_hull rig reaches 0.000 m"], "srcreal": ["viewmodel_inside_hull rig", "spray_fps_independent gap 0.2 deg"],
              "srcmiscount": ["reequip_idle idle clip on three equips: []"]}.get(mode, [])
     for f in fails:
@@ -416,6 +432,23 @@ class Gate(unittest.TestCase):
         errs, _ = self.gate("ufail")
         self.assertTrue(any(e.startswith("Godot --uitest on the exported pck: exit 1") and "UITEST FAIL rebind" in e for e in errs), errs)
 
+    def test_engine_error_with_a_pass_line(self):
+        """A glb that fails to load prints only Godot's ERROR: line; the self-test still passes, the gate does not."""
+        errs, _ = self.gate("engerr")
+        self.assertEqual(len(errs), 1, errs)
+        self.assertTrue(errs[0].startswith("Godot --wtest on the exported pck: exit 0, pass line present") and "Failed loading resource" in errs[0], errs)
+        errs, _ = self.gate("missing")  # on release data a missing file is a real gap, never excused
+        self.assertTrue(errs and "Error opening file" in errs[0], errs)
+
+    def test_engine_errors_helper(self):
+        out = "\n".join(("ERROR: Error opening file '/x/d/rust/tex/a.png'.", "   at: open", "USER ERROR: weapons: bad sheet",
+                         "WARNING: The load-time scene is not defined", "ERROR: Error opening file '/x/other/a.png'."))
+        self.assertEqual(package.engine_errors(out), ["ERROR: Error opening file '/x/d/rust/tex/a.png'.", "USER ERROR: weapons: bad sheet",
+                                                      "ERROR: Error opening file '/x/other/a.png'."])
+        self.assertEqual(package.engine_errors(out, "/x/d"), ["USER ERROR: weapons: bad sheet", "ERROR: Error opening file '/x/other/a.png'."])
+        win = out.replace("'/x/d/rust/tex/a.png'", "'" + os.path.join(os.path.abspath("/x/d"), "rust", "tex", "a.png").replace("/", "\\") + "'")
+        self.assertEqual(len(package.engine_errors(win, "/x/d")), 2)  # Godot on Windows may print either slash
+
     def test_hung_test_is_stopped_by_the_clock(self):
         os.environ["FAKE_GODOT"] = "sleep"
         errs = package.godot_gate(self.r, self.godot, self.data, timeout=2, log=lambda s: None)
@@ -450,6 +483,15 @@ class Ci(unittest.TestCase):
         errs, _ = self.ci("srcreal")  # a real regression next to an excused one still fails
         self.assertEqual(len(errs), 1, errs)
         self.assertIn("spray_fps_independent", errs[0])
+
+    def test_empty_data_errors_excused_only_there(self):
+        """--ci runs with an empty data folder, so "Error opening file" under it is expected; any other engine
+        error is not."""
+        errs, _ = self.ci("srcmissing")
+        self.assertEqual(errs, [])
+        errs, _ = self.ci("srcengerr")
+        self.assertEqual(len(errs), 1, errs)
+        self.assertIn("Failed loading resource", errs[0])
 
     def test_excuse_needs_the_test_own_count_to_agree(self):
         errs, _ = self.ci("srcmiscount")

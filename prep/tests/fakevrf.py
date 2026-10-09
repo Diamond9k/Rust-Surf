@@ -6,11 +6,26 @@ import os, json, zlib, struct
 MP3 = ("amb_wind_01.vsnd_c",)  # sounds the real VPK stores as mp3 (the one content.json row says so)
 
 
-def png_bytes():
-    def chunk(kind, data):
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
-    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
-            + chunk(b"IDAT", zlib.compress(b"\0\0\0\0")) + chunk(b"IEND", b""))
+def png_chunk(kind, data):
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+
+def png_bytes(w=1, h=1, ctype=2, raw=None, interlace=0, split=0):
+    """A PNG with good chunk CRCs. raw: the pixel stream (default: filter 0 rows of zeros for w x h at 8 bits);
+    split: the IDAT stream cut into chunks of this many bytes, as encoders do for big images."""
+    ch = {0: 1, 2: 3, 4: 2, 6: 4}[ctype]
+    if raw is None:
+        raw = b"".join(b"\0" + b"\0" * (w * ch) for _ in range(h))
+    z = zlib.compress(raw)
+    parts = [z[i:i + split] for i in range(0, len(z), split)] if split else [z]
+    return (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, ctype, 0, 0, interlace))
+            + b"".join(png_chunk(b"IDAT", p) for p in parts) + png_chunk(b"IEND", b""))
+
+
+def garbled_png():
+    """Whole on the outside (signature, CRCs, IEND) but its pixel stream is short and a row filter is invalid:
+    what a texture mixed up in a batch export can look like."""
+    return png_bytes(4, 4, raw=b"\x09" + b"\x7f" * 12 + b"\0" * 13)
 
 
 def glb_bytes(kind="mesh", images=(), n=64):
@@ -40,11 +55,13 @@ class FakeVRF:
     bad: paths that never export; flaky: paths that fail their first call; poison: a call of several files holding any
     of these exports nothing (all-or-nothing batches); truncate: glbs written cut short the first time;
     items_game: text written for scripts/items/items_game.txt; vdata: text for a .vdata_c (None: not in the VPK);
-    badtex: models whose PNG texture is written cut short every time."""
+    badtex: models whose PNG texture is written cut short every time; batchtex: models whose texture comes out
+    garbled (good CRCs, bad pixels) when exported in a call of several files, whole when alone; noclobber: never
+    overwrite a file that exists (a damaged output stays unless prep deletes it)."""
 
-    def __init__(self, items_game="", bad=(), flaky=(), poison=(), truncate=(), vdata=None, badtex=()):
+    def __init__(self, items_game="", bad=(), flaky=(), poison=(), truncate=(), vdata=None, badtex=(), batchtex=(), noclobber=False):
         self.items_game, self.bad, self.flaky, self.poison, self.truncate = items_game, set(bad), set(flaky), set(poison), set(truncate)
-        self.vdata, self.badtex = vdata, set(badtex)
+        self.vdata, self.badtex, self.batchtex, self.noclobber = vdata, set(badtex), set(batchtex), noclobber
         self.calls, self.seen = [], set()
 
     def __call__(self, vpk, outdir, timeout):
@@ -59,17 +76,18 @@ class FakeVRF:
                 if f in self.bad or (first and f in self.flaky):
                     ok = False
                     continue
-                self.write(outdir, f, first and f in self.truncate)
+                self.write(outdir, f, first and f in self.truncate, len(files) > 1)
             return ok
         return run
 
-    def write(self, outdir, f, cut):
+    def write(self, outdir, f, cut, batch=False):
         if f.endswith(".vsnd_c"):
             p, data = f[:-7] + (".mp3" if f.endswith(MP3) else ".wav"), (b"\xff\xfb\x90\xc4" + b"\0" * 60 if f.endswith(MP3) else wav_bytes())
         elif f.endswith(".vmdl_c"):
             p = os.path.splitext(f)[0] + ".glb"
             tex = os.path.basename(p)[:-4] + "_color_psd_0.png"
-            self.put(os.path.join(outdir, os.path.dirname(p), tex), png_bytes()[:30] if f in self.badtex else png_bytes())
+            png = png_bytes()[:30] if f in self.badtex else garbled_png() if batch and f in self.batchtex else png_bytes()
+            self.put(os.path.join(outdir, os.path.dirname(p), tex), png)
             data = glb_bytes("mesh", [tex])
         elif f.endswith(".vnmclip_c"):
             p, data = os.path.splitext(f)[0] + ".glb", glb_bytes("clip")
@@ -84,6 +102,8 @@ class FakeVRF:
         self.put(os.path.join(outdir, p), data)
 
     def put(self, p, data):
+        if self.noclobber and os.path.exists(p):
+            return
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "wb") as fh:
             fh.write(data)

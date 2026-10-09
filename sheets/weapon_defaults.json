@@ -428,10 +428,17 @@
   },
   {
    "id": "burst_cooldown",
-   "value": 0.35,
-   "used_in": "seconds after a burst when items_game gives no cycletime alt",
-   "source": "mashup estimate",
+   "value": 0.5,
+   "used_in": "seconds from a burst's pull to the next pull when items_game gives no cycletime alt (burst_from_pull 1)",
+   "source": "mashup estimate: keeps the earlier 0.35 s after the last round of a 3-round, 0.075 s burst",
    "verified": "unverified: CS2 value not checked"
+  },
+  {
+   "id": "burst_from_pull",
+   "value": 1,
+   "used_in": "1: a burst gun's next pull is cycletime alt after the pull's first round (never before the last round + burst_gap); 0: after its last round",
+   "source": "mashup reading of CS:GO CSBaseGunFire (next primary attack set when the pull fires, follow-up rounds leave it), recalled, not read",
+   "verified": "unverified: CS:GO SDK recalled; CS2 burst timing not checked"
   },
   {
    "id": "shell_start",
@@ -705,6 +712,20 @@
    "used_in": "landing penalty = inaccuracy land x fall speed (units/s) x this, added to the fire inaccuracy",
    "source": "mashup reading of CS:GO CWeaponCSBase::OnLand (penalty = inaccuracy land x fall velocity); whether CS scales the velocity first was not checked",
    "verified": "unverified: the velocity scaling of CS's landing penalty was not checked"
+  },
+  {
+   "id": "air_spread_scale",
+   "value": 1.0,
+   "used_in": "multiplies the take-off cone (inaccuracy jump initial) in the airborne term and the take-off penalty",
+   "source": "CS:GO convar weapon_air_spread_scale (default 1) recalled from the SDK, not read from a file",
+   "verified": "unverified for CS2 (CS:GO SDK default from memory)"
+  },
+  {
+   "id": "jump_takeoff_penalty",
+   "value": 1.0,
+   "used_in": "on take-off the fire inaccuracy gains take-off cone x air_spread_scale x this (0 turns it off)",
+   "source": "mashup reading of CS:GO CWeaponCSBase::OnJump (accuracy penalty += inaccuracy jump initial x weapon_air_spread_scale), recalled, not read",
+   "verified": "unverified: CS:GO SDK recalled; whether CS2 keeps OnJump was not checked"
   },
   {
    "id": "shotgun_spread_patterns",
@@ -1005,9 +1026,9 @@
   },
   {
    "id": "vm_metal_scale",
-   "value": 0.6,
+   "value": 0.2,
    "used_in": "viewmodel weapon mask: metallic factor on top of the metal channel",
-   "source": "mashup tuning: at 1.0 the knife blade mirrored the blue sky (no map cubemap like CS2's) and read dark navy in the floor/start renders",
+   "source": "mashup tuning: at 1.0 the knife blade mirrored the blue sky (no map cubemap like CS2's) and read dark navy; at 0.6 Gauntlet critics still saw a blue-black blade; at 0.2 the sun lights it as grey steel (weapons_r1_1 start/floor/sun renders)",
    "verified": "mashup choice, not a CS2 value; judged from renders, not compared side by side with CS2"
   }
  ],

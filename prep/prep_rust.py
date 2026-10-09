@@ -46,7 +46,7 @@ def load_env(UnityPy, rust, bundles, node_filter=None):
 
 def export_texture(tex_pptr, out_png, max_size):
     from prep_cs2 import file_ok
-    if file_ok(out_png):  # whole (every PNG chunk CRC); a cut or garbled one is exported again
+    if file_ok(out_png):  # whole (chunk CRCs and the pixel stream); a cut or garbled one is exported again
         return True
     try:
         tex = tex_pptr.read()

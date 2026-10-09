@@ -15,9 +15,19 @@ const FILL := Color(0.86, 0.87, 0.9)
 const OLD := {"sens": "sensitivity", "vm_fov": "viewmodel_fov", "vm_x": "viewmodel_offset_x", "vm_y": "viewmodel_offset_y",
 	"vm_z": "viewmodel_offset_z", "xh_size": "cl_crosshairsize", "xh_gap": "cl_crosshairgap", "xh_thick": "cl_crosshairthickness",
 	"xh_color": "cl_crosshaircolor", "xh_dot": "cl_crosshairdot", "speed": "show_speed"}
+# key names SurfInput.KEYS lacks: the keypad and the right-hand modifiers, under Source's names (KP_END is keypad 1;
+# unverified that CS2 kept them). The menu writes these names and builds their events itself; KP_1-style names read too.
+const KP := {"KP_INS": KEY_KP_0, "KP_END": KEY_KP_1, "KP_DOWNARROW": KEY_KP_2, "KP_PGDN": KEY_KP_3, "KP_LEFTARROW": KEY_KP_4,
+	"KP_5": KEY_KP_5, "KP_RIGHTARROW": KEY_KP_6, "KP_HOME": KEY_KP_7, "KP_UPARROW": KEY_KP_8, "KP_PGUP": KEY_KP_9,
+	"KP_DEL": KEY_KP_PERIOD, "KP_SLASH": KEY_KP_DIVIDE, "KP_MULTIPLY": KEY_KP_MULTIPLY, "KP_MINUS": KEY_KP_SUBTRACT,
+	"KP_PLUS": KEY_KP_ADD, "KP_ENTER": KEY_KP_ENTER, "PAUSE": KEY_PAUSE, "NUMLOCK": KEY_NUMLOCK, "SCROLLLOCK": KEY_SCROLLLOCK,
+	"APP": KEY_MENU}
+const SIDED := {"RCTRL": [KEY_CTRL, KEY_LOCATION_RIGHT], "RSHIFT": [KEY_SHIFT, KEY_LOCATION_RIGHT],
+	"RALT": [KEY_ALT, KEY_LOCATION_RIGHT], "LWIN": [KEY_META, KEY_LOCATION_LEFT], "RWIN": [KEY_META, KEY_LOCATION_RIGHT]}
 const BLUR := """shader_type canvas_item;
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
 uniform float vignette = 0.0;
+uniform float dim = 0.6;
 void fragment() {
 	vec2 px = SCREEN_PIXEL_SIZE * 6.0;
 	vec3 c = vec3(0.0);
@@ -26,7 +36,7 @@ void fragment() {
 			c += textureLod(screen_tex, SCREEN_UV + vec2(float(x), float(y)) * px, 3.0).rgb;
 		}
 	}
-	vec3 col = mix(c / 25.0, vec3(0.035, 0.04, 0.05), 0.6);
+	vec3 col = mix(c / 25.0, vec3(0.035, 0.04, 0.05), dim);
 	vec2 d = (SCREEN_UV - 0.5) * vec2(1.0, 0.8);
 	COLOR = vec4(col * (1.0 - vignette * smoothstep(0.15, 0.75, length(d) * 1.4)), 1.0);
 }"""
@@ -38,6 +48,7 @@ var rows := {}           # id -> settings.json row
 var _changed := {}
 var _keys := {}          # input.json id -> [key, key] in slot order (CS2 key names, upper case)
 var _keys_set := {}      # input.json ids whose keys the player set here (saved)
+var _dead := {}          # key names no key answers to (left out of the InputMap, shown red)
 var _root: Control
 var _tab := "game"
 var _pages := {}
@@ -345,20 +356,44 @@ func _set_keys(id: String, ks: Array) -> void:
 	_keys[id] = ks.slice(0, 2)
 	_keys_set[id] = true
 
-## Puts _keys into the InputMap: each action gets exactly its keys (SurfInput builds each event).
+## Puts _keys into the InputMap: each action gets exactly its keys. A name no key answers to (a vcfg name this
+## game does not know) is left out of the map and shown red in the bind list, never registered as a dead event.
 func _apply_keys() -> void:
-	var tmp := "_settings_key"
+	_dead.clear()
 	for r in _input_rows():
 		var action: String = r["godot_action"]
 		if not InputMap.has_action(action):
 			InputMap.add_action(action)
 		InputMap.action_erase_events(action)
 		for k in _keys.get(r["id"], []):
-			main.sinput._register(tmp, k)
-			for ev in InputMap.action_get_events(tmp):
+			var ev := _event(String(k))
+			if ev == null:
+				_dead[String(k)] = true
+			else:
 				InputMap.action_add_event(action, ev)
-	if InputMap.has_action(tmp):
-		InputMap.erase_action(tmp)
+	if not _dead.is_empty():
+		push_warning("binds with key names this game does not know: %s" % ", ".join(_dead.keys()))
+
+## The input event for a CS2 key name: the keypad and sided keys here, the rest through SurfInput; null when unknown.
+func _event(k: String) -> InputEvent:
+	var up := k.to_upper()
+	if KP.has(up) or SIDED.has(up) or (up.begins_with("KP_") and up.substr(3).is_valid_int() and int(up.substr(3)) in range(10)):
+		var e := InputEventKey.new()
+		if SIDED.has(up):
+			e.keycode = SIDED[up][0]
+			e.location = SIDED[up][1]
+		else:
+			e.keycode = KP[up] if KP.has(up) else KEY_KP_0 + int(up.substr(3))
+		return e
+	if up.begins_with("KP_"):
+		return null  # SurfInput would drop the prefix and bind the main-keyboard key
+	var tmp := "_settings_key"
+	main.sinput._register(tmp, up)
+	var evs := InputMap.action_get_events(tmp)
+	InputMap.erase_action(tmp)
+	if evs.is_empty() or (evs[0] is InputEventKey and (evs[0] as InputEventKey).keycode == KEY_NONE):
+		return null
+	return evs[0]
 
 ## CS2 key name for a pressed key or mouse button (the names cs2_user_keys.vcfg uses).
 func _key_name(ev: InputEvent) -> String:
@@ -368,6 +403,12 @@ func _key_name(ev: InputEvent) -> String:
 				return n
 		return ""
 	var kc: Key = (ev as InputEventKey).keycode
+	for n in SIDED:
+		if SIDED[n][0] == kc and SIDED[n][1] == (ev as InputEventKey).location:
+			return n
+	for n in KP:
+		if KP[n] == kc:
+			return n
 	for n in SurfInput.KEYS:
 		if SurfInput.KEYS[n] == kc:
 			return n
@@ -414,12 +455,22 @@ func _rebind(slot: String, key: String) -> void:
 	_set_keys(id, ks)
 	_apply_keys()
 	_save()
+	_refresh_binds()
 
 func _refresh_binds() -> void:
 	for s in _bind_btns:
 		var ks: Array = _keys.get(String(s).get_slice(":", 0), [])
 		var i := int(String(s).get_slice(":", 1))
-		(_bind_btns[s] as Button).text = String(ks[i]).to_upper() if i < ks.size() else "-"
+		var b := _bind_btns[s] as Button
+		b.text = String(ks[i]).to_upper() if i < ks.size() else "-"
+		var dead := i < ks.size() and _dead.has(String(ks[i]))
+		if dead:
+			b.add_theme_color_override("font_color", Color(1, 0.42, 0.38))
+		elif i == 0:
+			b.remove_theme_color_override("font_color")
+		else:
+			b.add_theme_color_override("font_color", Color(0.75, 0.77, 0.8))
+		b.tooltip_text = "Not a key this game knows: click to bind another" if dead else "Click, then press a key (Esc cancels). Right-click clears."
 
 func _reset_binds() -> void:
 	_keys.clear()
@@ -551,6 +602,7 @@ func _build() -> void:
 	mat.shader = Shader.new()
 	mat.shader.code = BLUR
 	mat.set_shader_parameter("vignette", float(main.hud.H["menu_vignette"]))
+	mat.set_shader_parameter("dim", float(main.hud.H["menu_dim"]))
 	blur.material = mat
 	_root.add_child(blur)
 	# nav bar: icon buttons like CS2's main menu (settings lit, resume, aim lobby, restart; quit on the right)
@@ -1277,6 +1329,45 @@ func _uitest() -> void:
 	var gw: float = Hud.xh_px(d4, 1080, hv, float(hv["gap_base"]) + 6.0)["gap"]
 	ok.call(gw > g4, "a weapon gap widens the static gap (%s -> %s px)" % [g4, gw])
 	ok.call(Hud.xh_color({"cl_crosshaircolor": "5", "cl_crosshaircolor_r": "10", "cl_crosshaircolor_g": "20", "cl_crosshaircolor_b": "30", "cl_crosshairalpha": "128"}, hv).is_equal_approx(Color8(10, 20, 30, 128)), "colour 5 is the custom RGB with alpha")
+	# style 2 opens as one arm up to splitdist, then only the outer pip keeps moving (no jump either side of it)
+	var c2 := {"cl_crosshairstyle": "2", "cl_crosshairsize": "5", "cl_crosshairgap": "1", "cl_crosshair_dynamic_splitdist": "7",
+		"cl_crosshair_dynamic_maxdist_splitratio": "0.35", "cl_crosshair_dynamic_splitalpha_outermod": "0.5"}
+	var spl := roundf(7.0 * 1080 / float(hv["yres_base"]))
+	var g2: float = Hud.xh_px(c2, 1080, hv)["gap"]
+	var q0: Array = Hud.xh_segs(c2, 1080, hv, 0.0, 0.0)
+	var q3: Array = Hud.xh_segs(c2, 1080, hv, 3.0, 0.0)
+	var qa: Array = Hud.xh_segs(c2, 1080, hv, spl, 0.0)
+	var qb: Array = Hud.xh_segs(c2, 1080, hv, spl + 1.0, 0.0)
+	var qw: Array = Hud.xh_segs(c2, 1080, hv, spl + 20.0, 0.0)
+	var inner: float = q0[0][1]
+	ok.call(q3[0][0] == g2 + 3.0 and q3[1][0] == g2 + 3.0 + inner and q3[1][2] == 1.0, "style 2 opens 3 px as one arm below splitdist (%s)" % [q3])
+	ok.call(qb[0][0] == qa[0][0] and qb[1][0] == qa[1][0] + 1.0, "style 2 has no jump at splitdist (%s -> %s)" % [qa, qb])
+	ok.call(qw[0][0] == g2 + spl and qw[1][0] == g2 + spl + 20.0 + inner and is_equal_approx(float(qw[1][2]), 0.5), "style 2 past splitdist: inner stays, outer moves at outermod (%s)" % [qw])
+	# keypad and right-hand keys keep their own events and CS2 names; an unknown name is never a dead bind
+	var kp := InputEventKey.new()
+	kp.keycode = KEY_KP_1
+	var rc := InputEventKey.new()
+	rc.keycode = KEY_CTRL
+	rc.location = KEY_LOCATION_RIGHT
+	ok.call(_key_name(kp) == "KP_END" and _key_name(rc) == "RCTRL", "numpad 1 is KP_END, right Ctrl is RCTRL (%s, %s)" % [_key_name(kp), _key_name(rc)])
+	var e5: InputEvent = _event("KP_5")
+	var e1: InputEvent = _event("kp_1")
+	var er: InputEvent = _event("RCTRL")
+	ok.call(e5 is InputEventKey and (e5 as InputEventKey).keycode == KEY_KP_5 and (e1 as InputEventKey).keycode == KEY_KP_1
+		and (er as InputEventKey).location == KEY_LOCATION_RIGHT and _event("KP_NOPE") == null and _event("NOTAKEY") == null, "KP_5, KP_1, RCTRL map to their keys; unknown names map to none")
+	_rebind("reload:1", "NOTAKEY")
+	var dead_ev := false
+	for ev in InputMap.action_get_events("surf_reload"):
+		dead_ev = dead_ev or (ev is InputEventKey and (ev as InputEventKey).keycode == KEY_NONE)
+	ok.call(not dead_ev and _dead.has("NOTAKEY") and (_bind_btns["reload:1"] as Button).tooltip_text.begins_with("Not a key"), "an unknown key name binds nothing and shows red")
+	_rebind("reload:1", "KP_ENTER")
+	var kpe := false
+	for ev in InputMap.action_get_events("surf_reload"):
+		kpe = kpe or (ev is InputEventKey and (ev as InputEventKey).keycode == KEY_KP_ENTER)
+	ok.call(kpe and _dead.is_empty(), "KP_ENTER binds keypad Enter, not Enter")
+	_reset_binds()
+	for p in [FILE, FILE + ".tmp", FILE + ".bad"]:
+		DirAccess.remove_absolute(gp.call(p))
 	# no hit marker unless the player turns it on
 	main.hud.hitmarker(false)
 	ok.call(main.hud._hit == 0.0, "hit marker off by default")

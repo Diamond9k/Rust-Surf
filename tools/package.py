@@ -3,6 +3,9 @@ that would install broken.
 usage: package.py [<version>] --godot <Godot binary> --data <prep output folder> [--no-sync] [--skip-pck-scan]
                   [--no-bundle-smoke]
   -> dist/RustSurf-<version>.zip, dist/RustSurf-<version>.entries.json
+       package.py --sync
+  -> copies sheets/ over game/data/ and prep/ and checks them; run it before exporting from the Godot editor
+     (game/data/ is not in git, so an export without it ships whatever copies were last there)
        package.py --ci --godot <Godot 4.7.2 headless binary>
   -> "CI: clean" or the problems, exit 1; no zip. Every push runs it (.github/workflows/ci.yml): the checks that
      need neither the games' files nor export templates (see ci()), so a script change is tested before release.
@@ -22,7 +25,8 @@ not in git, so a fresh clone holds none or stale ones; --no-sync only checks). T
   prep/items_game.py does; then dist/RustSurf is emptied and the Windows Desktop preset exported into it
   (--export-release; needs the Godot 4.7.2 export templates), and --lobbytest ("LTEST ALL PASS"), --wtest
   ("WTEST weapons checks=N failed=0") and --uitest ("UITEST ok") run on that exported RustSurf.pck
-  (--main-pack), each with exit 0, no FAIL / SCRIPT ERROR / Parse Error line and a wall-clock limit, on --data
+  (--main-pack), each with exit 0, no FAIL / SCRIPT ERROR / Parse Error / engine ERROR: line and a wall-clock
+  limit (--ci excuses only "Error opening file" under its empty data folder), on --data
   (so the real CS2 stats reach the gun model) with empty Rust and CS2 folders so the packager's own CS2 config
   cannot change a result. The zip therefore holds exactly the tested export.
 Checks before zipping (each failure is listed, nothing is written):
@@ -385,6 +389,23 @@ GAME_TESTS = (("--lobbytest", re.compile(r"^LTEST ALL PASS\s*$", re.M)),
               ("--wtest", re.compile(r"^WTEST weapons checks=[1-9]\d* failed=0\s*$", re.M)),
               ("--uitest", re.compile(r"^UITEST ok\s*$", re.M)))
 TEST_FAIL = re.compile(r"^(LTEST|WTEST|UITEST) FAIL", re.M)
+# Godot's own error lines (a resource or glb that does not load, a missing node, push_error): a test can still
+# print its pass line after one, so each fails the test too.
+ENGINE_ERR = re.compile(r"^(?:USER )?ERROR:")
+
+
+def engine_errors(out, data=None):
+    """Godot ERROR: lines of a run. data: a folder the run was told holds no content (--ci): "Error opening file"
+    lines for files under it are what an empty data folder prints and are left out; nothing else is."""
+    root = os.path.abspath(data).replace(os.sep, "/").rstrip("/") + "/" if data else None
+    errs = []
+    for l in out.splitlines():
+        l = l.strip()
+        if ENGINE_ERR.match(l):
+            if root and "Error opening file" in l and root in l.replace("\\", "/"):
+                continue
+            errs.append(l)
+    return errs
 TEST_TIMEOUT = 300  # wall clock per headless test; each one quits itself when done (about 20 s here)
 
 
@@ -427,8 +448,9 @@ def scripts_gate(root, godot, timeout=600, log=print):
 def game_tests(godot, launch, data, where, timeout=TEST_TIMEOUT, log=print, allowed=()):
     """--lobbytest, --wtest and --uitest with launch (["--main-pack", pck] or ["--path", game]) on data, with empty
     Rust and CS2 folders (the packager's own CS2 config cannot change a result), each under a wall-clock limit.
-    A test passes on exit 0, its pass line and no FAIL / SCRIPT ERROR line. allowed: check names whose FAIL alone
-    is accepted (--ci, which has no extracted content); the test's own failed=N must then count exactly those."""
+    A test passes on exit 0, its pass line and no FAIL / SCRIPT ERROR / engine ERROR: line. allowed: check names
+    whose FAIL alone is accepted (--ci, which has no extracted content); the test's own failed=N must then count
+    exactly those, and there "Error opening file" lines for files under the empty data folder are expected."""
     errs = []
     empty = tempfile.mkdtemp(prefix="rs_gate_")
     for d in ("rust", "cs2", "cwd"):
@@ -438,6 +460,7 @@ def game_tests(godot, launch, data, where, timeout=TEST_TIMEOUT, log=print, allo
             cmd = [godot, "--headless"] + launch + ["--", "--data", data, "--rust", os.path.join(empty, "rust"), "--cs2", os.path.join(empty, "cs2"), flag]
             code, out = _run(cmd, os.path.join(empty, "cwd"), timeout, log)
             fails = [l for l in out.splitlines() if SCRIPT_ERR.search(l) or TEST_FAIL.match(l)]
+            fails += [l for l in engine_errors(out, data if allowed else None) if l not in fails]
             excused = [l for l in fails if TEST_FAIL.match(l) and len(l.split()) > 2 and l.split()[2] in allowed]
             hard = [l for l in fails if l not in excused]
             counted = re.search(r"^\w+ \w+ checks=[1-9]\d* failed=(\d+)\s*$", out, re.M)
@@ -623,6 +646,13 @@ def main(argv):
             args.append(argv[i])
         i += 1
     godot = opt.get("--godot") or os.environ.get("GODOT", "")
+    if "--sync" in argv:  # before any export made outside this script (the Godot editor, a local export tool)
+        names = sync_copies(R)
+        for n in names:
+            print("synced %s from sheets/" % n)
+        errs = check_copies(R)
+        print("sheet copies: %s" % ("in step (%d rewritten)" % len(names) if not errs else "; ".join(errs)))
+        return 1 if errs else 0
     if "--ci" in argv:
         errs = ci(R, godot)
         print("CI: clean" if not errs else "CI: %d problem(s):" % len(errs))

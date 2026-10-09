@@ -42,6 +42,15 @@ class Parse(unittest.TestCase):
         self.assertNotIn("console_only", self.ig["prefabs"]["weapon_ak47_prefab"])
         self.assertEqual(self.ig["prefabs"]["weapon_ak47_prefab"]["visuals"]["weapon_type"], "Rifle")
 
+    def test_item_with_blocks_before_its_name(self):
+        """An items entry need not start with "name": stats() finds it by the parsed key, whatever comes first."""
+        st = items_game.stats(FIX, ["weapon_deagle"])["weapon_deagle"]
+        self.assertEqual(st["damage"], "63")             # the item's own attribute block
+        self.assertEqual(st["cycletime"], "0.225000")
+        self.assertEqual(st["penetration"], "1")         # from its prefab chain: pistol -> secondary -> weapon_base
+        self.assertEqual(st["range"], "4096")
+        self.assertNotIn("weapon_deagle", items_game.prefab_chains(FIX, ["weapon_deagle"]))  # no weapon_deagle_prefab
+
     def test_cond_true(self):
         for e, want in (("$WIN32", True), ("!$WIN32", False), ("$X360", False), ("!$X360", True),
                         ("$X360||$WIN32", True), ("$WINDOWS&&!$X360", True), ("$WIN32 && $OSX", False), ("$win32", True)):

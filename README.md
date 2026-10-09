@@ -33,20 +33,27 @@ Prep needs Rust and CS2 installed through Steam and takes several minutes, most 
 texture bundles. Every file it writes is checked whole before it counts:
 
 - CS2 models and clips: the glb's length field, its JSON and BIN chunks, a mesh in every model and an
-  animation in every clip, and every PNG texture the model names (each PNG chunk's CRC). These checks
-  match what Source2Viewer-CLI 20 wrote for the arms, knife and knife clips on a real install.
+  animation in every clip, and every PNG texture the model names: each PNG chunk's CRC, and the pixel data
+  must inflate to exactly the size the image header gives with a valid filter on every row, so a texture
+  garbled during a batch export fails even when its CRCs are intact. These checks pass on all 79 PNGs and
+  every glb that Source2Viewer-CLI 20 and UnityPy wrote for the arms, knife, knife clips and Launch Site
+  on a real install.
 - Sounds: the wav RIFF size or the mp3 frame sync. Text files (`items_game.txt`, `weapons.vdata`) must
   parse to the last closing brace.
-- Rust: every Launch Site mesh the placements file names, with its textures, and every course texture.
+- Rust: every Launch Site mesh the placements file names, with its textures (the same PNG check), and
+  every course texture.
 
-A CS2 file that fails is exported again on its own (twice by default, `sheets/prep.json`). Prep writes
+A CS2 file that fails has its damaged output and any damaged texture deleted, then is exported again on
+its own (twice by default, `sheets/prep.json`). Prep writes
 `data/done-0.2.0.txt` only when every surf asset, the arms, the knife, all 35 weapons (model, every
 clip, shot sound) are in place and `items_game.txt` exported whole and names every weapon. Otherwise it
 stops with the reason on screen, in a Windows message box (the launcher's console window may close
 before you can read it; the box closes itself after 15 minutes so an unattended setup still exits) and in
 `data/prep.log`, writes the reasons to `data/prep_status.json` (the game
 shows them in its error panel, so a partial install never looks like a working one) and runs again on
-the next start, redoing only what is missing.
+the next start, redoing only what is missing. A run also removes the done file and marks
+`prep_status.json` unfinished before it exports anything, so setup closed half way through is set up again
+on the next start and named in the error panel, never left looking finished.
 
 Missing weapon stats (`stats_required` in `sheets/prep.json`) do not stop setup in 0.2.0: the key names
 CS2 uses have not been read from a real install yet, and a wrong guess would fail setup for every player
@@ -88,6 +95,8 @@ tools such as `Source2Viewer-CLI.exe`).
 - `sheets/` the design, one JSON sheet per kind of thing (games, content, weapons, movement, course,
   materials, sounds, input, settings, hud, aim lobby, prep, systems, hooks, credits). The sheets are the
   source of truth; `game/data/` and `prep/` hold byte-identical copies (`tools/package.py` writes them).
+  `game/data/` is not in git: before exporting from the Godot editor run `python3 tools/package.py --sync`,
+  or the export ships whatever copies were last there (`tools/preflight.py` reports any copy that differs).
 - `game/` the Godot 4.7 project. Every script is one row of `sheets/systems.json`.
 - `prep/` the one-time extractor Melty runs before the first start. `python3 -m unittest discover prep/tests`
   runs its tests (set `RS_DATA` to an extracted data folder to also check real exports, `RS_GODOT` to a
@@ -110,7 +119,8 @@ tools such as `Source2Viewer-CLI.exe`).
   (`tools/kv_parity.gd`) must read the test fixture and the real file exactly as prep does. It then
   empties `dist/RustSurf`, exports the game into it itself (Godot's Windows export templates must be
   installed) and runs the headless `--lobbytest`, `--wtest` and `--uitest` on that exported pack with the
-  `--data` folder, each under a wall-clock limit and required to exit 0 with its pass line, so the zip
+  `--data` folder, each under a wall-clock limit and required to exit 0 with its pass line and without a
+  single Godot `ERROR:` line (a glb that fails to load prints only that), so the zip
   holds exactly the build that was tested. It also refuses unless the export holds every current sheet,
   the prep bundle has `python.exe` with its standard library, UnityPy, `vrf/`, `vgm/` and every prep
   source byte for byte and nothing a dev run left there (an allowlist), the bundle's own `python.exe`

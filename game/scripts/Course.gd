@@ -135,7 +135,7 @@ func _surface(m: Dictionary) -> Material:
 	for k in ["leak_v", "debris_v"]:
 		var a: Array = W[k]
 		sm.set_shader_parameter(k, Vector2(a[0], a[1]))
-	for k in ["leak_len", "leak_width", "debris_width", "groove", "groove_width", "edge_wear"]:
+	for k in ["leak_len", "leak_width", "debris_width", "groove", "groove_width", "edge_wear", "leak_vary", "leak_gap"]:
 		sm.set_shader_parameter(k, float(W[k]))
 	return sm
 
@@ -362,6 +362,8 @@ uniform vec2 debris_v = vec2(0.32, 0.17);
 uniform float leak_len = 6.0;
 uniform float leak_width = 5.0;
 uniform float debris_width = 2.0;
+uniform float leak_vary = 0.0;
+uniform float leak_gap = 0.0;
 varying vec3 wpos;
 varying vec3 wn;
 varying flat vec2 face_off;  // flat: interpolation jitter fed into hash() speckled the leak decals and slab joints per pixel
@@ -493,8 +495,13 @@ void fragment() {
 	if (has_leak) {  // uniform branch only: the atlas lookups need derivatives, undefined per pixel branch
 		// Rust's own leak decals (dirt_stains_leaks) hanging from the top edge, in runs along it
 		float run = smoothstep(0.35, 0.6, fbm(vec2(mo.x / 11.0, 3.7)));
-		vec4 lk = band(leak_v, (m.x + face_off.x) / leak_width, top / leak_len, face_off.y);
-		float la = lk.a * leaks * run * face * (1.0 - smoothstep(0.75, 1.0, top / leak_len));
+		// each atlas tile hangs its own length and strength, and some hang none, so the drips stop
+		// reading as one decal repeated along the edge
+		float lt = floor((m.x + face_off.x) / leak_width);
+		float ll = leak_len * mix(1.0 - leak_vary, 1.0 + leak_vary * 0.5, hash(vec2(lt, face_off.y + 5.0)));
+		float lkeep = step(leak_gap, hash(vec2(lt, face_off.y + 17.0))) * mix(0.55, 1.0, hash(vec2(lt, face_off.y + 29.0)));
+		vec4 lk = band(leak_v, (m.x + face_off.x) / leak_width, top / ll, face_off.y);
+		float la = lk.a * leaks * run * lkeep * face * (1.0 - smoothstep(0.75, 1.0, top / ll));
 		c = mix(c, mix(lk.rgb, vec3(dot(lk.rgb, vec3(0.333))), 0.35) * 0.75, clamp(la, 0.0, 1.0));
 		rough = mix(rough, 1.0, la * 0.4);
 		// gravel and litter washed into the foot of the face (the crease of a valley)

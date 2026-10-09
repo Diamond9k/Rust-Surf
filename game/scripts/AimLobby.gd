@@ -39,12 +39,13 @@ var _gaps: Array[float] = []       # kill interval: from the later of the bot st
 var _flick_sum := 0.0
 var _flick_n := 0
 var _on_target := 0.0
-var _last_shot_at := 0.0   # round clock of the latest shot
-var _last_kill_at := 0.0   # round clock of the previous kill: the kill interval counts from it or the bot's stand-up
+var _last_shot_at := 0.0   # Weapons clock (_t) of the latest shot
+var _last_kill_at := 0.0   # _t of the previous kill: the kill interval counts from it or the bot's stand-up
 var _last_kill_shot := -1
 var _used := {}
-var _spawned_at := 0.0
-var _pause_now := -1.0     # Weapons' clock when the last paused frame ran, -1 while not paused
+var _spawned_at := 0.0     # _t when the round or the current flick orb began
+var _drawn := ""           # the slot and weapon in hand when _firing last looked, so a redraw is seen
+var _draw_end := 0.0       # Weapons' clock when that draw ends
 var _best := {}
 var _targets: Array[Node3D] = []
 var _dir := 1.0
@@ -92,7 +93,7 @@ class Bot extends Node3D:
 	var first_hit_at := -1.0
 	var last_hit_at := -1.0
 	var alive := true
-	var up_at := 0.0
+	var up_at := 0.0       # lobby _t() when it last stood up
 	var down_at := 0.0
 	var kick := 0.0
 	var phase := 0.0       # idle sway offset, so the range never moves in step
@@ -198,37 +199,16 @@ func _draw_gun() -> void:
 		if String(w.slots.get(s, "")) != "":
 			if w.current != s:
 				w.switch_to(s)
-				if main.get("shots_running") == true and main.viewmodel:
-					main.viewmodel.idle()  # a Gauntlet capture shows the gun held, not mid-draw
+			_capture_idle()
 			return
 	main.hud.message("no CS2 gun exported yet: run prep on your PC (B opens the buy menu)", 4.0)
 
-## Weapons times draws, bolts, reloads, shells and the Zeus charge on its own clock. While the round clock
-## stands still (Esc menu, buy menu) every pending timer is pushed back by however far that clock ran, so a
-## pause never finishes a reload or a bolt for free. A weapons clock that stops by itself moves nothing here.
-const WEAPON_TIMERS := ["_next_fire", "_reload_until", "_shell_next", "_toggle_until", "_burst_at", "_dry_at", "_part_at"]
-
-func _hold_weapon_clock(paused: bool) -> void:
-	var w: Node = main.weapons
-	if w == null or not paused or not w.has_method("_now"):
-		_pause_now = -1.0
-		return
-	var now := float(w.call("_now"))
-	if _pause_now >= 0.0 and now > _pause_now:
-		var d := now - _pause_now
-		for k in WEAPON_TIMERS:
-			var v: Variant = w.get(k)
-			if v is float and float(v) > _pause_now:
-				w.set(k, float(v) + d)
-		var rc: Variant = w.get("_recharge")
-		if rc is Dictionary:
-			for id in (rc as Dictionary).keys():
-				if float(rc[id]) > _pause_now:
-					rc[id] = float(rc[id]) + d
-		var cock: Variant = w.get("_cock")
-		if cock is float and float(cock) >= 0.0:
-			w.set("_cock", float(cock) + d)  # an R8 hammer pull keeps the part it had already done
-	_pause_now = now
+## A Gauntlet capture shows the gun held, not mid-draw: called on entry and every frame of the lobby pose,
+## so a draw that starts after the switch (a model loaded late, a redraw) is cut to the idle too.
+func _capture_idle() -> void:
+	var vm: Node = main.viewmodel
+	if main.get("shots_running") == true and vm != null and vm.has_method("current") and String(vm.current()) == "draw":
+		vm.idle()
 
 ## The surf timer pill and speed readout mean nothing here: hide them while the lobby is open.
 func _show_surf_hud(on: bool) -> void:
@@ -908,12 +888,15 @@ func _layout_ui() -> void:
 	_ui.position = Vector2.ZERO
 	_ui.size = vp / s
 
+## A side box of the top bar: a team-tinted translucent panel (ui_team_box: darken, opacity) with white digits.
 func _top_box(parent: Node, cap: String, col: Color) -> Label:
 	var p := _pc(parent, _f("ui_alpha"), col)
+	var tb: Array = V["ui_team_box"]
+	(p.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = Color(col.darkened(float(tb[0])), float(tb[1]))
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", -6)
 	p.add_child(v)
-	var l := _lab(v, 30, col, HORIZONTAL_ALIGNMENT_CENTER)
+	var l := _lab(v, 30, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
 	l.custom_minimum_size.x = 92
 	_lab(v, 12, GREY, HORIZONTAL_ALIGNMENT_CENTER, cap)
 	return l
@@ -1029,7 +1012,7 @@ func _process(dt: float) -> void:
 	if not _inside_arena(main.player.global_position):
 		_leave("left the aim lobby, round not saved")  # restart or checkpoint teleported the player away
 		return
-	_hold_weapon_clock(_paused())
+	_capture_idle()
 	if not _paused():
 		_clock += dt
 		if Input.is_action_just_pressed("surf_lobby_mode"):
@@ -1089,12 +1072,12 @@ func _start_round() -> void:
 func _go() -> void:
 	_state = "round"
 	_left = _f("round_s")
-	_spawned_at = _clock
-	_last_shot_at = _clock
-	_last_kill_at = _clock
+	_spawned_at = _t()
+	_last_shot_at = _t()
+	_last_kill_at = _t()
 	for t in _targets:
 		if t is Bot:
-			(t as Bot).up_at = _clock
+			(t as Bot).up_at = _t()
 
 func _end_round() -> void:
 	_state = "summary"
@@ -1121,16 +1104,20 @@ func _end_round() -> void:
 	_summary.visible = true
 	_clear()
 
-## The best file, else the temp copy a save left behind if it was killed before the rename. A file that will
-## not parse is kept beside it as .bad (never silently replaced by an empty table).
+## A temp copy left beside the best file is the newest whole write (the rename after it failed or was cut off),
+## so it wins when it parses, like Settings; a torn temp is dropped. A best file that will not parse is kept
+## beside it as .bad (never silently replaced by an empty table).
 func _load_best() -> Dictionary:
 	var p := String(V["best_file"])
-	for f in [p, p + ".tmp"]:
+	for f in [p + ".tmp", p]:
 		if not FileAccess.file_exists(f):
 			continue
 		var j := JSON.new()
 		if j.parse(FileAccess.get_file_as_string(f)) == OK and j.data is Dictionary:
 			return j.data
+		if f.ends_with(".tmp"):
+			DirAccess.remove_absolute(f)  # a write cut off mid-way: the best file (or nothing) is the newest whole one
+			continue
 		if FileAccess.file_exists(f + ".bad"):
 			DirAccess.remove_absolute(f + ".bad")  # keep the newest torn copy: a rename onto a file can fail
 		DirAccess.rename_absolute(f, f + ".bad")
@@ -1151,12 +1138,26 @@ func _save_best() -> void:
 	if err != OK:
 		main.hud.message("could not save the best score: %s" % error_string(err), 3.0)
 
+## Engagement times (time to kill, kill interval, flick time, track firing) run on the Weapons clock, the one
+## shots are fired on: a round keeps its own slot time inside a frame, and it stands still in the same menus.
+func _t() -> float:
+	var w: Node = main.weapons
+	return float(w._now()) if w != null and w.has_method("_now") else _clock
+
+## The current shot's time: a gun's round its slot time (Weapons stamps _last_shot before calling here), a
+## knife swing now.
+func _shot_time() -> float:
+	var w: Node = main.weapons
+	if w != null and String(w.held()) != "knife" and w.get("_last_shot") is float and float(w._last_shot) <= _t():
+		return float(w._last_shot)
+	return _t()
+
 ## Weapons calls this once per trigger pull, hit or miss, before that pull's hits.
 func on_shot_fired() -> void:
 	if not (active and _state == "round"):
 		return
 	_shots += 1
-	_last_shot_at = _clock
+	_last_shot_at = _shot_time()
 	_shot_frame = Engine.get_process_frames()
 	_shot_ok = _behind_line()
 	_shot_weapon = String(main.weapons.held()) if main.weapons else ""
@@ -1172,7 +1173,7 @@ func register_hit(unit: Node3D, dmg: float, head: bool, _at: Vector3, group: Str
 	match mode:
 		"flick":
 			_count(false)
-			_flick_sum += _clock - _spawned_at
+			_flick_sum += _last_shot_at - _spawned_at
 			_flick_n += 1
 			_spawn_mode()
 		"track":
@@ -1256,14 +1257,20 @@ func _firing() -> bool:
 	if w == null:
 		return false
 	var id := String(w.held())
+	# a new slot or weapon in hand was just drawn: Weapons set _next_fire to the draw's end, so keep that
+	# (a slow gun's _next_fire - cycletime is already past while it is still being drawn)
+	var drawn := "%s|%s" % [w.current, id]
+	if drawn != _drawn:
+		_drawn = drawn
+		_draw_end = float(w._next_fire)
 	if id == "" or id == "knife" or not w.ammo.has(id) or _shots == 0 or _shot_weapon != id:
 		return false
 	if int(w.ammo[id][0]) <= 0 or float(w._reload_until) > 0.0 or float(w._shell_next) > 0.0:
 		return false
 	var cyc := float(w.mstat(id, "cycletime"))
-	if float(w._now()) + 0.0005 < maxf(float(w._next_fire) - cyc, float(w._toggle_until)):
+	if float(w._now()) + 0.0005 < maxf(maxf(float(w._next_fire) - cyc, _draw_end), float(w._toggle_until)):
 		return false  # still drawing, or a silencer turn
-	return _clock - _last_shot_at <= maxf(cyc, _f("track_fire_window"))
+	return _t() - _last_shot_at <= maxf(cyc, _f("track_fire_window"))
 
 ## The crosshair ray (screen centre, where the player looks) against the world: true when the first thing it
 ## meets is a part of the track bot, so a wall or crate between them blocks it.
@@ -1287,10 +1294,10 @@ func _kill(b: Bot, head: bool) -> void:
 	# time to kill: from the shot that first hit this bot (a one-tap is 0 ms). The kill interval runs from the
 	# later of this bot standing up and the previous kill; a second kill by the same shot (penetration,
 	# pellets) belongs to that shot's engagement and adds no interval
-	_ttk.append(_clock - b.first_hit_at)
+	_ttk.append(_last_shot_at - b.first_hit_at)
 	if _last_kill_shot != _shots:
-		_gaps.append(_clock - maxf(b.up_at, _last_kill_at))
-	_last_kill_at = _clock
+		_gaps.append(_last_shot_at - maxf(b.up_at, _last_kill_at))
+	_last_kill_at = _last_shot_at
 	_last_kill_shot = _shots
 	_set_live(b, false)
 	_feed_add(b.tag, head)
@@ -1320,7 +1327,7 @@ func _tick_bots(dt: float) -> void:
 				b.alive = true
 				_heal(b)
 				b.kick = 0.0
-				b.up_at = _clock
+				b.up_at = _t()
 				fall = 0.0
 				_set_live(b, true)
 		var ph := _clock * TAU * float(idle[1]) + b.phase
@@ -1418,7 +1425,7 @@ func _spawn_flick() -> void:
 	shape.radius = r
 	var t := _target(null, shape, _sphere(r), _flat(_col("color_flick"), 1.0), Transform3D(Basis(), at), false, "head", self)
 	_targets.append(t)
-	_spawned_at = _clock
+	_spawned_at = _t()
 
 func _spawn_track() -> void:
 	_targets.append(_bot(Vector3(0, 0, _f("firing_line_z") - _f("track_distance")), 0.0, 0, "BOT"))
@@ -1701,7 +1708,8 @@ func _physics_process(dt: float) -> void:
 	var t := _targets[0]
 	if not is_instance_valid(t):
 		return
-	_track_tick(dt, Input.is_action_pressed("surf_attack"), _crosshair_on(t), _firing())
+	var firing := _firing()  # every tick, so it sees each draw
+	_track_tick(dt, Input.is_action_pressed("surf_attack"), _crosshair_on(t), firing)
 	var half := _f("track_half_range")
 	_flip -= dt
 	if _flip <= 0.0:
@@ -1729,6 +1737,8 @@ func _part(b: Bot, id: String) -> AimTarget:
 
 ## --lobbytest: a shot fired with weapon id (the test player holds the knife when no CS2 gun is exported).
 func _fire(id := "cs2_ak47") -> void:
+	if main.weapons:
+		main.weapons._last_shot = main.weapons._now()  # Weapons stamps a round's slot time before it calls in
 	on_shot_fired()
 	if _state == "round":
 		_shot_weapon = id
@@ -1858,12 +1868,27 @@ func _selftest() -> void:
 	wg._next_fire = wg._now() + 1.0
 	var dr := _firing()
 	wg._next_fire = 0.0
-	_last_shot_at = _clock - 1.0
+	_last_shot_at = _t() - 1.0
 	var stale := _firing()
-	_last_shot_at = _clock
+	_last_shot_at = _t()
 	wg.current = "knife"
 	var kn := _firing()
 	ok = _check("track: reload, shell load, draw, no shot within the window, knife: no time", not (rl or sh or dr or stale or kn), [rl, sh, dr, stale, kn]) and ok
+	# a slow gun put away and drawn again inside its cycle: the draw's end gates the time, not _next_fire - cycletime
+	var awp := "cs2_awp"
+	wg.slots["primary"] = awp
+	wg.current = "primary"
+	wg._next_fire = 0.0
+	wg.ammo[awp] = [5, 30]
+	_fire(awp)
+	var awp_live := _firing()
+	wg.current = "knife"
+	_firing()
+	wg.current = "primary"
+	wg._next_fire = wg._now() + minf(0.5, float(wg.mstat(awp, "cycletime")) * 0.5)  # what switch_to sets: the draw
+	var redraw := _firing()
+	wg._next_fire = 0.0
+	ok = _check("track: a redrawn AWP earns nothing until its draw ends", awp_live and not redraw, [awp_live, redraw]) and ok
 	wg.current = keep_cur
 	wg.slots["primary"] = keep_slot
 	wg.refill()
@@ -1981,6 +2006,18 @@ func _selftest() -> void:
 	bf.close()
 	back = _load_best()
 	ok = _check("second torn file replaces the old .bad", back.is_empty() and not FileAccess.file_exists(String(V["best_file"])) and FileAccess.get_file_as_string(String(V["best_file"]) + ".bad").ends_with("99"), back) and ok
+	_best = {"bots|ak47": 1}
+	_save_best()
+	bf = FileAccess.open(String(V["best_file"]) + ".tmp", FileAccess.WRITE)
+	bf.store_string("{\"bots|ak47\": 2}")
+	bf.close()
+	back = _load_best()
+	ok = _check("a temp left by a failed rename is the newer write and wins", int(back.get("bots|ak47", 0)) == 2, back) and ok
+	bf = FileAccess.open(String(V["best_file"]) + ".tmp", FileAccess.WRITE)
+	bf.store_string("{\"bots|ak47\": 3")
+	bf.close()
+	back = _load_best()
+	ok = _check("a torn temp is dropped, the best file loads", int(back.get("bots|ak47", 0)) == 1 and not FileAccess.file_exists(String(V["best_file"]) + ".tmp"), back) and ok
 	for f in ["", ".tmp", ".bad"]:
 		if FileAccess.file_exists(String(V["best_file"]) + f):
 			DirAccess.remove_absolute(String(V["best_file"]) + f)

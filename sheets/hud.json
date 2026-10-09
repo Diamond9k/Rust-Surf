@@ -347,10 +347,17 @@
     },
     {
       "id": "menu_vignette",
-      "value": 0.45,
+      "value": 0.6,
       "unit": "0-1",
       "note": "how much the blurred game behind the Esc menu darkens toward the corners",
-      "verified": "design value after Gauntlet round 1 visual reviewers asked for a vignetted blurred background; CS2's own strength unverified: not checked against the CS2 client"
+      "verified": "design value after Gauntlet round 3 visual reviewers (both) said CS2's menu backdrop is darker than this blur; unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "menu_dim",
+      "value": 0.7,
+      "unit": "0-1",
+      "note": "how far the blurred game behind the Esc menu is mixed toward near-black (Settings.gd BLUR shader)",
+      "verified": "design value after Gauntlet round 3 visual reviewers (both) said CS2's menu backdrop is darker than this blur (was 0.6 in code); unverified: not checked against the CS2 client"
     }
   ]
 }

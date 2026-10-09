@@ -883,6 +883,16 @@ func _terrain_material() -> ShaderMaterial:
 	sm.set_shader_parameter("road_count", mini(segs.size(), MAX_ROADS))
 	segs.resize(MAX_ROADS)
 	sm.set_shader_parameter("roads", segs)
+	var ln: Dictionary = rd["lines"]
+	var lt := content.texture(ln["texture"], "MainTex")
+	sm.set_shader_parameter("has_lines", lt != null)
+	if lt:
+		sm.set_shader_parameter("tex_lines", lt)
+	for k in ["centre_v", "edge_v", "dash"]:
+		var a: Array = ln[k]
+		sm.set_shader_parameter(k, Vector2(a[0], a[1]))
+	for k in ["line_width", "line_tile", "line_opacity", "edge_inset"]:
+		sm.set_shader_parameter(k, float(ln[k]))
 	sm.set_shader_parameter("roughness_val", float(rows[layers[0]]["roughness"]))
 	return sm
 
@@ -917,6 +927,15 @@ uniform float road_scale = 6.0;
 uniform float road_width = 8.0;
 uniform int road_count = 0;
 uniform vec4 roads[16];
+uniform sampler2D tex_lines : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform bool has_lines = false;
+uniform vec2 centre_v = vec2(0.387, 0.413);
+uniform vec2 edge_v = vec2(0.387, 0.413);
+uniform float line_width = 0.25;
+uniform float line_tile = 8.0;
+uniform vec2 dash = vec2(9.0, 0.5);
+uniform float line_opacity = 0.8;
+uniform float edge_inset = 0.5;
 uniform int apron_count = 0;
 uniform vec4 aprons[32];
 uniform float scrub_cell = 4.0;
@@ -1041,8 +1060,22 @@ void fragment() {
 	float stone = scatter(p, stone_cell, stone_density, 23.0) * opn;
 	c = mix(c, c * stone_color, stone);
 	float rd = 1.0e9;
+	float ra = 0.0;  // metres along the nearest road
+	float rl = 0.0;  // metres across it (signed)
+	float rfade = 0.0;  // 0 at a road's ends: no markings through junctions
 	for (int i = 0; i < road_count; i++) {
-		rd = min(rd, seg_dist(p, roads[i]));
+		vec2 ab = roads[i].zw - roads[i].xy;
+		float len = max(length(ab), 1e-3);
+		vec2 dir = ab / len;
+		vec2 ap = p - roads[i].xy;
+		float t = clamp(dot(ap, dir), 0.0, len);
+		float d = length(ap - dir * t);
+		if (d < rd) {
+			rd = d;
+			ra = t;
+			rl = dot(ap, vec2(-dir.y, dir.x));
+			rfade = smoothstep(road_width * 0.6, road_width * 1.4, t) * smoothstep(road_width * 0.6, road_width * 1.4, len - t);
+		}
 	}
 	rd += (fbm(p / 3.0 + vec2(9.0, 4.0)) - 0.5) * 1.6;
 	float road = (1.0 - smoothstep(road_width * 0.5 - 0.6, road_width * 0.5 + 0.4, rd)) * (1.0 - low);
@@ -1051,6 +1084,23 @@ void fragment() {
 	vec3 rc = texture(tex_road, ruv).rgb * mix(0.85, 1.1, fbm(p / 17.0 + vec2(2.0, 8.0)));
 	c = mix(c, c * 0.82, shoulder);
 	c = mix(c, rc, road);
+	if (has_lines) {
+		// worn painted lines cut from Rust's road_decals atlas: a dashed centre line and solid edge lines,
+		// faded to their average once thinner than a pixel so they never shimmer
+		float px = max(fwidth(rl), 1e-4);
+		float ce = abs(rl) / line_width;
+		float ee = abs(abs(rl) - (road_width * 0.5 - edge_inset)) / line_width;
+		vec4 lc = texture(tex_lines, vec2(ra / line_tile, mix(centre_v.x, centre_v.y, clamp(rl / line_width + 0.5, 0.0, 1.0))));
+		vec4 le = texture(tex_lines, vec2(ra / line_tile + 0.37, mix(edge_v.x, edge_v.y, clamp((abs(rl) - road_width * 0.5 + edge_inset) / line_width + 0.5, 0.0, 1.0))));
+		float on = step(fract(ra / dash.x), dash.y);
+		float thin = clamp(line_width / px, 0.0, 1.0);
+		float mc = (1.0 - smoothstep(0.5 - px / line_width, 0.5 + px / line_width, ce)) * on;
+		float me = 1.0 - smoothstep(0.5 - px / line_width, 0.5 + px / line_width, ee);
+		float wear = smoothstep(0.25, 0.55, fbm(p / 4.0 + vec2(61.0, 3.0)));
+		float k = line_opacity * rfade * road * mix(0.35, 1.0, wear) * mix(0.5, 1.0, thin);
+		c = mix(c, lc.rgb, clamp(mc * lc.a * k, 0.0, 1.0));
+		c = mix(c, le.rgb, clamp(me * le.a * k, 0.0, 1.0));
+	}
 	nm = mix(nm, texture(nrm_road, ruv).rgb, road);
 	ALBEDO = c;
 	NORMAL_MAP = nm;
@@ -1060,6 +1110,7 @@ void fragment() {
 
 ## The sky for Main._lighting: lighting.json gradient, a sun disc with a halo where the sun light comes
 ## from, a warm horizon band under the sun, and a static cloud layer (nothing moves, so the sky light probe renders once).
+## The light probe (reflections and ambient) sees the sky greyed by lighting.json reflect_grey.
 static func sky_material(L: Dictionary) -> ShaderMaterial:
 	var sm := ShaderMaterial.new()
 	var sh := Shader.new()
@@ -1068,7 +1119,7 @@ static func sky_material(L: Dictionary) -> ShaderMaterial:
 	for k in ["sky_top", "sky_horizon", "ground_horizon", "ground_bottom", "cloud_color", "cloud_shade", "sun_warm"]:
 		var a: Array = L[k]
 		sm.set_shader_parameter(k, Color(a[0], a[1], a[2]))
-	for k in ["sun_disc_deg", "sun_halo_deg", "sun_halo", "sun_disc_energy", "cloud_cover", "cloud_scale", "cloud_height_fade", "sun_warm_width"]:
+	for k in ["sun_disc_deg", "sun_halo_deg", "sun_halo", "sun_disc_energy", "cloud_cover", "cloud_scale", "cloud_height_fade", "sun_warm_width", "reflect_grey"]:
 		sm.set_shader_parameter(k, float(L[k]))
 	return sm
 
@@ -1088,6 +1139,7 @@ uniform float cloud_scale = 1.4;
 uniform float cloud_height_fade = 0.08;
 uniform vec3 sun_warm : source_color;
 uniform float sun_warm_width = 4.0;
+uniform float reflect_grey = 0.0;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vnoise(vec2 p) {
@@ -1134,6 +1186,11 @@ void sky() {
 		sun *= 1.0 - cov * 0.85;
 	}
 	col = mix(col, sun_col * sun_disc_energy, sun);
+	if (AT_CUBEMAP_PASS) {
+		// what bare metal mirrors and the ambient light: the open sky greyed toward its own brightness, as a
+		// map's cubemaps (buildings, ground, haze) would, so steel reads grey instead of sky blue
+		col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), reflect_grey);
+	}
 	COLOR = col;
 }
 "

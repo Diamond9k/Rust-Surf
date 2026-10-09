@@ -336,6 +336,24 @@ class Prep(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertFalse(self.done())
 
+    def test_run_killed_half_way_leaves_no_done_file(self):
+        """A rerun over a finished install that is closed half way (after the stats files were deleted for their
+        fresh export) must not leave the old done file: Melty sets up again and the game names the run unfinished."""
+        code, out = self.main(FakeVRF(items_game_for(WEAPONS)))
+        self.assertEqual(code, 0, out)
+        def killed(a):
+            os.remove(os.path.join(self.out, "cs2", "scripts", "items", "items_game.txt"))
+            raise KeyboardInterrupt  # the console window closed: not an Exception, nothing below runs
+        with self.assertRaises(KeyboardInterrupt):
+            self.main(FakeVRF(items_game_for(WEAPONS)), steps=(killed,))
+        self.assertFalse(self.done())
+        st = self.status()
+        self.assertFalse(st["ok"])
+        self.assertTrue(st["player"] and "did not finish" in st["player"][0], st)
+        code, out = self.main(FakeVRF(items_game_for(WEAPONS)))  # the next start redoes it and finishes
+        self.assertEqual(code, 0, out)
+        self.assertTrue(self.done() and self.status()["ok"])
+
     def test_local_data_folder_passes_content_check(self):
         """The real local prep output, when this machine has one (never in the repo)."""
         data = os.environ.get("RS_DATA", "")

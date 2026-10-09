@@ -40,6 +40,7 @@ const LAYER := 1 << 19
 var _main_cam: Camera3D
 var world_fov := 90.0
 var shrink := 1.0
+var _placed_fov := -1.0  # the camera fov the squeeze was last worked out for
 
 ## Settings menu hook: any of viewmodel_fov / viewmodel_offset_x/y/z (CS2 units) and world_fov.
 func set_view(vals: Dictionary) -> void:
@@ -50,9 +51,17 @@ func set_view(vals: Dictionary) -> void:
 			V[k] = float(vals[k])
 	_place()
 
+## The world fov the squeeze works from: the live camera's (its vertical fov back to Source's horizontal 4:3),
+## so the arms keep their size while a scope eases the camera in or out; world_fov before the camera exists.
+func _live_fov() -> float:
+	if _main_cam == null or not is_instance_valid(_main_cam):
+		return world_fov
+	return rad_to_deg(2.0 * atan(tan(deg_to_rad(_main_cam.fov) * 0.5) / 0.75))
+
 func _place() -> void:
 	var u: float = Sheets.movement()["unit_to_m"]
-	var k := tan(deg_to_rad(world_fov) * 0.5) / tan(deg_to_rad(V["viewmodel_fov"]) * 0.5)
+	_placed_fov = _main_cam.fov if _main_cam and is_instance_valid(_main_cam) else -1.0
+	var k := tan(deg_to_rad(_live_fov()) * 0.5) / tan(deg_to_rad(V["viewmodel_fov"]) * 0.5)
 	var squeeze := Basis.from_scale(Vector3(k, k, 1.0))
 	var rig_basis := Basis.from_euler(Vector3(0, deg_to_rad(V["yaw"]), 0)).scaled(Vector3.ONE * V["scale"])
 	var off := Vector3(V["offset_x"] + V["viewmodel_offset_x"] * u, V["offset_y"] + V["viewmodel_offset_z"] * u, V["offset_z"] - V["viewmodel_offset_y"] * u)
@@ -297,6 +306,8 @@ func _motion() -> Transform3D:
 func _process(dt: float) -> void:
 	if rig == null:
 		return
+	if _main_cam and _main_cam.fov != _placed_fov:
+		_place()
 	if _kick == "":
 		rig.transform = _motion()
 		return
@@ -397,8 +408,6 @@ func idle() -> void:
 func inspect() -> void:
 	if ok and _inspect_name != "" and anim.current_animation != _inspect_name:
 		anim.play(_inspect_name)
-	elif ok and _clips.has("lookat01") and anim.current_animation != "lookat01":
-		anim.play("lookat01")
 
 func _find(n: Node, cls: String) -> Node:
 	if n.get_class() == cls:

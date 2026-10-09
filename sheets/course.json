@@ -334,7 +334,7 @@
     "tuned": "2026-10-09 world_r3_1x (gauntlet 3): dry patches and clump mottle on the open ground, by eye; 2026-10-09 world_r2 (gauntlet 2): site_cover 0.32 -> 0.55 (r1 critics: the site reads as a bare field); 2026-10-09 world_r1 (gauntlet 2): scrub_density 0.32 -> 0.14 now 3D bushes stand on the ground (r3 critics saw a repeating dot pattern); world_r3 renders: grass, rock, hill shade, edge trims and the props past the end pad checked by eye in start/ramp1/valley2/site_overview/floor/sun; earlier rounds: props, roads, scatter, blended mounds, pit edges, far ridgeline. Hill heights, tints, grass, scatter and roads are a look, not Rust's terrain (unverified)",
     "props": {
       "_doc": "Course scenery: extra copies of meshes prep already extracts for the real Launch Site (rust/mesh), set where the fixed views look so the land round the course reads as an industrial site. Our arrangement, not Rust's layout (the real placements are scene_launch_site). pos is course [x, z]; the prop stands on the ground level at x plus dy (dy copies the real placements' offsets: warehouses 0.3, awnings 0.2, floodlights and vents -0.1); awnings share their warehouse's origin, turned 180 deg as in the real placements. apron_meshes: props of these meshes get a ragged concrete apron apron metres wide round their footprint in the terrain shader, like the halls (r2 critics: missing concrete aprons; our look, unverified against Rust's own site ground).",
-      "tuned": "2026-10-09 world_r2 renders, by eye",
+      "tuned": "2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): 28 more props (a warehouse yard and floodlights in the sun view, sheds and vents beside the lower ramps, a warehouse and vents in the site overview, vents, a floodlight and a warehouse east of the end pad), by eye; 2026-10-09 world_r2 renders, by eye",
       "apron_meshes": [
         "warehouse_launch_site_a_LOD0",
         "range_outbuilding_a_LOD0",
@@ -868,6 +868,286 @@
           "yaw": 0,
           "dy": 0.0,
           "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            225,
+            -190
+          ],
+          "yaw": 90,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_awning_LOD0",
+          "pos": [
+            225,
+            -190
+          ],
+          "yaw": 270,
+          "dy": 0.2,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            265,
+            -190
+          ],
+          "yaw": 90,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "floodlights_A_LOD0",
+          "pos": [
+            150,
+            -185
+          ],
+          "yaw": 10,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "floodlights_A_LOD0",
+          "pos": [
+            315,
+            -205
+          ],
+          "yaw": -30,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "range_outbuilding_a_LOD0",
+          "pos": [
+            185,
+            -172
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "range_outbuilding_b_LOD0",
+          "pos": [
+            196,
+            -174
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            240,
+            -160
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            250,
+            -160
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            260,
+            -160
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "launch_site_ground_pipes_LOD0",
+          "pos": [
+            240,
+            -235
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "range_outbuilding_a_LOD0",
+          "pos": [
+            400,
+            -35
+          ],
+          "yaw": 90,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "range_outbuilding_b_LOD0",
+          "pos": [
+            415,
+            -40
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            430,
+            -30
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            440,
+            -30
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            370,
+            140
+          ],
+          "yaw": 0,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_awning_LOD0",
+          "pos": [
+            370,
+            140
+          ],
+          "yaw": 180,
+          "dy": 0.2,
+          "scale": 1.0
+        },
+        {
+          "mesh": "range_outbuilding_b_LOD0",
+          "pos": [
+            395,
+            118
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            160,
+            172
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            170,
+            172
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            180,
+            172
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "floodlights_A_LOD0",
+          "pos": [
+            135,
+            178
+          ],
+          "yaw": -15,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            420,
+            -80
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            430,
+            -80
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            440,
+            -80
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "floodlights_A_LOD0",
+          "pos": [
+            612,
+            -95
+          ],
+          "yaw": 20,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            585,
+            -140
+          ],
+          "yaw": 90,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_awning_LOD0",
+          "pos": [
+            585,
+            -140
+          ],
+          "yaw": 270,
+          "dy": 0.2,
+          "scale": 1.0
         }
       ]
     },
@@ -1217,7 +1497,28 @@
           260
         ]
       ],
-      "tuned": "2026-10-09 world_r3_1x (gauntlet 3): 8 more segments, a denser network round the halls and warehouses (r2 critics: missing Rust's road network density), by eye; 2026-10-09 world_r2 (gauntlet 2): z 152 road added along the new halls; 2026-10-09 world_r3 renders, by eye (extended to the props past the end pad)"
+      "tuned": "2026-10-09 world_r3_1x (gauntlet 3): 8 more segments, a denser network round the halls and warehouses (r2 critics: missing Rust's road network density), by eye; 2026-10-09 world_r2 (gauntlet 2): z 152 road added along the new halls; 2026-10-09 world_r3 renders, by eye (extended to the props past the end pad)",
+      "lines": {
+        "_doc": "Painted lines on the terrain roads, cut from a band of the texture (the course.json paint bands, read from the png alpha: worn white line v 0.387-0.413, yellow 0.443-0.470): centre_v / edge_v are the [v0, v1] of the band for the dashed centre line and the solid edge lines; line_width metres (0.5: twice a real road line, so it still reads from the course 60-90 m up); line_tile metres of road per atlas width; dash is [period in metres, share painted]; edge_inset metres from the road edge to the edge line; line_opacity the paint strength (worn by noise to between 35 and 100 percent of it). Lines fade out over the junctions at each segment end. Our markings, not Rust road paint layouts (unverified) (gauntlet 3 critics: no road decals).",
+        "texture": "tex_road_decals",
+        "centre_v": [
+          0.3867,
+          0.4131
+        ],
+        "edge_v": [
+          0.4434,
+          0.4697
+        ],
+        "line_width": 0.5,
+        "line_tile": 12.0,
+        "dash": [
+          9.0,
+          0.45
+        ],
+        "line_opacity": 1.0,
+        "edge_inset": 0.6,
+        "tuned": "2026-10-09 world_r1x renders (gauntlet round 1, batch 3), by eye"
+      }
     },
     "blend_materials": [
       "terrain_blend",
@@ -1524,15 +1825,15 @@
     }
   },
   "trim": {
-    "_doc": "Steel strips along each ramp face's exposed edges (both edges of a ridge face, the rim of a valley), scenery only: the collision stays the bare prism. width and offset in metres (offset is the flat's thickness: it stands that far proud of the face, inner side closed, so the edge reads as a solid steel capping); v0 is the metre offset into the material's texture where the strip starts (1.17 m at uv_scale 3 is site_steel_trims' light painted, riveted panel band, v 0.39-0.52 of the texture: a clean edge, where the rusty top band at 0.1 m read as a smeared brown strip along the ridge).",
+    "_doc": "Steel strips along each ramp face's exposed edges (both edges of a ridge face, the rim of a valley), scenery only: the collision stays the bare prism. width and offset in metres (offset is the flat's thickness: it stands that far proud of the face, inner side closed, so the edge reads as a solid steel capping); v0 is the metre offset into the material's texture where the strip starts (1.66 m at uv_scale 3 is site_steel_trims' dark plain steel plate band, v 0.553-0.687 of the texture, mean sRGB about 96: the light riveted panel band at 1.17 m read as an over-bright white strip along the ridge, and the rusty top band at 0.1 m as a smeared brown one).",
     "material": "trim_steel",
     "width": 0.4,
     "offset": 0.07,
-    "v0": 1.17,
-    "tuned": "2026-10-09 world_r3_14 ramp1 render (gauntlet 3): v0 0.1 -> 1.17 (r2 critics: smeared wood-brown ridge), by eye; 2026-10-09 world_r3_1x renders (gauntlet 3): a 7 cm thick, 0.4 m capping (r2 critics: no bevel or clean trim), by eye; 2026-10-09 world_r3 renders, by eye"
+    "v0": 1.66,
+    "tuned": "2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): v0 1.17 -> 1.66 (critics: over-bright white ridge strip), band found by reading the png rows, by eye; 2026-10-09 world_r3_14 ramp1 render (gauntlet 3): v0 0.1 -> 1.17 (r2 critics: smeared wood-brown ridge), by eye; 2026-10-09 world_r3_1x renders (gauntlet 3): a 7 cm thick, 0.4 m capping (r2 critics: no bevel or clean trim), by eye; 2026-10-09 world_r3 renders, by eye"
   },
   "weathering": {
-    "_doc": "Decal atlas the ramp shader hangs leaks and gravel from (materials.json leaks/debris set the strength per material): leak_v is the atlas v at the top and bottom of the drip band (found by reading the png alpha: drips run v 0.595-0.925; the first rows are speckled, so the band starts at 0.607, left half dark green, right half rust), debris_v the v at the middle and edge of the gravel/litter band (alpha 1 at v 0.33, fading out by 0.175). leak_len: metres the drips hang down a face; leak_width: metres of face per half-atlas tile; debris_width: metres up from a face's foot the gravel reaches. Our use of Rust's decals, not a CS2 map's (unverified as a match for any real surf map). groove: how far the normal tilts into each cast-slab joint (a V groove groove_width metres either side, so one lip catches the sun); edge_wear: smooth, polished arris along each face's top metre with rough chipped pits. Our look (unverified against a CS2 surf map's materials).",
+    "_doc": "Decal atlas the ramp shader hangs leaks and gravel from (materials.json leaks/debris set the strength per material): leak_v is the atlas v at the top and bottom of the drip band (found by reading the png alpha: drips run v 0.595-0.925; the first rows are speckled, so the band starts at 0.607, left half dark green, right half rust), debris_v the v at the middle and edge of the gravel/litter band (alpha 1 at v 0.33, fading out by 0.175). leak_len: metres the drips hang down a face; leak_width: metres of face per half-atlas tile; debris_width: metres up from a face's foot the gravel reaches. Our use of Rust's decals, not a CS2 map's (unverified as a match for any real surf map). groove: how far the normal tilts into each cast-slab joint (a V groove groove_width metres either side, so one lip catches the sun); edge_wear: smooth, polished arris along each face's top metre with rough chipped pits. Our look (unverified against a CS2 surf map's materials). leak_vary: each atlas tile of drips hangs between (1 - leak_vary) and (1 + leak_vary/2) times leak_len; leak_gap: the share of tiles that hang no drips at all (gauntlet 3 critics: the drips read as one decal tiled uniformly along both walls). Our look (unverified).",
     "texture": "tex_dirt_stains_leaks",
     "leak_v": [
       0.607,
@@ -1547,8 +1848,10 @@
     "debris_width": 2.2,
     "groove": 0.25,
     "groove_width": 0.06,
-    "edge_wear": 0.7,
-    "tuned": "2026-10-09 world_r3_1x renders (gauntlet 3): groove, groove_width, edge_wear by eye; 2026-10-09 world_r1 (gauntlet 2) renders, by eye"
+    "edge_wear": 0.3,
+    "tuned": "2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): leak_vary, leak_gap by eye, edge_wear 0.7 -> 0.3 (critics: an over-bright strip along the ridge, the polished arris glaring in the sun); 2026-10-09 world_r3_1x renders (gauntlet 3): groove, groove_width, edge_wear by eye; 2026-10-09 world_r1 (gauntlet 2) renders, by eye",
+    "leak_vary": 0.55,
+    "leak_gap": 0.3
   },
   "paint_columns": [
     "id",

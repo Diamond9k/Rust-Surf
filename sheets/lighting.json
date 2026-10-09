@@ -102,15 +102,15 @@
     },
     {
       "id": "sun_halo",
-      "value": 0.4,
+      "value": 0.28,
       "note": "glow strength around the disc, times the sun light",
-      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: small sun with weak bloom (was 0.22)"
+      "tuned": "2026-10-09 world_r1x renders (gauntlet round 1, batch 3): 0.4 -> 0.28 with the disc brighter (gauntlet 3 critics: the sun reads as a soft blob), by eye; 2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: small sun with weak bloom (was 0.22)"
     },
     {
       "id": "sun_disc_energy",
-      "value": 9,
+      "value": 14,
       "note": "disc brightness, times the sun light (blooms with glow on)",
-      "tuned": "2026-10-09 world_r1 renders, by eye"
+      "tuned": "2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): 9 -> 14 (critics: the sun reads as a soft blob), by eye; 2026-10-09 world_r1 renders, by eye"
     },
     {
       "id": "sun_warm",
@@ -127,6 +127,12 @@
       "value": 3,
       "note": "how tightly the warm glow hugs the sun's azimuth (higher is narrower)",
       "tuned": "2026-10-09 world_r2 renders, by eye"
+    },
+    {
+      "id": "reflect_grey",
+      "value": 0.8,
+      "note": "share by which the sky is greyed to its own luminance in the light probe only (what metal reflects and the sky ambient), never in the visible sky: without a map cubemap a steel blade mirrored the open blue sky and read blue (gauntlet 3 critics, every view). A look, unverified against CS2 or Rust probes",
+      "tuned": "2026-10-09 world_r1x_6/7 renders (gauntlet round 1, batch 3): 0.5 left the backlit blade in the sun view blue (mean sRGB 44,47,60), 0.8 by eye"
     },
     {
       "id": "cloud_color",
@@ -246,9 +252,9 @@
     },
     {
       "id": "fog_sun_scatter",
-      "value": 0.12,
+      "value": 0.06,
       "note": "how much the haze glows toward the sun",
-      "tuned": "2026-10-09 world_r3_16 sun render (gauntlet 3), by eye: 0.2 -> 0.12 (0.2 washed the hills under the sun white); 2026-10-09 world_r3_1x renders (gauntlet 3), by eye: 0.05 -> 0.2 (haze glows toward the sun: sun-aligned in-scattering the critics asked for); 2026-10-09 world_r3: 0.1 still whitened the hills under the sun; world_r1: 0.25 washed the sky round the sun white"
+      "tuned": "2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): 0.12 -> 0.06 (critics: the land washed out near the horizon under the sun), by eye; 2026-10-09 world_r3_16 sun render (gauntlet 3), by eye: 0.2 -> 0.12 (0.2 washed the hills under the sun white); 2026-10-09 world_r3_1x renders (gauntlet 3), by eye: 0.05 -> 0.2 (haze glows toward the sun: sun-aligned in-scattering the critics asked for); 2026-10-09 world_r3: 0.1 still whitened the hills under the sun; world_r1: 0.25 washed the sky round the sun white"
     },
     {
       "id": "fog_aerial",

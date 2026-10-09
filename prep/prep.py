@@ -157,6 +157,19 @@ def finish(a, problems, warnings, log):
     return 0
 
 
+def started(a):
+    """Before anything is exported: no done file, and a prep_status.json that says setup is running. A run that is
+    closed or killed half way (and that may already have deleted the stats files it exports fresh) then leaves
+    an install Melty sets up again and the game names as unfinished, never an old done file over half the files."""
+    done = os.path.join(a.out, "done-%s.txt" % a.version)
+    if os.path.exists(done):
+        os.remove(done)
+    msg = "setup started but did not finish (closed, killed or crashed before the end)"
+    prep_cs2.write_json(os.path.join(a.out, "prep_status.json"), {
+        "version": a.version, "ok": False, "problems": [msg], "warnings": [],
+        "player": ["Prep: " + msg, "Prep: setup is not done, so Melty runs it again on the next start; details in data/prep.log"]})
+
+
 def main(argv=None, steps=None, runner=None, show=None):
     """Runs both games, then finish(); returns the exit code. steps/runner/show (the message box) are for prep/tests."""
     ap = argparse.ArgumentParser()
@@ -181,6 +194,7 @@ def main(argv=None, steps=None, runner=None, show=None):
         LOG = prep_cs2.LOG = both
         t = time.time()
         problems, warnings = [], []
+        started(a)
         try:
             both("prep %s start; rust=%s cs2=%s" % (a.version, a.rust, a.cs2))
             for step in steps or (cs2_step, rust_step):  # one game failing must not skip the other

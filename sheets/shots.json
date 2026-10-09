@@ -100,7 +100,7 @@
       "pitch": -3,
       "frames": 60,
       "what": "aim lobby at the firing line: the numbered lanes, near and raised bots in a rifle-ready stance, catwalks and crates down range, with the round HUD",
-      "verified": "2026-10-09 rendered in lobby_r3_4 (Gauntlet round 3): same pose; every bot in one Rust full-metal-style kit (hood, facemask, chest plate, road sign kilt) set out in aim_botz-style rows, no crate stands, lamp light pools and pilaster/corner occlusion on the walls; the gun is shown in its idle hold (the lobby skips the draw clip in captures)"
+      "verified": "2026-10-09 rendered in lobby_r1_103 (lobby Gauntlet round 1): same pose; bots in the Rust full-metal-style kit (hood, facemask, chest plate) in three colourways, the near row at 4.5 m, three bots on crate stands between the rows, team-tinted score boxes; the gun is shown in its idle hold (the lobby cuts any draw clip to idle every frame of a capture)"
     }
   ]
 }
