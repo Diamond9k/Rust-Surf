@@ -15,12 +15,13 @@ const COL := {"damage": "damage", "cycletime": "cycletime", "cycletime alt": "cy
 	"armor ratio": "armor_ratio", "penetration": "penetration", "is full auto": "full_auto", "bullets": "bullets",
 	"max player speed": "max_speed", "max player speed alt": "max_speed_alt", "spread": "spread",
 	"inaccuracy stand": "inacc_stand", "inaccuracy crouch": "inacc_crouch", "inaccuracy move": "inacc_move",
-	"inaccuracy jump": "inacc_jump", "inaccuracy fire": "inacc_fire", "recoil angle": "recoil_angle",
+	"inaccuracy jump": "inacc_jump", "inaccuracy jump initial": "inacc_jump", "inaccuracy land": "inacc_land", "inaccuracy fire": "inacc_fire", "recoil angle": "recoil_angle",
 	"recoil angle variance": "recoil_angle_var", "recoil magnitude": "recoil_mag", "recoil magnitude variance": "recoil_mag_var",
 	"recovery time stand": "recovery_stand", "recovery time crouch": "recovery_crouch", "zoom levels": "zoom_levels",
 	"zoom fov 1": "zoom_fov_1", "zoom fov 2": "zoom_fov_2", "zoom time 1": "zoom_time"}
 ## Keys with an " alt" twin in items_game: the scoped / silenced / burst / fan value.
-const ALT_KEYS := ["spread", "inaccuracy stand", "inaccuracy crouch", "inaccuracy move", "inaccuracy jump", "inaccuracy fire",
+const ALT_KEYS := ["spread", "inaccuracy stand", "inaccuracy crouch", "inaccuracy move", "inaccuracy jump", "inaccuracy jump initial",
+	"inaccuracy land", "inaccuracy fire",
 	"recoil angle", "recoil angle variance", "recoil magnitude", "recoil magnitude variance", "cycletime", "max player speed"]
 
 ## KeyValues escapes and the platform defines conditionals test (prep/items_game.py reads the file the same way).
@@ -72,6 +73,8 @@ var _buy: CanvasLayer
 var _scope: Control
 var _scope_layer: CanvasLayer
 var _rng := RandomNumberGenerator.new()
+var _pellet_tabs := {}   # id -> PackedVector2Array (angle, radius share) of its fixed shotgun pattern
+var _recharge := {}      # id -> when an empty Zeus has its charge back
 
 func setup(m: Node) -> void:
 	main = m
@@ -106,6 +109,11 @@ func setup(m: Node) -> void:
 	slots["secondary"] = _first_ready(["cs2_usp_silencer", "cs2_glock", "cs2_deagle"], "pistol")
 	for id in rows:
 		_alt_on[id] = alt_kind(id) == "silencer"  # CS2 hands out the M4A1-S and USP-S silenced
+	if main.player and main.player.has_signal("landed"):
+		main.player.landed.connect(_on_land)
+	var cv: Variant = main.hud.get("convars") if main.hud else null
+	if cv is Dictionary and str(cv.get("zoom_sensitivity_ratio", "")).is_valid_float():
+		X["zoom_sensitivity_ratio"] = float(cv["zoom_sensitivity_ratio"])  # the player's own CS2 convar
 	refill()
 	_build_buy()
 	_build_scope()
@@ -194,6 +202,7 @@ func _zoom_levels(id: String) -> int:
 func refill() -> void:
 	for id in rows:
 		ammo[id] = [int(stat(id, "primary clip size")), int(stat(id, "primary reserve ammo max"))]
+	_recharge.clear()
 	_reload_until = 0.0
 	_shell_next = 0.0
 	_hud()
@@ -241,6 +250,7 @@ func switch_to(s: String) -> bool:
 	if current != "":
 		last = current
 	current = s
+	_xhair()
 	_deploy_reset()
 	_next_fire = _now() + maxf(vm.clip_length("draw"), 0.3)
 	_hud()
@@ -269,10 +279,13 @@ func _process(dt: float) -> void:
 	var t := _now()
 	_decay(id, dt, t)
 	_camera()
+	if main.viewmodel and main.viewmodel.has_method("move"):
+		main.viewmodel.move(main.player.speed_units() if main.player.grounded else 0.0, Vector2(main.player.pitch, main.player.yaw), dt)
 	if Input.is_action_just_pressed("surf_buymenu") and not (main.settings and main.settings.is_open):
 		_buy.visible = not _buy.visible
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if _buy.visible else Input.MOUSE_MODE_CAPTURED
 	_speed(id)
+	_recharge_tick(t)
 	if _blocked():
 		if _zoom > 0 and not _posed:
 			_set_zoom(0)
@@ -384,6 +397,8 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 		_burst_left = 0
 		_next_fire = cadence(_next_fire, t, cyc, get_process_delta_time())
 	a[0] = int(a[0]) - 1
+	if int(a[0]) <= 0 and int(a[1]) <= 0 and rows.has(id) and rows[id]["slot"] == "gear":
+		_recharge[id] = t + float(X["taser_recharge"])
 	_last_shot = t
 	var vm: Viewmodel = main.viewmodel
 	if not vm.play("shoot1"):
@@ -401,9 +416,14 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 	# random angle and a uniform (centre-weighted) radius
 	var t0 := _rng.randf() * TAU
 	var r0 := _rng.randf() * inacc
-	for i in int(stat(id, "bullets")):
+	var n := int(stat(id, "bullets"))
+	var fixed := pellets(id) if n > 1 and float(X["shotgun_spread_patterns"]) > 0.0 else PackedVector2Array()
+	for i in n:
 		var t1 := _rng.randf() * TAU
 		var r1 := _rng.randf() * spr
+		if i < fixed.size():
+			t1 = fixed[i].x  # CS2 shotguns: the same pellet pattern every blast, moved by the inaccuracy ring
+			r1 = fixed[i].y * spr
 		var off := Vector2(cos(t0) * r0 + cos(t1) * r1, sin(t0) * r0 + sin(t1) * r1)
 		var dir := (-eye.z + eye.x * off.x + eye.y * off.y).normalized()
 		_trace(id, cam.global_position, dir, reach, stat(id, "damage"), hits)
@@ -451,6 +471,7 @@ func _trace(id: String, from: Vector3, dir: Vector3, reach: float, dmg: float, h
 	var space: PhysicsDirectSpaceState3D = main.player.get_world_3d().direct_space_state
 	var ex: Array[RID] = [main.player.get_rid()]
 	var start := from
+	var travelled_from := from  # range falloff counts every unit flown, the ones inside walls too
 	var power := stat(id, "penetration")
 	var rm := stat(id, "range modifier")
 	var seen := {}
@@ -463,7 +484,8 @@ func _trace(id: String, from: Vector3, dir: Vector3, reach: float, dmg: float, h
 		if r.is_empty():
 			return
 		var pos: Vector3 = r["position"]
-		dmg *= pow(rm, start.distance_to(pos) / u / 500.0)
+		dmg *= pow(rm, travelled_from.distance_to(pos) / u / 500.0)
+		travelled_from = pos
 		var col: Object = r["collider"]
 		var body := col != null and col.has_method("hit")
 		if body:
@@ -472,7 +494,7 @@ func _trace(id: String, from: Vector3, dir: Vector3, reach: float, dmg: float, h
 			if not seen.has(key):
 				seen[key] = true
 				var d := dmg * (stat(id, "headshot multiplier") if head else 1.0)
-				hits.append([col, _armored(key, d, head, id), head, pos])
+				hits.append([col, _armored(key, d, _group(col, head), id), head, pos])
 		else:
 			_decal(pos, r["normal"])
 		if power <= 0.0:
@@ -486,6 +508,8 @@ func _trace(id: String, from: Vector3, dir: Vector3, reach: float, dmg: float, h
 		if not body:
 			_decal(exit["position"], exit["normal"])
 		start = exit["position"] + dir * 0.002
+		travelled_from = exit["position"]
+		dmg *= pow(rm, thick / 500.0)  # the flight through the wall
 		left -= 1
 
 ## One plain ray along the camera inside a cone of spread_mrad (tools aim with it; firing uses _trace).
@@ -512,11 +536,18 @@ func _exit(space: PhysicsDirectSpaceState3D, col: Object, pos: Vector3, dir: Vec
 		d += step
 	return {}
 
-## CS armor: an armored hitgroup (any but the head without a helmet) takes armor ratio x 0.5 of the damage to
-## health, and the armor pays half of the rest. Only targets that carry an armor value are armored.
-func _armored(key: Object, d: float, head: bool, id: String) -> float:
+## A struck part's hitgroup: "head" for a head, else its group property (chest when it has none).
+func _group(col: Object, head: bool) -> String:
+	if head:
+		return "head"
+	return String(col.get("group")) if col.get("group") is String else "chest"
+
+## CS armor on a target that carries an armor value (the aim lobby armours its bots itself, after its
+## hitgroup scale): an armored hitgroup takes armor ratio x armor_ratio_scale of the damage to health and
+## the armor pays armor_bonus of the rest. The legs are never armored, the head only with a helmet.
+func _armored(key: Object, d: float, group: String, id: String) -> float:
 	var armor: Variant = key.get("armor")
-	if not (armor is float or armor is int) or float(armor) <= 0.0 or (head and key.get("helmet") != true):
+	if not (armor is float or armor is int) or float(armor) <= 0.0 or group == "legs" or (group == "head" and key.get("helmet") != true):
 		return d
 	var bonus := float(X["armor_bonus"])
 	var health := d * stat(id, "armor ratio") * float(X["armor_ratio_scale"])
@@ -534,9 +565,8 @@ func pattern(id: String, mode: int) -> PackedVector2Array:
 	if _tables.has(k):
 		return _tables[k]
 	var sfx := " alt" if mode == 1 else ""
-	var seed := int(stat(id, "recoil seed")) if _has(id, "recoil seed") else (String(rows[id]["item"]).hash() & 0xffff if rows.has(id) else 0)
 	var rs := SourceRandom.new()
-	rs.set_seed(seed)
+	rs.set_seed(_seed(id))
 	var auto := stat(id, "is full auto") > 0.5
 	var follow := float(X["pattern_follow"])
 	var base_a := _alt_or(id, "recoil angle", sfx)
@@ -629,8 +659,32 @@ func _inacc(id: String) -> float:
 	var k := clampf(remap(p.speed_units(), maxspd * float(X["move_inacc_start"]), maxspd * float(X["move_inacc_end"]), 0.0, 1.0), 0.0, 1.0)
 	a += k * mstat(id, "inaccuracy move")
 	if not p.grounded:
-		a += mstat(id, "inaccuracy jump")
+		a += air_inacc(_jump_inacc(id), absf(p.velocity.y) / u)
 	return a + _inaccuracy
+
+## The airborne term's base: items_game's "inaccuracy jump initial" (CS's take-off penalty), else the class
+## inacc_jump column. Its "inaccuracy jump" is not used here: in the CS:GO scripts that key is a small speed
+## factor, not the take-off cone.
+func _jump_inacc(id: String) -> float:
+	return mstat(id, "inaccuracy jump initial")
+
+## CS's airborne inaccuracy: remapped on the square root of the vertical speed (units/s); none below
+## air_inacc_apex_share of sqrt(jump impulse) (the apex), the full value at take-off speed, up to
+## air_inacc_max_scale times it on fast falls and surf descents.
+func air_inacc(jump: float, vz_units: float) -> float:
+	var top := sqrt(float(Sheets.movement()["jump_impulse"]) / u)
+	return clampf(remap(sqrt(vz_units), top * float(X["air_inacc_apex_share"]), top, 0.0, jump), 0.0, jump * float(X["air_inacc_max_scale"]))
+
+## Landing: the weapon's "inaccuracy land" x the fall speed goes onto the fire inaccuracy, which recovers
+## over the recovery time like a shot's penalty, so a shot the tick after landing is not fully accurate.
+func _on_land(fall_speed: float) -> void:
+	var id := held()
+	if id == "" or id == "knife":
+		return
+	_inaccuracy += land_penalty(id, fall_speed / u)
+
+func land_penalty(id: String, fall_units: float) -> float:
+	return mstat(id, "inaccuracy land") * fall_units * float(X["land_velocity_scale"])
 
 ## Spread + inaccuracy of the held weapon, items_game units (the HUD's dynamic crosshair reads it).
 func _spread(id: String) -> float:
@@ -668,13 +722,45 @@ func _set_zoom(level: int) -> void:
 	_zoom = level
 	if main.viewmodel:
 		main.viewmodel.visible = level == 0
-	if main.hud and main.hud.get("crosshair") is Control:
-		(main.hud.crosshair as Control).visible = level == 0
 	_scope_layer.visible = level > 0
+	_xhair()
 	_scope.queue_redraw()
 
 func scoped() -> bool:
 	return _zoom > 0
+
+## CS2 draws no crosshair while scoped, nor on an unscoped sniper rifle (AWP, SSG 08, SCAR-20, G3SG1).
+func crosshair_shown() -> bool:
+	var id := held()
+	return _zoom == 0 and not (id != "" and String(X["no_crosshair_classes"]).split(",").has(_cls(id)))
+
+func _xhair() -> void:
+	if main.hud and main.hud.get("crosshair") is Control:
+		(main.hud.crosshair as Control).visible = crosshair_shown()
+
+## An empty Zeus charges back to a full clip taser_recharge seconds after its shot.
+func _recharge_tick(t: float) -> void:
+	for id in _recharge.keys():
+		if t >= float(_recharge[id]):
+			_recharge.erase(id)
+			ammo[id] = [int(stat(id, "primary clip size")), int(ammo[id][1])]
+			_hud()
+
+## A shotgun's fixed pellet pattern: an angle and a share of the spread radius per pellet, drawn once from
+## Source's random stream on the weapon's recoil seed, so every blast puts its pellets in the same shape.
+func pellets(id: String) -> PackedVector2Array:
+	if _pellet_tabs.has(id):
+		return _pellet_tabs[id]
+	var rs := SourceRandom.new()
+	rs.set_seed(_seed(id) + int(X["shotgun_pattern_seed_offset"]))
+	var out := PackedVector2Array()
+	for i in int(stat(id, "bullets")):
+		out.append(Vector2(rs.rand_float(0.0, TAU), rs.rand_float(0.0, 1.0)))
+	_pellet_tabs[id] = out
+	return out
+
+func _seed(id: String) -> int:
+	return int(stat(id, "recoil seed")) if _has(id, "recoil seed") else (String(rows[id]["item"]).hash() & 0xffff if rows.has(id) else 0)
 
 ## CS2's knife: slash (attack) 40 first / 25 combo / 90 in the back, stab (attack2) 65 / 180 in the back.
 ## A ray to the knife's reach, then a hull around its end like CS's knife trace; one swing = one shot.
@@ -707,7 +793,7 @@ func _knife(stab: bool) -> void:
 		dmg = float(X["knife_stab_back" if back else "knife_stab"])
 	else:
 		dmg = float(X["knife_slash_back"] if back else (X["knife_slash_first"] if first else X["knife_slash"]))
-	col.hit(_armored(unit, dmg, head, "knife"), head, at)
+	col.hit(_armored(unit, dmg, _group(col, head), "knife"), head, at)
 	_next_fire = t + float(X["knife_stab_hit" if stab else "knife_slash_hit"])
 	if main.hud.has_method("hitmarker"):
 		main.hud.hitmarker(head)
@@ -1123,12 +1209,72 @@ func _selftest() -> void:
 	# armor: CS's ratio split
 	var armored := TestPart.new()
 	armored.armor = 100.0
-	var dealt := _armored(armored, 36.0, false, "cs2_ak47")
+	var dealt := _armored(armored, 36.0, "chest", "cs2_ak47")
 	var want_h := 36.0 * stat("cs2_ak47", "armor ratio") * float(X["armor_ratio_scale"])
-	_check("armor", is_equal_approx(dealt, want_h) and is_equal_approx(armored.armor, 100.0 - (36.0 - want_h) * float(X["armor_bonus"])), "36 -> %.2f health, armor %.2f" % [dealt, armored.armor])
+	var after_chest := armored.armor
+	var leg_dealt := _armored(armored, 27.0, "legs", "cs2_ak47")
+	var head_dealt := _armored(armored, 144.0, "head", "cs2_ak47")
+	_check("armor", is_equal_approx(dealt, want_h) and is_equal_approx(after_chest, 100.0 - (36.0 - want_h) * float(X["armor_bonus"])) and leg_dealt == 27.0 and head_dealt == 144.0 and armored.armor == after_chest, "chest 36 -> %.2f health, armor %.2f; legs 27 -> %.1f and no-helmet head 144 -> %.1f leave the armor" % [dealt, after_chest, leg_dealt, head_dealt])
 	armored.free()
+	# range falloff counts the flight inside a penetrated wall: one 8-unit wall costs its toll plus rm^(8/500)
+	var fall_hits: Array = []
+	var far_part := _test_box(TestPart.new(), Vector3(4, 4, 0.2), Vector3(0, -900, -3)) as TestPart
+	made.append(far_part)
+	await get_tree().physics_frame
+	_trace("cs2_ak47", Vector3(0, -900, 3), Vector3(0, 0, -1), 50.0, 100.0, fall_hits)
+	var rmod := stat("cs2_ak47", "range modifier")
+	var pmw := 1.0 / float(X["pen_mod_world"])
+	var exp_d := 100.0 * pow(rmod, (3.0 - 4.0 * u) / u / 500.0)
+	for wz in [0.0, -1.0]:
+		exp_d -= exp_d * float(X["pen_chunk"]) + maxf(0.0, 3.0 / stat("cs2_ak47", "penetration") * 1.25) * pmw * 3.0 + pmw * 64.0 / 24.0
+		exp_d *= pow(rmod, 8.0 / 500.0)
+		if wz == 0.0:
+			exp_d *= pow(rmod, (1.0 - 8.0 * u) / u / 500.0)
+	exp_d *= pow(rmod, (1.9 - 4.0 * u) / u / 500.0)
+	var got_d: float = float(fall_hits[0][1]) if fall_hits.size() > 0 else -1.0
+	_check("falloff_through_walls", stat("cs2_ak47", "penetration") <= 0.0 or absf(got_d - exp_d) < 0.005, "100 through two 8-unit walls to 6 m: %.2f (want %.2f with the in-wall flight counted)" % [got_d, exp_d])
 	for w in made:
 		(w as Node).queue_free()
+	# airborne cone: nothing at the apex, the take-off value at jump speed, capped at air_inacc_max_scale x
+	var jmp := _jump_inacc("cs2_ak47")
+	var vj := float(Sheets.movement()["jump_impulse"]) / u
+	var air := [air_inacc(jmp, 0.0), air_inacc(jmp, vj * 0.04), air_inacc(jmp, vj), air_inacc(jmp, vj * 100.0)]
+	_check("air_inaccuracy", air[0] == 0.0 and air[1] == 0.0 and is_equal_approx(air[2], jmp) and is_equal_approx(air[3], jmp * float(X["air_inacc_max_scale"])), "ak47 jump %.1f: apex %.1f, low %.1f, take-off %.1f, fast fall %.1f" % [jmp, air[0], air[1], air[2], air[3]])
+	_inaccuracy = 0.0
+	slots["primary"] = "cs2_ak47"
+	current = "primary"
+	_on_land(vj * u)
+	var landed := _inaccuracy
+	_inaccuracy = 0.0
+	_check("land_penalty", landed > 0.0 and is_equal_approx(landed, land_penalty("cs2_ak47", vj)), "ak47 landing from a jump adds %.2f to the fire inaccuracy" % landed)
+	# shotguns: the same pellet pattern every blast; rifles stay random
+	var pa := pellets("cs2_nova")
+	_pellet_tabs.clear()
+	_check("shotgun_pattern_fixed", pa.size() == int(stat("cs2_nova", "bullets")) and pa == pellets("cs2_nova") and pa != pellets("cs2_xm1014"), "nova %d pellets, first %s" % [pa.size(), str(pa.slice(0, 2))])
+	# Zeus: an empty charge comes back after taser_recharge seconds
+	var zeus := ""
+	for zid in rows:
+		if rows[zid]["slot"] == "gear":
+			zeus = zid
+	if zeus != "":
+		ammo[zeus] = [1, 0]
+		slots["taser"] = zeus
+		current = "taser"
+		_next_fire = 0.0
+		var t0 := _now()
+		_shoot(zeus, t0, false)
+		var empty := int(ammo[zeus][0])
+		_recharge_tick(t0 + float(X["taser_recharge"]) * 0.5)
+		var half := int(ammo[zeus][0])
+		_recharge_tick(t0 + float(X["taser_recharge"]) + 0.01)
+		_check("zeus_recharge", empty == 0 and half == 0 and int(ammo[zeus][0]) == int(stat(zeus, "primary clip size")), "%s: 0 after the shot, %d at half time, %d after %.0f s" % [zeus, half, ammo[zeus][0], float(X["taser_recharge"])])
+	# crosshair: hidden on an unscoped sniper, shown on a rifle
+	slots["primary"] = "cs2_awp"
+	current = "primary"
+	var xh_awp := crosshair_shown()
+	slots["primary"] = "cs2_ak47"
+	var xh_ak := crosshair_shown()
+	_check("sniper_no_crosshair", not xh_awp and xh_ak, "awp unscoped=%s ak=%s" % [xh_awp, xh_ak])
 	# backstab: behind a +Z-facing target vs in front of it
 	var dummy := Node3D.new()
 	main.add_child(dummy)
@@ -1157,6 +1303,15 @@ func _selftest() -> void:
 				far = maxf(far, (inv * m3.global_transform * bx.get_endpoint(k)).length())
 	var wall := float(p.M["hull_width"]) * 0.5
 	_check("viewmodel_inside_hull", far > 0.0 and far < wall and p.cam.near < far, "rig reaches %.3f m from the eye, nearest wall %.3f m, near plane %.4f m" % [far, wall, p.cam.near])
+	# re-equip: drawing the knife again keeps its own idle clip (the cached glb's clips are not shared)
+	var kclips := {"draw": main.content.path_of("clip_knife_draw"), "idle": main.content.path_of("clip_knife_idle"), "inspect": main.content.path_of("clip_knife_inspect")}
+	var idles: Array = []
+	for i in 3:
+		if vm.equip(main.content.path_of("model_knife_ct"), kclips):
+			idles.append(vm._idle_name)
+			vm.idle()
+	var loops := vm.anim != null and vm.anim.current_animation == vm._idle_name and vm.anim.get_animation(vm._idle_name).loop_mode == Animation.LOOP_LINEAR
+	_check("reequip_idle", idles.size() == 3 and idles[0] == idles[2] and not kclips.has(String(idles[0])) and loops, "idle clip on three equips: %s, looping=%s" % [str(idles), loops])
 	# items_game reader: platform conditionals and escapes as prep reads them
 	_ig = '"x" { "a" "1" [$X360] "a" "2" [$WIN32] "b" "say \\"hi\\"" "c" "3" [!$WIN32] "blk" [$X360] { "z" "9" } "d" [$WIN32||$OSX] { "y" "8" } }'
 	var kv := _kv(_ig.find("{"))

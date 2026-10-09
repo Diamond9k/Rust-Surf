@@ -54,7 +54,7 @@ func build(c: Content, offset: Vector3, yaw_deg: float) -> void:
 	_props()
 
 ## course.json terrain.props: extra copies of the extracted Launch Site meshes set around the course as
-## scenery (our arrangement, not Rust's layout), standing on the ground level at their x.
+## scenery (our arrangement, not Rust's layout), standing on the ground height at their x, z.
 func _props() -> void:
 	for p in T["props"]["rows"]:
 		var mesh := _mesh(p["mesh"])
@@ -66,7 +66,7 @@ func _props() -> void:
 		mi.top_level = true
 		add_child(mi)
 		var sc := float(p["scale"])
-		mi.global_transform = Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(float(p["yaw"])), 0)).scaled(Vector3.ONE * sc), Vector3(at[0], level(at[0]) + float(p["dy"]), at[1]))
+		mi.global_transform = Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(float(p["yaw"])), 0)).scaled(Vector3.ONE * sc), Vector3(at[0], height(at[0], at[1]) + float(p["dy"]), at[1]))
 		props += 1
 
 func _mesh(name: String) -> Mesh:
@@ -424,6 +424,12 @@ uniform vec3 scrub_color = vec3(0.3, 0.32, 0.2);
 uniform float stone_cell = 1.3;
 uniform float stone_density = 0.25;
 uniform vec3 stone_color = vec3(1.15, 1.1, 1.0);
+uniform vec3 grass_color = vec3(0.8, 0.95, 0.55);
+uniform float grass_cover = 0.45;
+uniform float grass_period = 55.0;
+uniform vec3 rock_color = vec3(0.62, 0.6, 0.57);
+uniform float rock_slope = 0.25;
+uniform float hill_shade = 0.3;
 varying vec3 wpos;
 varying vec3 wn;
 
@@ -496,6 +502,17 @@ void fragment() {
 	vec3 tn = mix(tint_a, tint_b, smoothstep(0.3, 0.7, fbm(p / tint_period + vec2(19.0, 41.0))));
 	c *= mix(tn, vec3(1.0), site);  // open ground only: olive and brown patches; the site concrete stays grey
 	float opn = (1.0 - site) * (1.0 - low);
+	// grass: patches of dry green over the open ground, with a fine blade grain close to the camera
+	float gm = fbm(p / grass_period + vec2(13.0, 29.0)) * 0.7 + fbm(p / (grass_period * 0.23) + vec2(4.0, 61.0)) * 0.3;
+	float grass = smoothstep(1.0 - grass_cover - 0.12, 1.0 - grass_cover + 0.12, gm) * opn * (1.0 - smoothstep(0.15, 0.35, slope));
+	float blade = mix(vnoise(p * vec2(9.0, 2.3)) * 0.6 + vnoise(p * 23.0) * 0.4, 0.5, far);
+	c = mix(c, c * grass_color * mix(0.78, 1.18, blade), grass);
+	// outside the site: bare rock on steep hill flanks, and broad light and shade so the coarse far
+	// hills read as folded land instead of flat cut-outs
+	float hill = 1.0 - inside;
+	float rock = smoothstep(rock_slope, rock_slope + 0.2, slope) * hill;
+	c = mix(c, vec3(dot(c, vec3(0.333))) * rock_color / 0.33 * 0.5 + c * 0.5, rock);
+	c *= mix(1.0, mix(1.0 - hill_shade, 1.0 + hill_shade * 0.5, fbm(p / 160.0 + vec2(71.0, 5.0))), hill);
 	float scrub = scatter(p, scrub_cell, scrub_density * smoothstep(0.25, 0.6, fbm(p / 70.0 + vec2(5.0, 2.0))), 1.0) * opn * (1.0 - slope * 2.0);
 	c = mix(c, c * scrub_color, clamp(scrub, 0.0, 1.0));
 	float stone = scatter(p, stone_cell, stone_density, 23.0) * opn;
@@ -514,7 +531,7 @@ void fragment() {
 	nm = mix(nm, texture(nrm_road, ruv).rgb, road);
 	ALBEDO = c;
 	NORMAL_MAP = nm;
-	ROUGHNESS = roughness_val;
+	ROUGHNESS = mix(roughness_val, 0.75, road);
 }
 "
 

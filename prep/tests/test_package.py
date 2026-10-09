@@ -134,6 +134,14 @@ class Build(unittest.TestCase):
             meta = json.load(f)
         self.assertEqual((meta["gates"], meta["unverified_cells"]), ("passed", 3))
 
+    def test_refused_build_removes_an_older_zip(self):
+        out, errs = self.build()
+        self.assertEqual(errs, [])
+        out, errs = self.build(gate=lambda: (["Godot --wtest on the exported pck: exit 1"], 0))
+        self.assertIsNone(out)
+        for p in ("RustSurf-%s.zip", "RustSurf-%s.entries.json"):
+            self.assertFalse(os.path.exists(os.path.join(self.r, "dist", p % self.ver)), p)
+
     def test_version_mismatch_and_readme(self):
         out, errs = self.build(ver="9.9.9")
         self.assertIn("version 9.9.9 does not match melty.recipe.json (%s)" % self.ver, errs)
@@ -154,7 +162,7 @@ class Build(unittest.TestCase):
 
 
 FAKE_GODOT = """#!/usr/bin/env python3
-import os, sys
+import os, sys, time
 mode = os.environ.get("FAKE_GODOT", "ok")
 a = sys.argv[1:]
 if "--check-only" in a:
@@ -164,17 +172,36 @@ if "--check-only" in a:
     sys.exit(0)
 if "--import" in a:
     sys.exit(0)
+if "--export-release" in a:
+    if mode == "notemplates":
+        print('ERROR: Cannot export project with preset "Windows Desktop" due to configuration errors:')
+        print("No export template found at the expected path")
+        sys.exit(1)
+    exe = a[-1]
+    for p, body in ((exe, b"MZ"), (exe[:-4] + ".pck", b"GDPC export " + mode.encode())):
+        with open(p, "wb") as f:
+            f.write(body)
+    sys.exit(0)
+if "--main-pack" not in a or not os.path.isfile(a[a.index("--main-pack") + 1]):
+    print("not run on an exported pck")
+    sys.exit(3)
 if "--lobbytest" in a:
     print("LTEST PASS round" if mode != "lfail" else "LTEST FAIL round (x)")
     print("LTEST ALL PASS" if mode != "lfail" else "LTEST FAILED")
     sys.exit(1 if mode == "lfail" else 0)
 if "--wtest" in a:
     if mode == "hang":
-        sys.exit(0)  # --quit-after ended it before the self-test printed its verdict
+        sys.exit(0)  # ended before the self-test printed its verdict
     if mode == "werr":
         print("SCRIPT ERROR: Invalid call. Nonexistent function 'x'")
     print("WTEST weapons checks=21 failed=0")
     sys.exit(0)
+if "--uitest" in a:
+    if mode == "sleep":
+        time.sleep(30)
+    print("UITEST PASS menu" if mode != "ufail" else "UITEST FAIL rebind moves the key")
+    print("UITEST ok" if mode != "ufail" else "UITEST FAILED 1")
+    sys.exit(1 if mode == "ufail" else 0)
 sys.exit(2)
 """
 
@@ -218,15 +245,38 @@ class Gate(unittest.TestCase):
 
     def test_lobbytest_fail(self):
         errs, _ = self.gate("lfail")
-        self.assertTrue(any(e.startswith("Godot --lobbytest: exit 1, no pass line") and "LTEST FAIL round" in e for e in errs), errs)
+        self.assertTrue(any(e.startswith("Godot --lobbytest on the exported pck: exit 1, no pass line") and "LTEST FAIL round" in e for e in errs), errs)
 
     def test_no_verdict_is_a_failure(self):
         errs, _ = self.gate("hang")
-        self.assertEqual(errs, ["Godot --wtest: exit 0, no pass line"])
+        self.assertEqual(errs, ["Godot --wtest on the exported pck: exit 0, no pass line"])
 
     def test_script_error_with_exit_0(self):
         errs, _ = self.gate("werr")
         self.assertTrue(errs and "SCRIPT ERROR" in errs[0], errs)
+
+    def test_tests_run_on_a_fresh_export(self):
+        stray = os.path.join(self.r, "dist", "RustSurf", "left_by_a_dev_run.txt")
+        os.makedirs(os.path.dirname(stray))
+        open(stray, "w").close()
+        errs, lines = self.gate("ok")
+        self.assertEqual(errs, [])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.r, "dist", "RustSurf"))), ["RustSurf.exe", "RustSurf.pck"])
+        self.assertIn("gate: --uitest UITEST ok", lines)
+
+    def test_no_export_templates(self):
+        errs, _ = self.gate("notemplates")
+        self.assertEqual(len(errs), 1)
+        self.assertTrue(errs[0].startswith('Godot --export-release "Windows Desktop": exit 1') and "export templates" in errs[0], errs)
+
+    def test_uitest_fail(self):
+        errs, _ = self.gate("ufail")
+        self.assertTrue(any(e.startswith("Godot --uitest on the exported pck: exit 1") and "UITEST FAIL rebind" in e for e in errs), errs)
+
+    def test_hung_test_is_stopped_by_the_clock(self):
+        os.environ["FAKE_GODOT"] = "sleep"
+        errs = package.godot_gate(self.r, self.godot, self.data, timeout=2, log=lambda s: None)
+        self.assertTrue(any(e.startswith("Godot --uitest on the exported pck: exit -1") for e in errs), errs)
 
     def test_missing_godot_or_data(self):
         self.assertTrue(package.godot_gate(self.r, "", self.data)[0].startswith("no Godot binary"))

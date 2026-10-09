@@ -100,7 +100,7 @@
       "pitch": -3,
       "frames": 60,
       "what": "aim lobby at the firing line: the numbered lanes, near and raised bots, catwalks and crates down range, with the round HUD",
-      "verified": "2026-10-09 rendered in lobby_r2_6 (Gauntlet round 2): lanes, near, crate and catwalk bots, front-lit range, CS2-style round HUD"
+      "verified": "2026-10-09 rendered in lobby_r3_3 (Gauntlet round 3): range rescaled to the 72 u bot, near bots 3.5-6 m from the line, wall measuring grid, readable stats panel, CS2-style round HUD"
     }
   ]
 }

@@ -109,6 +109,39 @@ class Stats(unittest.TestCase):
             for k, v in a.items():
                 self.assertIsInstance(v, str, "%s %s" % (n, k))
 
+    def test_rifle_chain_gives_every_required_stat(self):
+        """The fixture's AK-47 is whole the way a real rifle is: every stat prep requires, through its chain."""
+        import prep_cs2
+        need = prep_cs2.keys(prep_cs2.settings()["stats_required"])
+        ak = self.st["weapon_ak47"]
+        self.assertEqual([k for k in need if not prep_cs2.number(ak.get(k))], [])
+        self.assertEqual((ak["inaccuracy move"], ak["inaccuracy crouch"]), ("140.000000", "4.100000"))  # [$X360] dropped; from rifle
+
+    def test_write_stats_on_the_fixture(self):
+        """prep_cs2.write_stats with this file as the player's export: the AK passes, the M4A4 (whose prefab
+        lists only clip, damage and rate) stops setup naming what it lacks, the Glock is not in the sheet rows."""
+        import prep_cs2
+        d = tempfile.mkdtemp()
+        try:
+            p = os.path.join(d, prep_cs2.ITEMS_GAME)
+            os.makedirs(os.path.dirname(p))
+            shutil.copy(FIX, p)
+            ws = {"rows": [{"game": "cs2", "slot": "rifle", "item": "weapon_ak47"}, {"game": "cs2", "slot": "rifle", "item": "weapon_m4a1"},
+                           {"game": "cs2", "slot": "gear", "item": "weapon_taser"}]}
+            with open(os.devnull, "w") as null:
+                prep_cs2.LOG = lambda s: null.write(s)
+                problems, warnings = prep_cs2.write_stats(d, ws)
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIn("weapon_m4a1 (armor ratio/", problems[0])
+            self.assertNotIn("weapon_ak47 (", problems[0])
+            self.assertIn("weapon_taser (cycletime)", problems[0])  # light slot: only its four keys; range from weapon_base
+            with open(os.path.join(d, "weapon_stats.json"), encoding="utf-8") as f:
+                st = json.load(f)
+            self.assertEqual((st["weapon_ak47"]["damage"], st["weapon_ak47"]["_source"]), ("36", "items_game.txt"))
+        finally:
+            prep_cs2.LOG = print
+            shutil.rmtree(d)
+
     def test_cli_output_is_json(self):
         d = tempfile.mkdtemp()
         try:

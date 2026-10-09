@@ -33,13 +33,14 @@ var _shot_ok := false
 var _kills := 0
 var _hs_kills := 0
 var _damage := 0.0
-var _ttk: Array[float] = []
+var _ttk: Array[float] = []        # per bot: from the shot that first hit it to the kill
+var _gaps: Array[float] = []       # kill interval: from the later of the bot standing up and the previous kill
 var _flick_sum := 0.0
 var _flick_n := 0
 var _on_target := 0.0
 var _last_shot_at := 0.0   # round clock of the previous shot (track credits the gap a hitting shot covers)
 var _shot_gap := 0.0
-var _last_kill_at := 0.0   # round clock of the previous kill: time to kill counts from it or the bot's stand-up
+var _last_kill_at := 0.0   # round clock of the previous kill: the kill interval counts from it or the bot's stand-up
 var _last_kill_shot := -1
 var _used := {}
 var _spawned_at := 0.0
@@ -80,9 +81,14 @@ class AimTarget extends StaticBody3D:
 		lobby.register_hit(unit, dmg, head or is_head, at, group)
 
 ## One humanoid bot: the unit every part reports to. pose tips over on death and rocks back on hits.
+## kevlar is the lobby's own name for its armour: Weapons only armours targets with an 'armor' property and
+## would split before the hitgroup scale, so the lobby does CS's order itself (hitgroup, then armour).
 class Bot extends Node3D:
 	var hp := 100.0
 	var hp_max := 100.0
+	var kevlar := 0.0
+	var helmet := false
+	var first_hit_at := -1.0
 	var alive := true
 	var up_at := 0.0
 	var down_at := 0.0
@@ -303,6 +309,10 @@ uniform float scale = 5.0;
 uniform float grime = 0.6;
 uniform float lift = 1.5;
 uniform float rough = 0.85;
+uniform vec3 grid_col = vec3(0.86);
+uniform float grid_m = 1.0;
+uniform float grid_major = 5.0;
+uniform float grid_a = 0.2;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vn(vec2 p) {
 	vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
@@ -325,6 +335,12 @@ void fragment() {
 	float s = streak * exp(-top / 4.5) * grime;
 	float lip = (1.0 - smoothstep(0.05, 0.35, top)) * grime;
 	c *= 1.0 - 0.55 * s - 0.3 * lip;
+	vec2 g = abs(fract(m / grid_m + 0.5) - 0.5) * grid_m;
+	vec2 gM = abs(fract(m / (grid_m * grid_major) + 0.5) - 0.5) * grid_m * grid_major;
+	float px = fwidth(m.x) + fwidth(m.y);
+	float minor = 1.0 - smoothstep(0.004, 0.012 + px, min(g.x, g.y));
+	float major = 1.0 - smoothstep(0.012, 0.03 + px, min(gM.x, gM.y));
+	c = mix(c, grid_col, max(minor * 0.45, major) * grid_a * (1.0 - s * 0.6));
 	ALBEDO = c;
 	if (has_nrm) { NORMAL_MAP = texture(nrm, uv).rgb; }
 	ROUGHNESS = mix(rough, 1.0, s * 0.5);
@@ -346,6 +362,12 @@ func _weathered(id: String) -> Material:
 	m.set_shader_parameter("scale", float(main.course.uv_scales.get(id, 5.0)))
 	m.set_shader_parameter("grime", _f("wall_grime"))
 	m.set_shader_parameter("lift", _f("wall_lift_m"))
+	var g: Array = V["wall_grid"]
+	m.set_shader_parameter("grid_m", float(g[0]))
+	m.set_shader_parameter("grid_major", float(g[1]))
+	m.set_shader_parameter("grid_a", float(g[2]))
+	var pc := _col("color_paint")
+	m.set_shader_parameter("grid_col", Vector3(pc.r, pc.g, pc.b))
 	return m
 
 ## One inner wall face: a quad from 'from' along 'along' for span metres, h tall, facing n.
@@ -430,20 +452,23 @@ func _arena() -> void:
 	var plaque := _flat(_col("color_plaque"), 0.0, 0.7)
 	for i in n + 1:
 		_paint(Vector3(_lane_x(i + 0.5), 0, (fz + back) * 0.5), 0.12, fz - back, paint)
+	var lp: Array = V["lane_plaque"]
+	var fnum := _f("lane_floor_number")
 	for i in n:
 		var x := _lane_x(i + 1)
-		_text3d(str(i + 1), Vector3(x, 0.012, fz - 2.6), Vector3(-90, 0, 0), 2.2, pc)
-		_box(Vector3(x, wh * 0.62, back + 0.06), Vector3(2.6, 2.8, 0.08), plaque, false)
-		_text3d(str(i + 1), Vector3(x, wh * 0.62, back + 0.12), Vector3.ZERO, 2.4, pc)
+		_text3d(str(i + 1), Vector3(x, 0.012, fz - fnum * 1.2), Vector3(-90, 0, 0), fnum, pc)
+		_box(Vector3(x, wh * 0.62, back + 0.06), Vector3(float(lp[0]), float(lp[1]), 0.08), plaque, false)
+		_text3d(str(i + 1), Vector3(x, wh * 0.62, back + 0.12), Vector3.ZERO, float(lp[2]), pc)
 	var edge := n * lw * 0.5
+	var dt: Array = V["distance_text"]
 	for d in V["distance_marks"]:
 		var z := fz - float(d)
 		_paint(Vector3(0, 0, z), n * lw, 0.1, paint)
 		for s in [-1.0, 1.0]:
-			_text3d("%d m" % int(d), Vector3(s * (edge + (hx - edge) * 0.5), 0.012, z + 0.55), Vector3(-90, 0, 0), 0.75, pc)
+			_text3d("%d m" % int(d), Vector3(s * (edge + (hx - edge) * 0.5), 0.012, z + float(dt[0]) * 0.75), Vector3(-90, 0, 0), float(dt[0]), pc)
 			var py := _f("distance_plaque_y")
-			_box(Vector3(s * (hx - 0.09), py, z), Vector3(0.08, 1.0, 2.3), plaque, false)
-			_text3d("%d m" % int(d), Vector3(s * (hx - 0.15), py, z), Vector3(0, -90.0 * s, 0), 0.7, pc)
+			_box(Vector3(s * (hx - 0.09), py, z), Vector3(0.08, float(dt[1]) * 1.4, float(dt[2])), plaque, false)
+			_text3d("%d m" % int(d), Vector3(s * (hx - 0.15), py, z), Vector3(0, -90.0 * s, 0), float(dt[1]), pc)
 	_paint(Vector3(0, 0.002, fz), sx, 0.18, _flat(_col("color_line"), 0.0, 0.8))
 	var rh := _f("rail_height")
 	_box(Vector3(0, rh * 0.5, fz - 0.4), Vector3(sx, rh, 0.4), pm)
@@ -597,17 +622,18 @@ func _hud() -> void:
 	var pv := VBoxContainer.new()
 	pv.add_theme_constant_override("separation", 2)
 	panel.add_child(pv)
-	_panel_title = _lab(pv, 15, tt)
+	var fs: Array = V["ui_panel_font"]
+	_panel_title = _lab(pv, int(fs[2]), tt)
 	var line := ColorRect.new()
 	line.color = Color(1, 1, 1, 0.14)
 	line.custom_minimum_size = Vector2(0, 1)
 	pv.add_child(line)
-	for i in 9:
+	for i in int(_f("ui_panel_rows")) + 1:
 		var hb := HBoxContainer.new()
 		pv.add_child(hb)
-		var nl := _lab(hb, 14, GREY)
+		var nl := _lab(hb, int(fs[0]), GREY)
 		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var vl := _lab(hb, 17, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
+		var vl := _lab(hb, int(fs[1]), Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
 		_rows.append([hb, nl, vl])
 	# kill feed, top right like CS2
 	_feed = VBoxContainer.new()
@@ -699,11 +725,11 @@ func _acc() -> float:
 func _elapsed() -> float:
 	return _f("round_s") - maxf(_left, 0.0) if _state == "round" else _f("round_s")
 
-func _avg_ttk_ms() -> float:
+func _avg_ms(a: Array[float]) -> float:
 	var s := 0.0
-	for x in _ttk:
+	for x in a:
 		s += x
-	return 1000.0 * s / maxf(_ttk.size(), 1)
+	return 1000.0 * s / maxf(a.size(), 1)
 
 func _best_ttk_ms() -> float:
 	return 1000.0 * float(_ttk.min()) if not _ttk.is_empty() else 0.0
@@ -728,16 +754,17 @@ func _stats() -> Array:
 			out.append(["Kills", str(_kills)])
 			out.append(["Headshot %", "%.0f%%" % (100.0 * _hs_kills / maxf(_kills, 1))])
 			out.append(["Accuracy", "%.0f%%" % _acc()])
-			out.append(["Shots / hits", "%d / %d" % [_shots, _hits]])
-			out.append(["Avg time to kill", "%.0f ms" % _avg_ttk_ms() if _kills > 0 else "-"])
-			out.append(["Best time to kill", "%.0f ms" % _best_ttk_ms() if _kills > 0 else "-"])
+			out.append(["Avg time to kill", "%.0f ms" % _avg_ms(_ttk) if _kills > 0 else "-"])
 			out.append(["Kills / min", "%.1f" % (60.0 * _kills / maxf(_elapsed(), 1.0))])
+			out.append(["Avg kill interval", "%.0f ms" % _avg_ms(_gaps) if _kills > 0 else "-"])
+			out.append(["Best time to kill", "%.0f ms" % _best_ttk_ms() if _kills > 0 else "-"])
+			out.append(["Shots / hits", "%d / %d" % [_shots, _hits]])
 			out.append(["Damage", str(int(_damage))])
 		"flick":
 			out.append(["Orbs hit", str(_hits)])
 			out.append(["Accuracy", "%.0f%%" % _acc()])
-			out.append(["Shots", str(_shots)])
 			out.append(["Avg time to hit", "%.0f ms" % (1000.0 * _flick_sum / maxf(_flick_n, 1)) if _flick_n > 0 else "-"])
+			out.append(["Shots", str(_shots)])
 		"track":
 			out.append(["On target", "%.1f s" % _on_target])
 			out.append(["Accuracy", "%.0f%%" % _acc()])
@@ -779,7 +806,7 @@ func _refresh_hud() -> void:
 	var wn := _weapon_name(key.get_slice("|", 1)) if key != "" else "mixed"
 	_top_mode.text = "%s  ·  %s" % [_mode_label(), "PAUSED" if _paused() else wn.to_upper()]
 	_panel_title.text = "AIM RANGE  ·  %s" % _mode_label()
-	var st := _stats()
+	var st := _stats().slice(0, int(_f("ui_panel_rows")))  # the first rows live; the summary shows them all
 	st.append(["Best (%s)" % wn, str(int(_best.get(key, 0))) if key != "" else "not ranked"])
 	for i in _rows.size():
 		var r: Array = _rows[i]
@@ -840,6 +867,7 @@ func _start_round() -> void:
 	_hs_kills = 0
 	_damage = 0.0
 	_ttk.clear()
+	_gaps.clear()
 	_flick_sum = 0.0
 	_flick_n = 0
 	_on_target = 0.0
@@ -954,13 +982,33 @@ func register_hit(unit: Node3D, dmg: float, head: bool, _at: Vector3, group: Str
 			if b == null or not b.alive:
 				return
 			_count(head)
+			if b.first_hit_at < 0.0:
+				b.first_hit_at = _last_shot_at
 			var d := dmg if head else dmg * _f("hitgroup_" + group)  # Weapons already applied the weapon's headshot multiplier
-			d = minf(d, b.hp)
+			d = minf(_armour(b, d, "head" if head else group), b.hp)
 			b.hp -= d
 			_damage += d
 			b.kick = _f("bot_flinch")
 			if b.hp <= 0.0:
 				_kill(b, head)
+
+## CS armour after the hitgroup scale: an armoured group (chest, stomach, arms; the head only with a helmet;
+## never the legs) takes the weapon's armor ratio x armor_ratio_scale to health, and the kevlar pays
+## armor_bonus of the rest, capped by what is left of it. Returns the health damage.
+func _armour(b: Bot, d: float, group: String) -> float:
+	if b.kevlar <= 0.0 or group == "legs" or (group == "head" and not b.helmet):
+		return d
+	var w: Node = main.weapons
+	if w == null:
+		return d
+	var bonus := float(w.X["armor_bonus"])
+	var health := d * float(w.stat(String(w.held()), "armor ratio")) * float(w.X["armor_ratio_scale"])
+	var paid := (d - health) * bonus
+	if paid > b.kevlar:
+		health = d - b.kevlar / bonus
+		paid = b.kevlar
+	b.kevlar -= paid
+	return health
 
 ## One hit per shot at most (a shotgun through two bots is still one shot that hit), so accuracy stays <= 100%.
 ## True when this is the shot's first hit.
@@ -983,7 +1031,7 @@ func _track_credit_cap() -> float:
 	var cap := _f("track_credit_max_s")
 	var w: Node = main.weapons
 	if w and w.rows.has(String(w.held())):
-		var cyc := float(w.stat(String(w.held()), "cycletime"))
+		var cyc := float(w.mstat(String(w.held()), "cycletime"))  # the held mode's cadence (burst, fan fire)
 		if cyc > 0.0:
 			cap = minf(cap, cyc)
 	return cap
@@ -994,10 +1042,12 @@ func _kill(b: Bot, head: bool) -> void:
 	_kills += 1
 	if head:
 		_hs_kills += 1
-	# time to kill: from the later of this bot standing up and the previous kill; a second kill by the same
-	# shot (penetration, pellets) belongs to that shot's engagement and adds no time
+	# time to kill: from the shot that first hit this bot (a one-tap is 0 ms). The kill interval runs from the
+	# later of this bot standing up and the previous kill; a second kill by the same shot (penetration,
+	# pellets) belongs to that shot's engagement and adds no interval
+	_ttk.append(_clock - b.first_hit_at)
 	if _last_kill_shot != _shots:
-		_ttk.append(_clock - maxf(b.up_at, _last_kill_at))
+		_gaps.append(_clock - maxf(b.up_at, _last_kill_at))
 	_last_kill_at = _clock
 	_last_kill_shot = _shots
 	_set_live(b, false)
@@ -1023,6 +1073,8 @@ func _tick_bots(dt: float) -> void:
 			if since >= _f("bot_respawn_s") and _state == "round":
 				b.alive = true
 				b.hp = b.hp_max
+				b.kevlar = _f("bot_armor")
+				b.first_hit_at = -1.0
 				b.kick = 0.0
 				b.up_at = _clock
 				fall = 0.0
@@ -1234,6 +1286,8 @@ func _bot(at: Vector3, yaw_deg: float, outfit: int, tag: String) -> Bot:
 	b.tag = tag
 	b.hp = _f("bot_hp")
 	b.hp_max = b.hp
+	b.kevlar = _f("bot_armor")
+	b.helmet = bool(V["bot_helmet"])
 	b.position = center + at
 	b.rotation_degrees.y = yaw_deg
 	b.pose = Node3D.new()
@@ -1318,8 +1372,8 @@ func _selftest() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	on_shot_fired()
-	_part(b1, "stomach").hit(20.0, false, Vector3.ZERO)
-	ok = _check("stomach x1.25 kill, ttk > 0", _kills == 2 and _hs_kills == 1 and _ttk.size() == 2 and _ttk[1] > 0.0, "ttk %.3f" % (_ttk[1] if _ttk.size() > 1 else -1.0)) and ok
+	_part(b1, "stomach").hit(400.0, false, Vector3.ZERO)
+	ok = _check("second-shot kill: ttk from its first hit > 0, one-tap ttk 0", _kills == 2 and _hs_kills == 1 and _ttk.size() == 2 and _ttk[0] == 0.0 and _ttk[1] > 0.0, _ttk) and ok
 	on_shot_fired()
 	_part(b0, "head").hit(400.0, true, Vector3.ZERO)
 	ok = _check("dead bot ignored", _kills == 2 and _hits == 3, _stats_line()) and ok
@@ -1380,7 +1434,31 @@ func _selftest() -> void:
 	on_shot_fired()
 	_part(_targets[0] as Bot, "head").hit(400.0, true, Vector3.ZERO)
 	_part(_targets[1] as Bot, "head").hit(400.0, true, Vector3.ZERO)
-	ok = _check("double kill by one shot: one hit, two kills, one ttk > 0", _kills == 2 and _hits == 1 and _ttk.size() == 1 and _ttk[0] > 0.0, _ttk) and ok
+	ok = _check("double kill by one shot: one hit, two kills, one kill interval > 0", _kills == 2 and _hits == 1 and _ttk.size() == 2 and _gaps.size() == 1 and _gaps[0] > 0.0, _gaps) and ok
+	# armour, CS order: hitgroup scale first, then the split; legs never armoured, the head only with a helmet
+	var w: Node = main.weapons
+	var ratio := float(w.stat(String(w.held()), "armor ratio")) * float(w.X["armor_ratio_scale"])
+	var bonus := float(w.X["armor_bonus"])
+	var ba := _targets[2] as Bot
+	var bl := _targets[3] as Bot
+	var bh := _targets[4] as Bot
+	ba.kevlar = 100.0
+	bl.kevlar = 100.0
+	bh.kevlar = 100.0
+	bh.helmet = false
+	on_shot_fired()
+	_part(ba, "stomach").hit(40.0, false, Vector3.ZERO)
+	_part(bl, "thigh_r").hit(40.0, false, Vector3.ZERO)
+	_part(bh, "head").hit(40.0, true, Vector3.ZERO)
+	var hp_a := 50.0 * ratio
+	ok = _check("armour: stomach x1.25 then split", is_equal_approx(ba.hp, 100.0 - hp_a) and is_equal_approx(ba.kevlar, 100.0 - (50.0 - hp_a) * bonus), "hp %.2f kevlar %.2f" % [ba.hp, ba.kevlar]) and ok
+	ok = _check("armour: legs unarmoured", is_equal_approx(bl.hp, 70.0) and bl.kevlar == 100.0, "hp %.2f kevlar %.2f" % [bl.hp, bl.kevlar]) and ok
+	ok = _check("armour: no helmet, full head damage", is_equal_approx(bh.hp, 60.0) and bh.kevlar == 100.0, "hp %.2f" % bh.hp) and ok
+	bl.kevlar = 1.0
+	on_shot_fired()
+	_part(bl, "chest").hit(40.0, false, Vector3.ZERO)
+	ok = _check("armour: worn-out kevlar caps what it absorbs", is_equal_approx(bl.hp, 70.0 - (40.0 - 1.0 / bonus)) and bl.kevlar == 0.0, "hp %.2f" % bl.hp) and ok
+	ok = _check("sheet: bots wear kevlar and helmet", ba.helmet == bool(V["bot_helmet"]) and (_targets[5] as Bot).kevlar == _f("bot_armor"), _f("bot_armor")) and ok
 	# best file: whole-file save through a temp file; an unparsable file is set aside, not silently lost
 	var keep := String(V["best_file"])
 	var keep_best := _best

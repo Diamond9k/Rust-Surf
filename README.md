@@ -12,12 +12,15 @@ or modified.
   strafing, ramp sliding, bunny hops, 64 tick, sv_airaccelerate 150. Timer with checkpoints, a personal
   best on disk and a ghost of your best run.
 - **CS2 weapons** (new in 0.2.0): the CS2 arms with the default CT knife and 35 CS2 guns, each with its
-  own model, viewmodel animations and shot sound from your CS2 install. Damage and fire rate always come
-  from your CS2 files (`scripts/items/items_game.txt`, or `scripts/weapons.vdata` for what that file
-  lacks); setup stops rather than run a gun on guessed numbers. Secondary stats a file does not give
-  (recoil, spread, speed) fall back to a class average marked unverified in
-  `sheets/weapon_defaults.json`, and setup lists those weapons as a warning. **B** opens a buy menu laid
-  out by CS2 weapon class.
+  own model, viewmodel animations and shot sound from your CS2 install. Every stat the gun model reads
+  (damage, fire rate, clip, fire mode, armor penetration, range falloff, wall penetration, spread,
+  inaccuracy, recoil pattern and seed, recovery, move speed) comes from your CS2 files
+  (`scripts/items/items_game.txt`, or `scripts/weapons.vdata` for what that file lacks); setup stops,
+  naming the weapon and the missing stat, rather than run a gun on guessed numbers (the Zeus needs only
+  damage, rate, charges and range). A few secondary stats (headshot multiplier, reserve ammo, range,
+  jump and landing inaccuracy) fall back to a class value in `sheets/weapon_defaults.json` when a file
+  does not give them, and setup lists those weapons as a warning. **B** opens a buy menu laid out by CS2
+  weapon class.
 - **Aim lobby** (new in 0.2.0): **F2** switches to an aim range with humanoid bots, rounds, kills,
   time-to-kill and accuracy; **M** cycles its modes.
 - **Settings** (new in 0.2.0): **Esc** opens a CS2-style settings menu. Binds, sensitivity and crosshair
@@ -39,7 +42,8 @@ texture bundles. Every file it writes is checked whole before it counts:
 
 A CS2 file that fails is exported again on its own (twice by default, `sheets/prep.json`). Prep writes
 `data/done-0.2.0.txt` only when every surf asset, the arms, the knife, all 35 weapons (model, every
-clip, shot sound) and every weapon's damage and fire rate are in place. Otherwise it stops with the
+clip, shot sound) and every required stat of every weapon (`stats_required` in `sheets/prep.json`) are
+in place. Otherwise it stops with the
 reason on screen and in `data/prep.log`, writes the reasons to `data/prep_status.json` (the game shows
 them in its error panel, so a partial install never looks like a working one) and runs again on the
 next start, redoing only what is missing. The weapon stats files are exported fresh on every run, so a
@@ -54,11 +58,14 @@ tools such as `Source2Viewer-CLI.exe`).
   `weapons.vdata` and a fake exporter (`prep/tests`), not yet on a fresh Windows install.
 - Where CS2 keeps live weapon stats is unverified: the reader takes `items_game.txt` attributes (the
   CS:GO layout) first and `weapons.vdata` fields second, and the vdata path and field names in
-  `sheets/prep.json` are from memory. If a CS2 update leaves a gun without damage or fire rate in both,
-  setup stops and says so; that needs a Rust Surf update, not a reinstall.
+  `sheets/prep.json` are from memory. If a CS2 update leaves a gun without a required stat in both,
+  setup stops and says so; that needs a Rust Surf update, not a reinstall. That the real CS2 files give
+  every required stat for all 35 guns has not been seen yet; if they do not, the first start says which.
+- How Melty itself presents a setup that exits 1 has not been seen; the reasons are always in
+  `data/prep.log` and the game's error panel reads `data/prep_status.json`.
 - Weapon constants CS2 does not publish (recoil decay, penetration, armor) are CS:GO SDK defaults or
   estimates. `python3 tools/preflight.py --list` prints every sheet cell labelled unverified
-  (about 200 in this build: weapon defaults, weapon alt/reload modes, HUD and settings values, prep's
+  (about 230 in this build: weapon defaults, weapon alt/reload modes, HUD and settings values, prep's
   vdata map and others); `tools/package.py` records the count in the release's entries file.
 - Rust weapons are not in this version.
 
@@ -74,10 +81,13 @@ tools such as `Source2Viewer-CLI.exe`).
   unverified, every cross-sheet reference, every copy. `--strict` also fails on unverified cells.
 - `tools/package.py --godot <Godot 4.7.2> --data <extracted data folder>` builds the release zip. It
   copies the sheets into `game/data/` and `prep/`, then refuses to package unless preflight is clean,
-  the prep unit tests pass, every game script passes Godot's `--check-only`, and the headless
-  `--lobbytest` and `--wtest` runs exit 0 with their pass lines; and unless the game export holds every
-  current sheet, the prep bundle has `python.exe`, `vrf/`, `vgm/` and every prep source, and the zip
-  reads back whole.
+  the prep unit tests pass and every game script passes Godot's `--check-only`. It then empties
+  `dist/RustSurf`, exports the game into it itself (Godot's Windows export templates must be installed)
+  and runs the headless `--lobbytest`, `--wtest` and `--uitest` on that exported pack, each under a
+  wall-clock limit and required to exit 0 with its pass line, so the zip holds exactly the build that was
+  tested. It also refuses unless the export holds every current sheet, the prep bundle has `python.exe`,
+  `vrf/`, `vgm/` and every prep source byte for byte, and the zip reads back whole; a refused build
+  deletes any older zip of the same version.
 
 ## Credits
 

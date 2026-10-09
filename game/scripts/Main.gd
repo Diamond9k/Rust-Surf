@@ -102,6 +102,16 @@ func _lighting() -> void:
 	sun.shadow_normal_bias = float(L["shadow_normal_bias"])
 	sun.light_angular_distance = float(L["sun_angular"])
 	add_child(sun)
+	# bounce: sunlit ground lighting the shaded faces from below, opposite the sun; no shadow, no
+	# specular, and kept out of the sky so the sky shader's LIGHT0 stays the sun
+	var bounce := DirectionalLight3D.new()
+	bounce.name = "bounce"
+	bounce.rotation_degrees = Vector3(float(L["bounce_pitch"]), float(L["sun_yaw"]) + 180.0, 0)
+	bounce.light_color = col.call("bounce_color")
+	bounce.light_energy = float(L["bounce_energy"])
+	bounce.light_specular = 0.0
+	bounce.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
+	add_child(bounce)
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_SKY
@@ -153,7 +163,7 @@ func _report() -> void:
 				lines.append(str(l))
 	_err_lines = lines
 	hud.errors(lines)
-	hud.message("Binds: %s | sens %.2f" % [sinput.source, sinput.sensitivity], 4.0)
+	print("Binds: %s | sens %.2f" % [sinput.source, sinput.sensitivity])  # console only: CS2 shows no such line over the view
 
 func _exit_tree() -> void:
 	if content:

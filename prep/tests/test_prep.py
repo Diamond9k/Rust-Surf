@@ -9,7 +9,10 @@ from fakevrf import FakeVRF, glb_bytes, wav_bytes, png_bytes
 
 WEAPONS = prep_cs2.weapon_rows(prep_cs2.sheet("weapons"))
 VDATA = prep_cs2.settings()["weapons_vdata"]
-FULL = '"damage" "30" "cycletime" "0.1" "primary clip size" "30" "spread" "0.6" "inaccuracy fire" "7" "recoil magnitude" "30" "max player speed" "215"'
+CFG = prep_cs2.settings()
+STAT_KEYS = sorted(set(prep_cs2.keys(CFG["stats_required"]) + prep_cs2.keys(CFG["stats_required_light"]) + prep_cs2.keys(CFG["stats_expected"])))
+VALUES = {"damage": "30", "cycletime": "0.1", "primary clip size": "30", "max player speed": "215"}
+FULL = " ".join('"%s" "%s"' % (k, VALUES.get(k, "1")) for k in STAT_KEYS)  # every stat prep asks for, as a number
 
 
 def items_game_for(rows, skip=()):
@@ -120,10 +123,43 @@ class Prep(unittest.TestCase):
         self.assertEqual(code, 1, out)
         self.assertFalse(self.done())
         p = self.status()["problems"]
-        self.assertTrue(any("weapon_deagle (damage/cycletime)" in x and "guessed numbers" in x for x in p), p)
+        self.assertTrue(any("weapon_deagle (damage/cycletime/" in x and "guessed numbers" in x for x in p), p)
+
+    def without(self, item, key, value=None):
+        """items_game_for(WEAPONS) with one attribute of one weapon dropped, or set to value."""
+        body = FULL.replace('"%s" "%s"' % (key, VALUES.get(key, "1")), "" if value is None else '"%s" "%s"' % (key, value))
+        return items_game_for(WEAPONS).replace('"%s_prefab" { "prefab" "rifle" "attributes" { %s } }' % (item, FULL),
+                                               '"%s_prefab" { "prefab" "rifle" "attributes" { %s } }' % (item, body))
+
+    def test_each_required_stat_blocks_done(self):
+        """Every stat the gun model reads is required: one gone (or not a number) stops setup and names it."""
+        for key in ("recoil seed", "armor ratio", "penetration", "recovery time crouch", "inaccuracy move"):
+            for value in (None, "fast"):
+                code, out = self.main(FakeVRF(self.without("weapon_ak47", key, value)))
+                self.assertEqual(code, 1, (key, value))
+                self.assertFalse(self.done())
+                p = self.status()["problems"]
+                self.assertTrue(any("weapon_ak47 (%s)" % key in x for x in p), p)
+                self.assertTrue(any("weapon_ak47 (%s)" % key in x for x in self.status()["player"]), self.status())
+
+    def test_light_slot_needs_less(self):
+        """The Zeus (stats_light_slots) does not need a recoil pattern; a rifle does."""
+        code, out = self.main(FakeVRF(self.without("weapon_taser", "recoil seed")))
+        self.assertEqual(code, 0, out)
+        code, out = self.main(FakeVRF(self.without("weapon_taser", "damage")))
+        self.assertEqual(code, 1, out)
+        self.assertTrue(any("weapon_taser (damage)" in x for x in self.status()["problems"]), self.status())
+
+    def test_expected_stat_is_a_warning(self):
+        code, out = self.main(FakeVRF(self.without("weapon_awp", "headshot multiplier")))
+        self.assertEqual(code, 0, out)
+        self.assertTrue(self.done())
+        self.assertTrue(any("weapon_awp (headshot multiplier)" in w for w in self.status()["warnings"]), self.status())
 
     def test_vdata_fills_what_items_game_lacks(self):
-        vd = '<!-- kv3 encoding:text:version{e21c7f3c} format:generic:version{7412167c} -->\n{ weapon_deagle = { m_nDamage = 53 m_flCycleTime = [ 0.225, 0.225 ] } }'
+        fields = " ".join("%s = 1" % r["id"] for r in prep_cs2.sheet("prep")["vdata_keys"] if r["id"] not in ("m_nDamage", "m_flCycleTime"))
+        vd = ('<!-- kv3 encoding:text:version{e21c7f3c} format:generic:version{7412167c} -->\n'
+              '{ weapon_deagle = { m_nDamage = 53 m_flCycleTime = [ 0.225, 0.225 ] %s } }' % fields)
         code, out = self.main(FakeVRF(self.thin(), vdata=vd))
         self.assertEqual(code, 0, out)
         with open(os.path.join(self.out, "cs2", "weapon_stats.json"), encoding="utf-8") as f:
@@ -132,7 +168,7 @@ class Prep(unittest.TestCase):
         self.assertEqual(st["weapon_deagle"]["_source"], "weapons.vdata")  # its items_game entry had no attributes
         self.assertEqual(st["weapon_ak47"]["damage"], "30")  # items_game.txt wins where it has the value
         self.assertEqual(st["weapon_ak47"]["_source"], "items_game.txt")
-        self.assertTrue(any("weapon_deagle" in w for w in self.status()["warnings"]))  # clip/spread still class averages
+        self.assertFalse(any("weapon_deagle" in w for w in self.status()["warnings"]))  # vdata gave every stat
 
     def test_stale_items_game_is_replaced(self):
         """A CS2 update: an earlier export is never reused for the stats."""

@@ -45,6 +45,7 @@ var _capture_frame := -1
 var _preview: Control
 var _u := 1.0
 var _loading := true
+var _no_save := false    # an unreadable settings file could not be set aside: never write over it
 
 func setup(m: Node) -> void:
 	main = m
@@ -81,8 +82,9 @@ func toggle() -> void:
 	_root.visible = is_open
 	_show_tab(_tab)
 	main.hud.visible = not is_open  # the menu covers the game; the HUD never draws over it
-	if is_open and main.weapons._buy.visible:
-		main.weapons._buy.visible = false  # one menu at a time
+	var buy: Variant = main.weapons.get("_buy") if main.get("weapons") != null else null
+	if is_open and buy is CanvasItem and (buy as CanvasItem).visible:
+		(buy as CanvasItem).visible = false  # one menu at a time
 	main.player.frozen = is_open  # the menu pauses movement like a paused local server
 	if main.timer: main.timer.set_process(not is_open)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if is_open else Input.MOUSE_MODE_CAPTURED
@@ -133,11 +135,21 @@ func _load() -> void:
 	for id in rows:
 		if rows[id]["kind"] != "binds":
 			vals[id] = _initial(rows[id])
-	if not FileAccess.file_exists(FILE):
+	var path := FILE
+	if not FileAccess.file_exists(path) and FileAccess.file_exists(FILE + ".tmp"):
+		path = FILE + ".tmp"  # a save cut off between removing the old file and the rename (Windows) left only the temp
+	if not FileAccess.file_exists(path):
 		return
-	var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(FILE))
+	var js := JSON.new()  # parse() reports a bad file to us instead of printing an engine error
+	var d: Variant = js.data if js.parse(FileAccess.get_file_as_string(path)) == OK else null
 	if not (d is Dictionary):
-		push_warning("settings: %s is not valid JSON, starting from your CS2 config" % FILE)
+		# set the unreadable file aside before any save can write over it; if that fails, never save this session
+		var bad := FILE + ".bad"
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(bad))
+		_no_save = DirAccess.rename_absolute(ProjectSettings.globalize_path(path), ProjectSettings.globalize_path(bad)) != OK
+		var why := "settings file unreadable: %s" % ("left untouched, changes will not be saved" if _no_save else "kept as " + bad.get_file())
+		push_warning(why)
+		main.hud.message(why + ", using your CS2 config", 6.0)
 		return
 	var saved: Dictionary = d.get("values", {}) if d.get("values") is Dictionary else {}
 	if not d.has("values"):  # v0.2 file: flat keys
@@ -164,6 +176,8 @@ func _load() -> void:
 
 ## Writes a temp file and renames it over the old one, so a crash mid-write never loses the settings.
 func _save() -> void:
+	if _no_save:
+		return
 	var out := {}
 	for k in _changed:  # only what the player changed here, so the rest keeps following their CS2 config
 		out[k] = vals[k]
@@ -200,6 +214,10 @@ func _apply(k: String) -> void:
 		"cl_showfps": h.set_fps_visible(v)
 		"sensitivity": main.player.input.sensitivity = v
 		"m_yaw": main.player.input.m_yaw = v
+		"zoom_sensitivity_ratio":
+			var w: Variant = main.get("weapons")
+			if w != null and w.get("X") is Dictionary:
+				w.X["zoom_sensitivity_ratio"] = v  # Weapons._set_zoom reads it on the next scope
 		"invert_mouse": main.player.input.m_pitch = -absf(main.player.input.m_pitch) if v else absf(main.player.input.m_pitch)
 		"volume":
 			AudioServer.set_bus_mute(0, v <= 0.0)
@@ -541,6 +559,15 @@ func _build() -> void:
 	area.offset_top = nav_h + tab_h + _px(16)
 	area.offset_bottom = -_px(18)
 	_root.add_child(area)
+	var back := Panel.new()  # the darker, near-opaque column behind the rows
+	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	back.add_theme_stylebox_override("panel", _sb(Color(0.016, 0.019, 0.024, float(main.hud.H["menu_panel_alpha"])), 3, Color(1, 1, 1, 0.06)))
+	back.set_anchors_preset(Control.PRESET_FULL_RECT)
+	back.offset_left = -_px(12)
+	back.offset_right = _px(12)
+	back.offset_top = -_px(10)
+	back.offset_bottom = _px(8)
+	area.add_child(back)
 	for t in TABS:
 		var page := _page(String(t[0]), w)
 		page.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -925,6 +952,47 @@ func _uitest() -> void:
 	_reset_binds()
 	ok.call(has.call("surf_attack", MOUSE_BUTTON_LEFT) and not has.call("surf_reload", MOUSE_BUTTON_LEFT), "reset puts MOUSE1 back on attack")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(FILE))
+	# an unreadable file is set aside as .bad (never overwritten); a lone .tmp left by a cut-off save is read back
+	var gp := func(p: String) -> String: return ProjectSettings.globalize_path(p)
+	DirAccess.remove_absolute(gp.call(FILE + ".bad"))
+	var bf := FileAccess.open(FILE, FileAccess.WRITE)
+	bf.store_string("{ not json")
+	bf.close()
+	_load()
+	ok.call(FileAccess.file_exists(FILE + ".bad") and not FileAccess.file_exists(FILE) and not _no_save, "unreadable settings file kept as .bad")
+	_change("volume", 0.5)
+	ok.call(FileAccess.get_file_as_string(FILE + ".bad") == "{ not json" and FileAccess.file_exists(FILE), "the .bad copy survives the next save")
+	DirAccess.remove_absolute(gp.call(FILE))
+	bf = FileAccess.open(FILE + ".tmp", FileAccess.WRITE)
+	bf.store_string(JSON.stringify({"values": {"sensitivity": 3.25}, "keys": {}}))
+	bf.close()
+	_changed.clear()
+	_load()
+	ok.call(is_equal_approx(float(vals["sensitivity"]), 3.25), "a lone settings.json.tmp is read back")
+	# zoom_sensitivity_ratio: the player's convar unrounded, and a change reaches Weapons
+	main.hud.convars["zoom_sensitivity_ratio"] = "0.818933"
+	ok.call(is_equal_approx(float(_initial(rows["zoom_sensitivity_ratio"])), 0.818933), "zoom_sensitivity_ratio 0.818933 from the convar")
+	main.hud.convars.erase("zoom_sensitivity_ratio")
+	_change("zoom_sensitivity_ratio", 0.818933, false)
+	ok.call(is_equal_approx(float(main.weapons.X["zoom_sensitivity_ratio"]), 0.818933), "zoom_sensitivity_ratio reaches Weapons")
+	for p in [FILE, FILE + ".tmp", FILE + ".bad"]:
+		DirAccess.remove_absolute(gp.call(p))
+	# a repeated message is not cut short by the first one's timer
+	main.hud.message("uitest", 0.05)
+	main.hud.message("uitest", 5.0)
+	await get_tree().create_timer(0.2).timeout
+	ok.call(main.hud.msg_label.text == "uitest", "a repeated message keeps its own time")
+	main.hud.message("", 0.0)
+	# no crosshair on an unscoped sniper, the usual one on a rifle
+	var w: Node = main.weapons
+	var was: Array = [w.current, w.slots["primary"]]
+	w.current = "primary"
+	w.slots["primary"] = "cs2_awp"
+	var awp: bool = main.hud._no_xh()
+	w.slots["primary"] = "cs2_ak47"
+	ok.call(awp and not main.hud._no_xh(), "AWP unscoped draws no crosshair, AK does")
+	w.current = was[0]
+	w.slots["primary"] = was[1]
 	# crosshair pixels: thickness truncates (0.7 at 1080p is 1 px), presets are the 250/50 colours
 	var hv: Dictionary = main.hud.H
 	ok.call(float(Hud.xh_px({"cl_crosshairthickness": "0.7"}, 1080, hv)["thickness"]) == 1.0, "thickness 0.7 at 1080p draws 1 px")

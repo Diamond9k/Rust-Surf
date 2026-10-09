@@ -264,10 +264,12 @@ def write_json(path, data):
 
 def write_stats(outdir, ws, here=HERE):
     """items_game.txt (and weapons.vdata for what it lacks) -> weapon_stats.json. Returns (problems, warnings).
-    A weapon without every stats_required attribute is a problem: guns never silently run on class averages."""
+    A weapon without every stats_required attribute as a number is a problem: guns never silently run on class
+    averages (stats_light_slots guns need stats_required_light). stats_expected gaps are warnings."""
     cfg = settings(here)
     vd = sheet("prep", here)["vdata_keys"]
-    need = [k.strip() for k in str(cfg["stats_required"]).split(",") if k.strip()]
+    light = set(keys(cfg["stats_light_slots"]))
+    need_of_item = {w["item"]: keys(cfg["stats_required_light" if w["slot"] in light else "stats_required"]) for w in weapon_rows(ws)}
     names = [w["item"] for w in weapon_rows(ws)]
     st, src = {}, []
     if present(outdir, ITEMS_GAME):
@@ -301,15 +303,31 @@ def write_stats(outdir, ws, here=HERE):
     lost = [n for n in names if n not in st]
     if lost:
         problems.append("CS2 has no weapon entry for %s in items_game.txt%s: a CS2 update may have renamed them" % (short(lost), " or weapons.vdata" if vst else ""))
-    thin = ["%s (%s)" % (n, "/".join(k for k in need if k not in st[n])) for n in names if n in st and not set(need) <= set(st[n])]
+    thin = {n: [k for k in need_of_item[n] if not number(st[n].get(k))] for n in names if n in st}
+    thin = ["%s (%s)" % (n, "/".join(m)) for n, m in thin.items() if m]
+    for x in thin:
+        LOG("  stats missing: " + x)
     if thin:
-        problems.append("CS2 gave no %s for %d weapon(s): %s. Setup stops rather than run those guns on guessed numbers; "
-                        "a CS2 update probably moved the stats, so Rust Surf needs an update" % ("/".join(need), len(thin), short(thin)))
-    want = [k.strip() for k in str(cfg["stats_expected"]).split(",") if k.strip()]
-    part = ["%s (%s)" % (n, "/".join(k for k in want if k not in st[n])) for n in names if n in st and not set(want) <= set(st[n])]
+        problems.append("CS2 gave no usable value for some stats of %d weapon(s): %s. Setup stops rather than run those guns on "
+                        "guessed numbers; a CS2 update probably moved the stats, so Rust Surf needs an update" % (len(thin), short(thin, 3)))
+    want = keys(cfg["stats_expected"])
+    part = ["%s (%s)" % (n, "/".join(k for k in want if not number(st[n].get(k)))) for n in names if n in st and not all(number(st[n].get(k)) for k in want)]
     if part:
         warnings.append("%d weapon(s) use class averages for some stats: %s" % (len(part), short(part, 3)))
     return problems, warnings
+
+
+def keys(cell):
+    """A sheet cell "a,b c,d" -> ["a", "b c", "d"]."""
+    return [k.strip() for k in str(cell).split(",") if k.strip()]
+
+
+def number(v):
+    """True for a value Weapons.gd reads as a stat (it skips anything that is not a float)."""
+    try:
+        return float(v) == float(v)  # NaN is not a stat
+    except (TypeError, ValueError):
+        return False
 
 
 def cs2_step(a, here=HERE):

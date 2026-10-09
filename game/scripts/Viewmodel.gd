@@ -21,6 +21,11 @@ var _wpn := -1
 var _weapon_rest := Transform3D.IDENTITY
 var _kick := ""          # procedural move when a weapon has no clip for it: shot, slash, stab
 var _kick_t := 1.0
+var _bob_phase := 0.0    # movement bob cycle, 0..1
+var _bob_amt := 0.0      # eased 0..1 share of the bob (ground speed over the reference speed)
+var _sway := Vector2.ZERO  # eased lag of the rig behind the turning view, degrees (pitch, yaw)
+var _last_view := Vector2.INF
+var B := {}              # weapon_defaults.json vm_* mechanics: bob and sway
 
 ## The arms keep CS2's viewmodel_fov while the world uses fov 90. Squeezing the rig in the camera
 ## plane by k = tan(fov/2) / tan(viewmodel_fov/2) (both Source fovs, horizontal at 4:3) projects it
@@ -62,6 +67,8 @@ func setup(c: Content, cam: Camera3D, convars: Dictionary = {}) -> void:
 	for r in Sheets.load_sheet("weapon_defaults")["mechanics"]:
 		if r["id"] == "viewmodel_shrink":
 			shrink = clampf(float(r["value"]), 0.01, 1.0)
+		elif String(r["id"]).begins_with("vm_"):
+			B[r["id"]] = float(r["value"])
 	cam.near *= shrink
 	cam.add_child(self)
 	world_fov = Sheets.movement()["fov_default"]
@@ -110,6 +117,11 @@ func equip(model_path: String, clip_paths: Dictionary) -> bool:
 		for n in [model, clip]:
 			if n: n.queue_free()
 		return false
+	if _idle_of(ap, clip_paths) == "":
+		why = "no idle clip in " + String(clip_paths.get("idle", "")).get_file()
+		model.queue_free()
+		clip.queue_free()
+		return false
 	var wname := KNIFE_SKEL if model_path.contains("knife") else String(wc.name)
 	for ch in clip.get_children():
 		if ch is Node3D and ch.name != ARMS_SKEL and _find(ch, "Skeleton3D") != null:
@@ -139,16 +151,30 @@ func equip(model_path: String, clip_paths: Dictionary) -> bool:
 	rig.add_child(ap)
 	clip.queue_free()
 	anim = ap
-	_clips = {"idle": anim.get_animation_list()[0]}
-	_idle_name = _clips["idle"]
+	# The glb copy shares its AnimationLibrary with Content's cached scene, so this weapon gets a library of
+	# its own: adding draw / reload / shoot1 to the shared one would leak them into the next equip of it.
+	var idle_clip := _idle_of(ap, clip_paths)
+	var lib := AnimationLibrary.new()
+	var src := ap.get_animation_library("")
+	for n in src.get_animation_list():
+		lib.add_animation(n, src.get_animation(n).duplicate() as Animation)
+	ap.remove_animation_library("")
+	ap.add_animation_library("", lib)
+	_clips = {"idle": idle_clip}
+	_idle_name = idle_clip
 	for k in clip_paths:
 		if k == "idle":
 			continue
 		var s := content.glb(String(clip_paths[k]))
 		if s:
 			var p2 := _find(s, "AnimationPlayer") as AnimationPlayer
-			if p2:
-				anim.get_animation_library("").add_animation(k, p2.get_animation(p2.get_animation_list()[0]).duplicate() as Animation)
+			var names := p2.get_animation_list() if p2 else PackedStringArray()
+			var pick := ""
+			for n in names:
+				if pick == "" and n != "RESET":
+					pick = n
+			if pick != "":
+				lib.add_animation(k, p2.get_animation(pick).duplicate() as Animation)
 				_clips[k] = k
 			s.queue_free()
 	_draw_name = _clips.get("draw", "")
@@ -164,6 +190,15 @@ func equip(model_path: String, clip_paths: Dictionary) -> bool:
 	if not play("draw"):
 		idle()
 	return true
+
+## The idle clip's own name in a freshly loaded clip player: its first clip that is not RESET or one of ours.
+func _idle_of(ap: AnimationPlayer, clip_paths: Dictionary) -> String:
+	if not ap.has_animation_library(""):
+		return ""
+	for n in ap.get_animation_library("").get_animation_list():
+		if n != "RESET" and not clip_paths.has(String(n)):
+			return n
+	return ""
 
 ## Plays one of our clip names (draw, idle, shoot1, reload, inspect); false when this weapon has none.
 func play(clip: String) -> bool:
@@ -188,14 +223,44 @@ func kick(kind: String) -> void:
 	_kick = kind
 	_kick_t = 0.0
 
+## Weapons feeds the player's ground speed (units/s, 0 in the air) and view angles (degrees) every frame.
+func move(speed_units: float, view: Vector2, dt: float) -> void:
+	if B.is_empty() or dt <= 0.0:
+		return
+	var want := clampf(speed_units / maxf(float(B["vm_bob_ref_speed"]), 1.0), 0.0, 1.0)
+	_bob_amt = lerpf(_bob_amt, want, 1.0 - exp(-float(B["vm_bob_ease"]) * dt))
+	_bob_phase = fmod(_bob_phase + dt / maxf(float(B["vm_bob_cycle"]), 0.05) * _bob_amt, 1.0)
+	if _last_view == Vector2.INF:
+		_last_view = view
+	var d := Vector2(view.x - _last_view.x, wrapf(view.y - _last_view.y, -180.0, 180.0))
+	_last_view = view
+	var target := (-d * float(B["vm_sway_scale"])).limit_length(float(B["vm_sway_max"]))
+	_sway = _sway.lerp(target, 1.0 - exp(-float(B["vm_sway_ease"]) * dt))
+
+## The bob and sway as a rig transform: a figure-eight of lat x vert Source units over one cycle, and the
+## rig trailing the view by the eased sway angles. The rig faces -Z after the 180 degree yaw, so its x and z
+## run opposite to the camera's.
+func _motion() -> Transform3D:
+	if B.is_empty():
+		return Transform3D.IDENTITY
+	var u: float = Sheets.movement()["unit_to_m"]
+	var a := _bob_phase * TAU
+	var lat := sin(a) * float(B["vm_bob_lat"]) * _bob_amt * u
+	var vert := -absf(sin(a)) * float(B["vm_bob_vert"]) * _bob_amt * u
+	var rot := Basis.from_euler(Vector3(deg_to_rad(-_sway.x), deg_to_rad(_sway.y), 0.0))
+	return Transform3D(rot, Vector3(-lat, vert, 0.0))
+
 func _process(dt: float) -> void:
-	if rig == null or _kick == "":
+	if rig == null:
+		return
+	if _kick == "":
+		rig.transform = _motion()
 		return
 	var dur := 0.12 if _kick == "shot" else (0.35 if _kick == "slash" else 0.5)
 	_kick_t += dt / dur
 	if _kick_t >= 1.0:
 		_kick = ""
-		rig.transform = Transform3D.IDENTITY
+		rig.transform = _motion()
 		return
 	var w := sin(_kick_t * PI)  # out and back
 	var pos := Vector3.ZERO
@@ -210,7 +275,7 @@ func _process(dt: float) -> void:
 		"stab":
 			pos = Vector3(-0.03, 0.03, -0.12) * w
 			rot = Vector3(deg_to_rad(-12.0), deg_to_rad(10.0), 0) * w
-	rig.transform = Transform3D(Basis.from_euler(rot), pos)
+	rig.transform = _motion() * Transform3D(Basis.from_euler(rot), pos)
 
 func clip_length(clip: String) -> float:
 	if anim == null or not _clips.has(clip):

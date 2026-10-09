@@ -93,10 +93,14 @@ def check(root=ROOT):
             problems.append(f"systems.{r['id']}: script {r['script']} does not exist")
     prep = {r["id"]: r["value"] for r in sheets["prep"]["rows"]}
     filled = {r["attribute"] for r in sheets["prep"].get("vdata_keys", [])}
-    for k in ("stats_required", "stats_expected"):
+    for k in ("stats_required", "stats_required_light", "stats_expected"):
         for a in str(prep.get(k, "")).split(","):
             if a.strip() and a.strip() not in filled:
                 problems.append(f"prep.{k}: '{a.strip()}' is not an attribute any vdata_keys row fills")
+    wslots = {r["slot"] for r in sheets["weapons"]["rows"]}
+    for sl in str(prep.get("stats_light_slots", "")).split(","):
+        if sl.strip() and sl.strip() not in wslots:
+            problems.append(f"prep.stats_light_slots: '{sl.strip()}' is no weapons.json slot")
 
     # 3. copies: game/data/ and prep/ ship byte-identical copies of the sheets (tools/package.py checks the same)
     sys.path.insert(0, os.path.join(root, "tools"))

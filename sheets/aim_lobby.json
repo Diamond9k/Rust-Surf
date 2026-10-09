@@ -1,6 +1,6 @@
 {
   "_sheet": "aim_lobby",
-  "_doc": "The aim-train range far above the surf course. Lengths in metres, positions in the range frame: origin at 'center', turned range_yaw about y (x right, y up, z toward the spawn; lanes run toward -z). Distances are measured from the firing line. Bot size is movement.json hull_height (72 u), so 'parts' and 'props' positions are fractions of that height in the bot's own frame (x to its left as you face it, z toward the player). A part is a hittable body in a hitgroup; a prop is a mesh riding on a part (when: always, face = outfits whose 'face' is true, otherwise the outfit's head or chest gear: wrap / can / hood / mask, plate / rig). A sphere's 'b', when b.y is not zero, scales its mesh per axis (0 = 1; the hitbox stays the sphere of radius r). An 'rbox' is a box hitbox drawn as a rounded pill of the same size. Time to kill runs from the later of the bot standing up (or the round starting) and your previous kill; a second kill by the same shot adds no time.",
+  "_doc": "The aim-train range far above the surf course. Lengths in metres, positions in the range frame: origin at 'center', turned range_yaw about y (x right, y up, z toward the spawn; lanes run toward -z). Distances are measured from the firing line. Bot size is movement.json hull_height (72 u), so 'parts' and 'props' positions are fractions of that height in the bot's own frame (x to its left as you face it, z toward the player). A part is a hittable body in a hitgroup; a prop is a mesh riding on a part (when: always, face = outfits whose 'face' is true, otherwise the outfit's head or chest gear: wrap / can / hood / mask, plate / rig). A sphere's 'b', when b.y is not zero, scales its mesh per axis (0 = 1; the hitbox stays the sphere of radius r). An 'rbox' is a box hitbox drawn as a rounded pill of the same size. Time to kill runs from the shot that first hit that bot to its death (a one-tap is 0 ms); the kill interval runs from the later of the bot standing up (or the round starting) and your previous kill, and a second kill by the same shot adds no interval.",
   "columns": [
     "id",
     "value",
@@ -27,23 +27,23 @@
     {
       "id": "arena_size",
       "value": [
-        60,
-        64
+        42,
+        58
       ],
       "what": "floor x and z extent",
-      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "wall_height",
-      "value": 9,
+      "value": 6.5,
       "what": "wall height above the floor",
-      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "front_wall_height",
-      "value": 3.0,
+      "value": 2.4,
       "what": "height of the wall behind the spawn: low, so its shadow never falls across the firing line and the near bots",
-      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "wall_thickness",
@@ -99,9 +99,9 @@
     },
     {
       "id": "lane_width",
-      "value": 11,
+      "value": 7.2,
       "what": "width of one lane",
-      "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "distance_marks",
@@ -166,7 +166,7 @@
     {
       "id": "points_miss",
       "value": 10,
-      "what": "every mode except track: score lost per shot that hit nothing; the score never goes below 0",
+      "what": "every mode except track: score lost per shot that hit nothing. A shot fired from in front of the firing line counts as a shot and can never hit (its hits are refused), so it always costs this; the score never goes below 0",
       "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
@@ -212,6 +212,16 @@
       "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
     },
     {
+      "id": "wall_grid",
+      "value": [
+        1.0,
+        5,
+        0.55
+      ],
+      "what": "measurement grid painted on the range walls, like a dev texture's: cell metres, a major line every n cells, paint strength 0..1 (UV metres along / up the wall, so the lines meet the distance marks)",
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
+    },
+    {
       "id": "trim_material",
       "value": "metal",
       "what": "materials.json id: wall skirting, railing, helmets and chest plates",
@@ -244,17 +254,17 @@
     {
       "id": "pilaster_size",
       "value": [
-        0.9,
-        0.45
+        0.7,
+        0.35
       ],
       "what": "pilaster width and depth out of the wall",
-      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "pilaster_step",
-      "value": 8,
+      "value": 6,
       "what": "spacing of pilasters along the side walls (front and back walls put one on every lane divider)",
-      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "crate_frame",
@@ -264,15 +274,41 @@
     },
     {
       "id": "catwalk_rail",
-      "value": 1.0,
+      "value": 0.8,
       "what": "height of the rail along a catwalk's open edge",
-      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "distance_plaque_y",
-      "value": 5.0,
+      "value": 3.4,
       "what": "height of the distance plaques on the side walls (above the catwalks)",
-      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
+    },
+    {
+      "id": "lane_plaque",
+      "value": [
+        1.8,
+        1.9,
+        1.6
+      ],
+      "what": "number plaque on the back wall above each lane: width, height, number height (m)",
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
+    },
+    {
+      "id": "lane_floor_number",
+      "value": 1.6,
+      "what": "height of the lane number painted on the floor in front of the firing line (m)",
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
+    },
+    {
+      "id": "distance_text",
+      "value": [
+        0.6,
+        0.55,
+        1.6
+      ],
+      "what": "distance marks: floor text height, wall plaque text height, wall plaque width along the wall (m)",
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "ground_material",
@@ -285,137 +321,137 @@
       "value": [
         [
           1,
-          14,
-          2.4,
-          0.75,
-          1.0
+          12,
+          1.7,
+          0.55,
+          0.7
         ],
         [
           4,
-          27,
-          2.0,
-          0.9,
-          1.2
+          26,
+          1.4,
+          0.65,
+          0.85
         ],
         [
           2,
-          30,
-          3.0,
-          0.6,
-          1.0
+          29,
+          2.1,
+          0.45,
+          0.7
         ],
         [
           5,
-          36,
-          2.2,
-          1.0,
-          1.0
+          34,
+          1.5,
+          0.7,
+          0.7
         ],
         [
           3,
-          18,
-          1.4,
-          1.1,
-          1.4
+          20,
+          1.0,
+          0.8,
+          1.0
         ]
       ],
       "what": "low framed crates down range: lane, metres from the firing line, width, height, depth",
-      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders and scored headless (--lobbytest); not yet playtested on the PC"
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "crate_stacks",
       "value": [
         [
-          -27.4,
+          -19.2,
           0,
-          28.6,
-          2.2,
-          1.2,
-          2.2
+          27.6,
+          1.5,
+          0.85,
+          1.5
         ],
         [
-          -27.3,
-          1.2,
-          28.7,
-          1.9,
+          -19.1,
+          0.85,
+          27.7,
+          1.3,
+          0.7,
+          1.3
+        ],
+        [
+          -17.3,
+          0,
+          28.1,
+          1.5,
+          0.85,
+          1.5
+        ],
+        [
+          19.1,
+          0,
+          27.6,
+          1.5,
+          0.85,
+          1.5
+        ],
+        [
+          19.2,
+          0.85,
+          27.7,
+          1.25,
+          0.7,
+          1.25
+        ],
+        [
+          -14,
+          0,
+          -28.0,
+          2.1,
           1.0,
-          1.9
+          1.7
         ],
         [
-          -24.9,
-          0,
-          29.6,
-          2.2,
-          1.2,
-          2.2
-        ],
-        [
-          27.2,
-          0,
-          28.4,
-          2.2,
-          1.2,
-          2.2
-        ],
-        [
-          27.4,
-          1.2,
-          28.5,
-          1.8,
+          -13.8,
           1.0,
-          1.8
+          -28.1,
+          1.5,
+          0.85,
+          1.4
         ],
         [
-          -20,
+          -11.0,
           0,
-          -30.4,
-          3.0,
+          -28.1,
           1.4,
-          2.4
+          0.85,
+          1.4
         ],
         [
-          -19.7,
-          1.4,
-          -30.6,
-          2.2,
-          1.2,
-          2.0
-        ],
-        [
-          -15.6,
+          12.3,
           0,
-          -30.6,
-          2.0,
-          1.2,
-          2.0
-        ],
-        [
-          17.5,
-          0,
-          -30.4,
-          3.0,
-          1.4,
-          2.4
-        ],
-        [
-          4.5,
-          0,
-          -30.6,
-          2.4,
-          1.2,
-          2.0
-        ],
-        [
-          4.6,
-          1.2,
-          -30.7,
-          1.8,
+          -28.0,
+          2.1,
           1.0,
-          1.8
+          1.7
+        ],
+        [
+          3.2,
+          0,
+          -28.1,
+          1.7,
+          0.85,
+          1.4
+        ],
+        [
+          3.3,
+          0.85,
+          -28.2,
+          1.25,
+          0.7,
+          1.25
         ]
       ],
       "what": "stacked framed crates in the spawn corners and along the back wall: [x, base y, z] relative to center, then width, height, depth",
-      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "catwalks",
@@ -424,93 +460,125 @@
           -1,
           18,
           44,
-          2.4,
-          2.8
+          2.2,
+          2.0
         ],
         [
           1,
           16,
           44,
-          2.4,
-          2.8
+          2.2,
+          2.0
         ]
       ],
       "what": "raised walkways along the side walls: [side -1 left / 1 right, near and far metres from the firing line, width, deck height]; a stair leads up at the near end",
-      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "bot_spots",
       "value": [
         [
-          2,
-          6,
+          1,
           4.5,
+          0.5,
           4,
           0,
           0
         ],
         [
-          4,
-          7,
-          -4.0,
+          2,
+          6,
+          -1,
           1,
           0,
           0
         ],
         [
           3,
-          4.5,
-          -2.0,
+          3.5,
+          1.5,
           2,
           0,
           0
         ],
         [
-          4,
-          10,
-          -2.0,
-          0,
-          0,
-          0
-        ],
-        [
-          1,
+          3,
           8,
-          1.5,
+          -2,
           0,
           0,
           0
         ],
         [
+          4,
+          5,
           1,
-          19,
+          3,
+          0,
+          0
+        ],
+        [
+          5,
+          4.5,
+          -0.5,
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          15,
           -1,
           2,
           0,
           0
         ],
         [
-          1,
-          31,
-          0.5,
-          1,
-          1.2,
-          0
-        ],
-        [
           2,
-          12,
-          0,
+          18,
+          1,
           3,
           0,
           0
         ],
         [
-          2,
-          24,
-          1,
+          3,
+          14,
+          0,
           4,
           0,
+          0
+        ],
+        [
+          4,
+          17,
+          -1.5,
+          0,
+          0,
+          0
+        ],
+        [
+          5,
+          20,
+          1,
+          2,
+          0,
+          0
+        ],
+        [
+          2,
+          13,
+          -2.5,
+          0,
+          0.8,
+          0
+        ],
+        [
+          1,
+          30,
+          0.5,
+          1,
+          0.8,
           0
         ],
         [
@@ -518,15 +586,7 @@
           36,
           -1,
           0,
-          2.4,
-          0
-        ],
-        [
-          3,
-          15,
-          1.5,
-          0,
-          0,
+          1.6,
           0
         ],
         [
@@ -534,52 +594,28 @@
           27,
           0,
           2,
-          1.2,
+          0.8,
           0
         ],
         [
           3,
-          40,
+          42,
           0,
           3,
           0,
-          0
-        ],
-        [
-          4,
-          21,
-          0,
-          4,
-          1.2,
           0
         ],
         [
           4,
           33,
           1,
-          0,
-          0,
+          4,
+          0.8,
           0
         ],
         [
           5,
-          9,
-          -1,
-          3,
-          0,
-          0
-        ],
-        [
-          5,
-          17,
-          0.5,
-          1,
-          0,
-          0
-        ],
-        [
-          5,
-          42,
+          40,
           0,
           0,
           0,
@@ -588,47 +624,47 @@
         [
           1,
           24,
-          -6.8,
+          -5.5,
           3,
-          2.8,
+          2.0,
           1
         ],
         [
           1,
           38,
-          -6.8,
+          -5.5,
           4,
-          2.8,
+          2.0,
           1
         ],
         [
           5,
           28,
-          6.8,
+          5.5,
           2,
-          2.8,
+          2.0,
           1
         ],
         [
           5,
           40,
-          6.8,
+          5.5,
           1,
-          2.8,
+          2.0,
           1
         ]
       ],
       "what": "where bots stand: [lane, metres from the firing line, sideways offset m, outfit index, standing height m, on a catwalk 0/1]; a raised spot that is not on a catwalk gets a crate of that height under the bot, like aim_botz's raised spots",
-      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders and scored headless (--lobbytest); not yet playtested on the PC"
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "bot_crate",
       "value": [
-        1.6,
-        1.6
+        1.2,
+        1.2
       ],
       "what": "footprint (x, z metres) of the crate a raised bot stands on",
-      "verified": "2026-10-09 design value: rendered in lobby_r1 renders and scored headless (--lobbytest); not yet playtested on the PC"
+      "verified": "2026-10-09 design value (Gauntlet round 3): rescaled to the 72 u bot so crates, rails and catwalks read at a player's size; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "bot_yaw_jitter",
@@ -639,8 +675,20 @@
     {
       "id": "bot_hp",
       "value": 100,
-      "what": "bot health, no armour; a downed bot stands back up after bot_respawn_s",
-      "verified": "2026-10-09 design value (100 hp is the CS2 player health; whether aim_botz bots wear armour is unverified)"
+      "what": "bot health; a downed bot stands back up after bot_respawn_s",
+      "verified": "2026-10-09 design value (100 hp is the CS2 player health)"
+    },
+    {
+      "id": "bot_armor",
+      "value": 100,
+      "what": "bot kevlar (0 = none), refilled when a bot stands up. Split in CS's order inside the lobby: hitgroup scale first, then the weapon's armor ratio x armor_ratio_scale to health and armor_bonus of the rest to the kevlar (weapon_defaults); legs are never armoured",
+      "verified": "unverified: that CS2 aim maps' bots wear kevlar and helmet is the round 2 critics' claim, not checked in CS2 here; the split order and unarmoured legs follow the CS:GO SDK from memory (unverified for CS2); set 0 for unarmoured bots"
+    },
+    {
+      "id": "bot_helmet",
+      "value": true,
+      "what": "bots wear a helmet: with it the head is armoured too (without it head hits skip the kevlar)",
+      "verified": "unverified: critics' claim about CS2 practice bots, not checked in CS2 here; switch to false for bare heads"
     },
     {
       "id": "bot_respawn_s",
@@ -858,9 +906,25 @@
     },
     {
       "id": "ui_panel_w",
-      "value": 300,
+      "value": 330,
       "what": "stats panel width, px at hud.json ref_height (the lobby HUD scales with the window height)",
-      "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+      "verified": "2026-10-09 design value (Gauntlet round 3): panel text sized to read at 960x540; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
+    },
+    {
+      "id": "ui_panel_rows",
+      "value": 6,
+      "what": "stat rows the live panel shows (the first rows of the mode, plus the best); the round summary shows every row",
+      "verified": "2026-10-09 design value (Gauntlet round 3): live stats panel cut to the rows a player reads mid-round; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
+    },
+    {
+      "id": "ui_panel_font",
+      "value": [
+        19,
+        21,
+        19
+      ],
+      "what": "stats panel font px at the hud ref_height: caption, value, title (readable at 540p captures)",
+      "verified": "2026-10-09 design value (Gauntlet round 3): panel text sized to read at 960x540; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "ui_hint_bottom",

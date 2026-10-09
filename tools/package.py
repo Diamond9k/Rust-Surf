@@ -2,19 +2,22 @@
 that would install broken.
 usage: package.py [<version>] --godot <Godot binary> --data <extracted data folder> [--no-sync] [--skip-pck-scan]
   -> dist/RustSurf-<version>.zip, dist/RustSurf-<version>.entries.json
-First the sheets are copied over game/data/ and prep/ (game/data/ is not in git, so a fresh clone holds none
-or stale ones; --no-sync only checks). Then the gates, each of which must pass:
+First any dist/RustSurf-<version>.zip and .entries.json of the same version are deleted, so a refused build
+never leaves an older zip that looks released. The sheets are copied over game/data/ and prep/ (game/data/ is
+not in git, so a fresh clone holds none or stale ones; --no-sync only checks). Then the gates, each must pass:
 - tools/preflight.py: every sheet cell filled and verified or honestly labelled unverified
 - python -m unittest discover prep/tests (prep, export checks, items_game/vdata readers, this file)
-- Godot, headless: --check-only on every game script, --import, then --lobbytest ("LTEST ALL PASS") and
-  --wtest ("WTEST weapons checks=N failed=0"), each with exit 0 and no SCRIPT ERROR / Parse Error line,
-  on --data with empty Rust and CS2 folders so the player's own CS2 config cannot change a result
+- Godot, headless: --check-only on every game script and --import; then dist/RustSurf is emptied and the
+  Windows Desktop preset exported into it (--export-release; needs the Godot 4.7.2 export templates), and
+  --lobbytest ("LTEST ALL PASS"), --wtest ("WTEST weapons checks=N failed=0") and --uitest ("UITEST ok") run on
+  that exported RustSurf.pck (--main-pack), each with exit 0, no FAIL / SCRIPT ERROR / Parse Error line and a
+  wall-clock limit, on --data with empty Rust and CS2 folders so the player's own CS2 config cannot change a
+  result. The zip therefore holds exactly the tested export and nothing a dev run left in the folder.
 Checks before zipping (each failure is listed, nothing is written):
 - melty.recipe.json names one x.y.z everywhere and it is the version asked for; README.md names it too
 - every sheets/*.json equals game/data/<name>.json and every prep/*.json equals its sheet (no stray copies)
 - dist/RustSurf has RustSurf.exe and RustSurf.pck, and the pck holds every sheet byte for byte (Godot 4.7.2
-  stores data/*.json uncompressed: checked with --export-pack), so an export made before the sheets
-  changed is refused
+  stores data/*.json uncompressed: checked with --export-pack); --skip-pck-scan if that ever changes
 - the prep bundle has python.exe, vrf/Source2Viewer-CLI.exe, vgm/vgmstream-cli.exe and, after the repo's
   prep sources are copied in, every prep/*.py and *.json byte for byte
 Then the zip is read back: it must open, pass its CRCs and hold every required entry."""
@@ -141,8 +144,36 @@ def _why(out):
     return " | ".join(bad or lines[-1:])[:400]
 
 
+GAME_TESTS = (("--lobbytest", re.compile(r"^LTEST ALL PASS\s*$", re.M)),
+              ("--wtest", re.compile(r"^WTEST weapons checks=[1-9]\d* failed=0\s*$", re.M)),
+              ("--uitest", re.compile(r"^UITEST ok\s*$", re.M)))
+TEST_FAIL = re.compile(r"^(LTEST|WTEST|UITEST) FAIL", re.M)
+TEST_TIMEOUT = 300  # wall clock per headless test; each one quits itself when done (about 20 s here)
+
+
+def export_game(root, godot, timeout=600, log=print):
+    """A clean dist/RustSurf from this tree: the folder is emptied, then Godot exports the Windows Desktop preset
+    into it, so the zip only ever holds what this export wrote (no stale pck, no files left by a dev run)."""
+    game = os.path.abspath(os.path.join(root, "game"))
+    out = os.path.abspath(os.path.join(root, "dist", "RustSurf"))
+    shutil.rmtree(out, ignore_errors=True)
+    if os.path.exists(out):
+        return ["could not empty %s (is RustSurf.exe still running?)" % out]
+    os.makedirs(out)
+    code, text = _run([godot, "--headless", "--path", game, "--export-release", "Windows Desktop", os.path.join(out, "RustSurf.exe")], game, timeout, log)
+    miss = [p for p in ("RustSurf.exe", "RustSurf.pck") if not os.path.isfile(os.path.join(out, p))]
+    if code != 0 or miss or SCRIPT_ERR.search(text):
+        return ["Godot --export-release \"Windows Desktop\": exit %d%s: %s (Godot 4.7.2 Windows export templates installed?)"
+                % (code, ", no " + "/".join(miss) if miss else "", _why(text))]
+    log("gate: exported %s" % ", ".join(sorted(os.listdir(out))))
+    return []
+
+
 def godot_gate(root, godot, data, timeout=600, log=print):
-    """Every game script parses, the project imports, and the asserting headless tests pass. Returns errors."""
+    """Every game script parses, the project imports, a fresh export lands in dist/RustSurf, and the asserting
+    headless tests (--lobbytest, --wtest, --uitest) pass on that exported RustSurf.pck (--main-pack), so the build
+    that ships is the build that was tested. Each test runs on --data with empty Rust and CS2 folders (the
+    packager's own CS2 config cannot change a result) under a wall-clock limit, not a frame count. Returns errors."""
     game = os.path.abspath(os.path.join(root, "game"))
     godot, data = os.path.abspath(godot) if godot else "", os.path.abspath(data) if data else ""
     errs = []
@@ -160,19 +191,24 @@ def godot_gate(root, godot, data, timeout=600, log=print):
     code, out = _run([godot, "--headless", "--path", game, "--import"], game, timeout, log)
     if code != 0 or SCRIPT_ERR.search(out):
         errs.append("Godot --import: exit %d: %s" % (code, _why(out)))
+    if errs:
+        return errs
+    errs = export_game(root, godot, timeout, log)
+    if errs:
+        return errs
+    pck = os.path.abspath(os.path.join(root, "dist", "RustSurf", "RustSurf.pck"))
     empty = tempfile.mkdtemp(prefix="rs_gate_")
-    for d in ("rust", "cs2"):
+    for d in ("rust", "cs2", "cwd"):
         os.makedirs(os.path.join(empty, d))  # Paths.gd refuses a folder that does not exist
     try:
-        for flag, frames, ok in (("--lobbytest", 6000, re.compile(r"^LTEST ALL PASS\s*$", re.M)),
-                                 ("--wtest", 6000, re.compile(r"^WTEST weapons checks=[1-9]\d* failed=0\s*$", re.M))):
-            cmd = [godot, "--headless", "--path", game, "--quit-after", str(frames), "--", "--data", data,
+        for flag, ok in GAME_TESTS:
+            cmd = [godot, "--headless", "--main-pack", pck, "--", "--data", data,
                    "--rust", os.path.join(empty, "rust"), "--cs2", os.path.join(empty, "cs2"), flag]
-            code, out = _run(cmd, game, timeout, log)
-            fails = [l for l in out.splitlines() if SCRIPT_ERR.search(l) or re.match(r"(LTEST|WTEST) FAIL", l)]
+            code, out = _run(cmd, os.path.join(empty, "cwd"), min(timeout, TEST_TIMEOUT), log)
+            fails = [l for l in out.splitlines() if SCRIPT_ERR.search(l) or TEST_FAIL.match(l)]
             if code != 0 or fails or not ok.search(out):
-                errs.append("Godot %s: exit %d, %s%s" % (flag, code, "no pass line" if not ok.search(out) else "pass line present",
-                                                          "; " + " | ".join(fails)[:600] if fails else ""))
+                errs.append("Godot %s on the exported pck: exit %d, %s%s" % (flag, code, "no pass line" if not ok.search(out) else "pass line present",
+                                                                             "; " + " | ".join(fails)[:600] if fails else ""))
             else:
                 log("gate: %s %s" % (flag, ok.search(out).group(0).strip()))
     finally:
@@ -201,12 +237,16 @@ def build(root=R, ver=None, scan_pck=True, gate=None):
     """Returns (zip path, errors). No zip is left behind when there are errors.
     gate: a callable returning (errors, unverified count), run first (main passes the real gates)."""
     unverified = None
+    rver, verrs = recipe_version(root)
+    ver = ver or rver
+    for v in {ver, rver}:  # a refused build never leaves an older zip of the same version next to the refusal
+        for p in ("RustSurf-%s.zip" % v, "RustSurf-%s.entries.json" % v):
+            if os.path.isfile(os.path.join(root, "dist", p)):
+                os.remove(os.path.join(root, "dist", p))
     errs = []
     if gate:
         errs, unverified = gate()
-    rver, verrs = recipe_version(root)
     errs += verrs
-    ver = ver or rver
     if ver != rver:
         errs.append("version %s does not match melty.recipe.json (%s)" % (ver, rver))
     errs += check_readme(root, rver)

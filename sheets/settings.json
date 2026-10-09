@@ -36,7 +36,7 @@
       "id": "hit_marker",
       "tab": "game",
       "section": "HUD",
-      "label": "Hit marker (not in CS2)",
+      "label": "Hit marker",
       "kind": "toggle",
       "convar": "(none: mashup training aid)",
       "min": 0,
@@ -45,7 +45,7 @@
       "default": 0,
       "choices": "No|Yes",
       "applies_to": "Hud.hit_marker: white X and hud.json hit_sound on a hit",
-      "verified": "mashup setting; off by default because CS2 shows no hit marker (Gauntlet round 1 reviewers)"
+      "verified": "mashup setting (no CS2 equivalent, so the menu label carries no CS2 claim); off by default because CS2 shows no hit marker (Gauntlet round 1 reviewers)"
     },
     {
       "id": "cl_showfps",
@@ -151,6 +151,21 @@
       "choices": "(none)",
       "applies_to": "SurfInput.m_yaw (yaw = counts x m_yaw x sensitivity)",
       "verified": "convar name and 0.022 from Input.gd (Source default); slider range unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "zoom_sensitivity_ratio",
+      "tab": "keys",
+      "section": "Mouse",
+      "label": "Zoom sensitivity ratio",
+      "kind": "slider",
+      "convar": "zoom_sensitivity_ratio",
+      "min": 0.01,
+      "max": 3,
+      "step": 0.01,
+      "default": 1,
+      "choices": "(none)",
+      "applies_to": "Weapons X zoom_sensitivity_ratio (scoped sensitivity = sensitivity x ratio x zoom fov / fov_default); the player's convar is the start value, unrounded",
+      "verified": "convar name as Weapons.gd and weapon_defaults use it (Gauntlet round 2 reviewers name it as CS2's); default 1 equals weapon_defaults; slider range 0.01-3 unverified: not checked against the CS2 client"
     },
     {
       "id": "invert_mouse",

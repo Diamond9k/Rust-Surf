@@ -14,6 +14,7 @@ var checkpoint_pos: Vector3
 var checkpoint_yaw: float
 var content: Content
 var rows := {}
+var _trim_mat: Material
 
 func build(c: Content) -> void:
 	content = c
@@ -29,6 +30,39 @@ func build(c: Content) -> void:
 	for r in sheet["rows"]:
 		rows[r["id"]] = r
 		add_child(_piece(r))
+	for d in sheet["paint"]:
+		_paint(d)
+
+## course.json paint: one Decal per row, a band of a Rust decal atlas (rect is u0, v0, u1, v1 of the
+## texture) laid flat at pos, length along yaw, projected down onto whatever is under it.
+func _paint(d: Dictionary) -> void:
+	var t := content.texture(d["texture"], "MainTex")
+	if t == null:
+		return
+	var rc: Array = d["rect"]
+	var img := t.get_image()
+	var sz := Vector2(img.get_width(), img.get_height())
+	var px := Rect2i(Vector2i(Vector2(rc[0], rc[1]) * sz), Vector2i(Vector2(float(rc[2]) - float(rc[0]), float(rc[3]) - float(rc[1])) * sz))
+	var dc := Decal.new()
+	dc.name = d["id"]
+	dc.texture_albedo = _region(img, px)
+	var n := content.texture(d["texture"], "BumpMap")
+	if n:
+		dc.texture_normal = _region(n.get_image(), Rect2i(Vector2i(Vector2(px.position) * Vector2(n.get_width(), n.get_height()) / sz), Vector2i(Vector2(px.size) * Vector2(n.get_width(), n.get_height()) / sz)))
+	dc.size = Vector3(float(d["length"]), 1.0, float(d["width"]))
+	dc.albedo_mix = float(d["opacity"])
+	dc.modulate = Color(1, 1, 1, float(d["opacity"]))
+	dc.upper_fade = 0.1
+	dc.lower_fade = 0.1
+	add_child(dc)
+	dc.transform = Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(float(d["yaw"])), 0)), _v3(d["pos"]))
+
+func _region(img: Image, px: Rect2i) -> ImageTexture:
+	var r := img.get_region(px)
+	if r.is_compressed():
+		r.decompress()
+	r.generate_mipmaps()
+	return ImageTexture.create_from_image(r)
 
 func _v3(a: Array) -> Vector3:
 	return Vector3(a[0], a[1], a[2])
@@ -110,6 +144,8 @@ func _ramp(r: Dictionary) -> StaticBody3D:
 	var apex := Vector2(H, 0) if ridge else Vector2(-H, 0)
 	var left := Vector2(-H, -W) if ridge else Vector2(H, -W)
 	var right := Vector2(-H, W) if ridge else Vector2(H, W)
+	var trims := SurfaceTool.new()
+	trims.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for f in [[apex, left], [apex, right]]:
 		var a: Vector2 = f[0]
 		var b: Vector2 = f[1]
@@ -121,6 +157,10 @@ func _ramp(r: Dictionary) -> StaticBody3D:
 		var slope := (Vector3(0, b.x, b.y) - Vector3(0, a.x, a.y)).length()
 		# the top edge is the apex of a ridge and the outer rim of a valley
 		_quad(st, p0, p1, p2, p3, n, L * 2.0, slope, 0.0 if ridge else slope, slope if ridge else 0.0, slope)
+		# steel trim strips along the face's exposed edges: both edges of a ridge face, the rim of a valley
+		if ridge:
+			_trim(trims, p0, p1, p2, p3, n)
+		_trim(trims, p3, p2, p1, p0, n)
 	if ridge:
 		var pa := Vector3(-L, H, 0); var pl := Vector3(-L, -H, -W); var pr := Vector3(-L, -H, W)
 		_tri(st, pa, pl, pr, Vector3(-1, 0, 0))
@@ -140,7 +180,41 @@ func _ramp(r: Dictionary) -> StaticBody3D:
 	shape.backface_collision = true
 	cs.shape = shape
 	body.add_child(cs)
+	trims.generate_tangents()
+	var tm := MeshInstance3D.new()
+	tm.name = "trim"
+	tm.mesh = trims.commit()
+	tm.material_override = _trim_material()
+	body.add_child(tm)  # scenery only: the collision stays the bare prism
 	return body
+
+## course.json trim: a strip trim.width metres wide on the face, from the edge e0-e1 toward f1-f0,
+## lifted trim.offset off it; UV in metres with v starting at trim.v0 (the band of the trim texture).
+func _trim(st: SurfaceTool, e0: Vector3, e1: Vector3, f1: Vector3, f0: Vector3, n: Vector3) -> void:
+	var T: Dictionary = sheet["trim"]
+	var w := float(T["width"])
+	var lift := n * float(T["offset"])
+	var d0 := (f0 - e0).normalized() * w
+	var d1 := (f1 - e1).normalized() * w
+	var pts: Array[Vector3] = [e0 + lift, e1 + lift, e1 + d1 + lift, e0 + d0 + lift]
+	var ulen := e0.distance_to(e1)
+	var v0 := float(T["v0"])
+	var uv := [Vector2(0, v0), Vector2(ulen, v0), Vector2(ulen, v0 + w), Vector2(0, v0 + w)]
+	var flip := (pts[1] - pts[0]).cross(pts[2] - pts[0]).dot(n) > 0.0
+	for tri in ([[0, 2, 1], [0, 3, 2]] if flip else [[0, 1, 2], [0, 2, 3]]):
+		for i in tri:
+			st.set_normal(n)
+			st.set_uv(uv[i])
+			st.set_uv2(Vector2(-1, -1))
+			st.add_vertex(pts[i])
+
+func _trim_material() -> Material:
+	if _trim_mat == null:
+		_trim_mat = surfaces[sheet["trim"]["material"]]
+		if _trim_mat is ShaderMaterial:
+			_trim_mat = _trim_mat.duplicate()
+			_trim_mat.set_shader_parameter("atlas", true)  # one band of an atlas: no second sampling
+	return _trim_mat
 
 ## UV in metres (the shader divides by uv_scale); on surf faces UV2.x is metres from the face's top
 ## edge (top0 at p0/p1, top1 at p2/p3) and UV2.y metres from its bottom edge (slope - top); faces with
@@ -243,6 +317,7 @@ uniform sampler2D nrm_b : hint_normal, filter_linear_mipmap_anisotropic, repeat_
 uniform bool has_nrm = false;
 uniform bool has_b = false;
 uniform bool world_map = false;
+uniform bool atlas = false;
 uniform float scale_a = 4.0;
 uniform float weather = 0.3;
 uniform float grime = 0.5;
@@ -279,10 +354,10 @@ void fragment() {
 	vec3 nm = has_nrm ? texture(nrm_a, uv).rgb : vec3(0.5, 0.5, 1.0);
 	// a second, larger sampling of the same texture over half the surface by noise: no visible repeat
 	vec2 uv3 = m / (scale_a * 2.37) + vec2(0.21, 0.67);
-	float k3 = 0.6 * smoothstep(0.35, 0.65, fbm(m / (scale_a * 3.1) + vec2(8.0, 2.0)));
+	float k3 = atlas ? 0.0 : 0.6 * smoothstep(0.35, 0.65, fbm(m / (scale_a * 3.1) + vec2(8.0, 2.0)));
 	c = mix(c, texture(tex_a, uv3).rgb, k3);
 	if (has_nrm) { nm = mix(nm, texture(nrm_a, uv3).rgb, k3); }
-	float rough = roughness_val;
+	float rough = roughness_val * mix(1.0, 0.72, smoothstep(0.5, 0.75, fbm(m / 9.0 + vec2(23.0, 5.0))));  // worn, smoother patches catch the sun
 	if (has_b) {
 		float w = smoothstep(1.0 - weather - 0.1, 1.0 - weather + 0.1, fbm(m / (scale_a * 2.7) + vec2(5.3, 1.7)));
 		vec2 uvb = m / (scale_a * 1.3) + vec2(0.31, 0.77);
@@ -292,7 +367,7 @@ void fragment() {
 	float dist = length(wpos - CAMERA_POSITION_WORLD);
 	vec3 mean = textureLod(tex_a, vec2(0.5), 12.0).rgb;
 	vec3 dt = texture(tex_a, uv * 7.31 + vec2(0.13, 0.57)).rgb;
-	float near = detail * (1.0 - smoothstep(3.0, 18.0, dist));
+	float near = atlas ? 0.0 : detail * (1.0 - smoothstep(3.0, 18.0, dist));
 	c *= mix(vec3(1.0), dt / max(mean, vec3(0.04)), near);
 	if (has_nrm) {
 		vec3 dn = texture(nrm_a, uv * 7.31 + vec2(0.13, 0.57)).rgb;

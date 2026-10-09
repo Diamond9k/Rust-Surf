@@ -61,6 +61,28 @@
       "tuned": "2026-10-09 world_r2 renders, by eye"
     },
     {
+      "id": "bounce_pitch",
+      "value": 10,
+      "note": "elevation of the bounce fill in degrees, positive points up: light thrown back off the sunlit ground onto the faces the sun misses (opposite the sun azimuth, no shadow, no specular)",
+      "tuned": "2026-10-09 world_r3 renders, by eye (a look, not measured from Rust)"
+    },
+    {
+      "id": "bounce_color",
+      "value": [
+        0.78,
+        0.66,
+        0.5
+      ],
+      "note": "bounce fill colour: the warm dust of the lit plain",
+      "tuned": "2026-10-09 world_r3 renders, by eye (a look, not measured from Rust)"
+    },
+    {
+      "id": "bounce_energy",
+      "value": 0.8,
+      "note": "bounce fill strength (the sun is sun_energy): shaded ramp faces keep their panels and cracks instead of going nearly black",
+      "tuned": "2026-10-09 world_r3 renders, by eye (a look, not measured from Rust)"
+    },
+    {
       "id": "sun_angular",
       "value": 0.5,
       "note": "DirectionalLight3D angular diameter in degrees: softens shadow edges with distance (the real sun is about 0.53)",
@@ -93,12 +115,12 @@
     {
       "id": "sun_warm",
       "value": [
-        0.3,
-        0.17,
-        0.06
+        0.2,
+        0.11,
+        0.04
       ],
       "note": "warm forward-scatter glow added along the horizon under the sun (dusty desert air)",
-      "tuned": "2026-10-09 world_r2 renders, by eye"
+      "tuned": "2026-10-09 world_r3 renders, by eye (0.3 brightened the horizon under the sun into a band)"
     },
     {
       "id": "sun_warm_width",
@@ -224,15 +246,15 @@
     },
     {
       "id": "fog_sun_scatter",
-      "value": 0.1,
+      "value": 0.05,
       "note": "how much the haze glows toward the sun",
-      "tuned": "2026-10-09 world_r1 renders: 0.25 washed the sky round the sun white"
+      "tuned": "2026-10-09 world_r3: 0.1 still whitened the hills under the sun; world_r1: 0.25 washed the sky round the sun white"
     },
     {
       "id": "fog_aerial",
-      "value": 0.9,
+      "value": 0.75,
       "note": "how much the haze takes the sky colour behind it (1 = distant hills fade into the sky with no grey band)",
-      "tuned": "2026-10-09 world_r1 renders, by eye"
+      "tuned": "2026-10-09 world_r3: 0.9 flattened the far hills into grey cut-outs (r2 critics), by eye"
     },
     {
       "id": "fog_sky_affect",
@@ -284,9 +306,9 @@
     },
     {
       "id": "shaft_density",
-      "value": 0.0018,
+      "value": 0.0006,
       "note": "volumetric haze density for sun shafts through the towers and ramps (0 turns the volumetric pass off)",
-      "tuned": "2026-10-09 world_r2 renders, by eye"
+      "tuned": "2026-10-09 world_r3: 0.0018 and 0.0011 washed the sun view into a flat white band (r2 critics), by eye"
     },
     {
       "id": "shaft_forward",

@@ -29,6 +29,9 @@ var _pill: PanelContainer
 var _pill_sb: StyleBoxFlat
 var _deco: Control
 var _sized: Array = []  # [Label, base px]
+var _msg_gen := 0      # each message() bumps it, so an older timer never clears a newer message
+var _hp := 100.0
+var _armor := 100.0
 
 func setup(cv: Dictionary, cs2_dir: String = "") -> void:
 	convars = cv
@@ -67,8 +70,7 @@ func setup(cv: Dictionary, cs2_dir: String = "") -> void:
 	err_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	hp_label = _label(root, H["font_health"], HORIZONTAL_ALIGNMENT_LEFT)
 	armor_label = _label(root, H["font_health"], HORIZONTAL_ALIGNMENT_LEFT)
-	hp_label.text = str(int(H["health"]))
-	armor_label.text = str(int(H["armor"]))
+	vitals(float(H["health"]), float(H["armor"]))
 	_ammo_box = Control.new()
 	_ammo_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ammo_box.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -155,10 +157,16 @@ func _load_font(cs2_dir: String) -> Font:
 			var ff := FontFile.new()
 			if ff.load_dynamic_font(dir + "/" + best) == OK:
 				return ff
+	# no CS2 font: Windows' DIN-style Bahnschrift is the nearest stock face to Stratum; any other sans is
+	# narrowed by hud.json font_narrow so it keeps Stratum's condensed proportions
 	var sf := SystemFont.new()
-	sf.font_names = PackedStringArray(["Stratum2", "Arial", "Helvetica"])
+	sf.font_names = PackedStringArray(["Stratum2", "Bahnschrift", "Arial Narrow", "Liberation Sans Narrow", "Arial", "Liberation Sans", "Helvetica"])
 	sf.font_weight = 700
-	return sf
+	var fv := FontVariation.new()
+	fv.base_font = sf
+	if not "Bahnschrift" in OS.get_system_fonts():
+		fv.variation_transform = Transform2D(Vector2(float(H["font_narrow"]), 0), Vector2(0, 1), Vector2.ZERO)
+	return fv
 
 func _label(parent: Control, size: float, align: HorizontalAlignment) -> Label:
 	var l := Label.new()
@@ -195,6 +203,17 @@ func _draw_deco() -> void:
 	var cx := 30.0 * s
 	_deco.draw_rect(Rect2(cx - t * 0.5, cy - a * 0.5, t, a), ic)
 	_deco.draw_rect(Rect2(cx - a * 0.5, cy - t * 0.5, a, t), ic)
+	# health and armor bars under the numbers: white full part over a dim track, health red when low
+	var bw2: float = H["vital_bar_width"] * s
+	var bh2: float = maxf(roundf(H["vital_bar_height"] * s), 2.0)
+	var by := cy + float(H["font_health"]) * s * 0.5
+	var low := _hp <= float(H["low_health"])
+	for e in [[58.0 * s, _hp, low], [214.0 * s, _armor, false]]:
+		var x0: float = e[0] + 4.0 * s
+		var f := clampf(float(e[1]) / 100.0, 0.0, 1.0)
+		_deco.draw_rect(Rect2(x0, by, bw2, bh2), Color(1, 1, 1, 0.18))
+		_deco.draw_rect(Rect2(x0, by, roundf(bw2 * f), bh2), Color(1, 0.3, 0.25) if e[2] else ic)
+	hp_label.modulate = Color(1, 0.35, 0.3) if low else Color.WHITE
 	# armor shield
 	var sx := 188.0 * s
 	var w := 11.0 * s
@@ -307,9 +326,20 @@ func spread_to_px(rad: float, h: float) -> float:
 	var half := deg_to_rad(float(Sheets.movement()["fov_default"])) * 0.5
 	return rad * float(H["spread_units"]) / tan(half) * h / float(H["yres_base"])
 
+## True while the held weapon's weapons.json slot is one CS2 draws no crosshair for (hud.json xh_hidden_slots:
+## the snipers; scoped, Weapons hides the crosshair for the lens anyway).
+func _no_xh() -> bool:
+	var w: Node = get_parent().get("weapons") if get_parent() else null
+	if w == null or not w.has_method("held"):
+		return false
+	var id: String = w.held()
+	var r: Variant = (w.get("rows") as Dictionary).get(id) if w.get("rows") is Dictionary else null
+	return r is Dictionary and String((r as Dictionary).get("slot", "")) in String(H["xh_hidden_slots"]).split(",")
+
 func _draw_crosshair() -> void:
 	var h := get_viewport().get_visible_rect().size.y
-	draw_xh(crosshair, convars, h, H, _dyn, _fire)
+	if not _no_xh():
+		draw_xh(crosshair, convars, h, H, _dyn, _fire)
 	if _hit > 0.0:
 		var k := h / float(H["ref_height"])
 		var hc := Color(1, 1, 1, _hit / float(H["hit_time"]))  # white for every hit
@@ -341,15 +371,27 @@ func _process(delta: float) -> void:
 
 func update(speed_u: float, t: float, pb: float, running: bool) -> void:
 	speed_label.text = "%d" % int(speed_u)
-	timer_label.text = RunTimer.fmt(t) if running or t > 0.0 else "ready"
+	timer_label.text = RunTimer.fmt(maxf(t, 0.0))
 	pb_label.text = "PB " + RunTimer.fmt(pb)
 
 func message(s: String, seconds: float = 2.5) -> void:
 	msg_label.text = s
+	_msg_gen += 1
+	var gen := _msg_gen
 	if seconds > 0.0:
 		get_tree().create_timer(seconds).timeout.connect(func() -> void:
-			if msg_label.text == s:
+			if _msg_gen == gen:
 				msg_label.text = "")
+
+## Health and armor, bottom-left (numbers and the bars under them). Nothing in the mashup deals damage to the
+## player yet, so Hud starts them at hud.json health/armor; a damage model calls this.
+func vitals(hp: float, armor: float) -> void:
+	_hp = hp
+	_armor = armor
+	hp_label.text = str(int(ceilf(hp)))
+	armor_label.text = str(int(ceilf(armor)))
+	if _deco:
+		_deco.queue_redraw()
 
 func errors(lines: PackedStringArray) -> void:
 	err_label.text = "\n".join(lines)

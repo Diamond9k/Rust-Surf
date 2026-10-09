@@ -252,7 +252,7 @@
     "site_rect": [
       -100,
       -150,
-      480,
+      620,
       150
     ],
     "cell": 2.0,
@@ -291,7 +291,7 @@
         0.8
       ],
       "tint_period": 260,
-      "_doc": "terrain shader uniforms. site_shade darkens the site concrete patches (pale patches read as snow); tint_a/tint_b: olive and khaki colour patches over the open ground every ~tint_period metres (a look, unverified against Rust's biome colours); scrub_*: dry scrub blobs on the open ground (one per scrub_cell metres with probability scrub_density, patchy by noise, colour is an albedo multiplier); stone_*: small pale loose stones the same way. A look standing in for ground scatter we have no meshes for (unverified against Rust's arid biome)",
+      "_doc": "terrain shader uniforms. site_shade darkens the site concrete patches (pale patches read as snow); tint_a/tint_b: olive and khaki colour patches over the open ground every ~tint_period metres (a look, unverified against Rust's biome colours); scrub_*: dry scrub blobs on the open ground (one per scrub_cell metres with probability scrub_density, patchy by noise, colour is an albedo multiplier); stone_*: small pale loose stones the same way. A look standing in for ground scatter we have no meshes for (unverified against Rust's arid biome). grass_*: dry green grass patches over the open ground (cover is the fraction, period the patch size in metres, colour an albedo multiplier) with a fine blade grain near the camera; rock_*: bare grey rock on hill flanks steeper than rock_slope (1 - normal.y); hill_shade: broad light and shade over the hills outside site_rect. Grass, rock and hill shade are a look standing in for Rust's splat map and grass meshes, which prep does not extract (unverified)",
       "site_shade": 0.8,
       "scrub_cell": 4.0,
       "scrub_density": 0.32,
@@ -306,9 +306,23 @@
         1.18,
         1.14,
         1.06
-      ]
+      ],
+      "grass_color": [
+        0.78,
+        0.95,
+        0.52
+      ],
+      "grass_cover": 0.45,
+      "grass_period": 55,
+      "rock_color": [
+        0.62,
+        0.6,
+        0.57
+      ],
+      "rock_slope": 0.25,
+      "hill_shade": 0.3
     },
-    "tuned": "2026-10-09 world_r2_4..7 renders: props, roads, ground scatter and blended mounds checked by eye in start/ramp1/valley2/site_overview/floor/sun; world_r1_3: pit edges, slope, far ridgeline. Hill heights, tints, scatter and roads are a look, not Rust's terrain (unverified)",
+    "tuned": "2026-10-09 world_r3 renders: grass, rock, hill shade, edge trims and the props past the end pad checked by eye in start/ramp1/valley2/site_overview/floor/sun; earlier rounds: props, roads, scatter, blended mounds, pit edges, far ridgeline. Hill heights, tints, grass, scatter and roads are a look, not Rust's terrain (unverified)",
     "props": {
       "_doc": "Course scenery: extra copies of meshes prep already extracts for the real Launch Site (rust/mesh), set where the fixed views look so the land round the course reads as an industrial site. Our arrangement, not Rust's layout (the real placements are scene_launch_site). pos is course [x, z]; the prop stands on the ground level at x plus dy (dy copies the real placements' offsets: warehouses 0.3, awnings 0.2, floodlights and vents -0.1); awnings share their warehouse's origin, turned 180 deg as in the real placements.",
       "columns": [
@@ -548,6 +562,296 @@
           "yaw": 0,
           "dy": 0.0,
           "scale": 1.0
+        },
+        {
+          "mesh": "floodlights_A_LOD0",
+          "pos": [
+            520,
+            -72
+          ],
+          "yaw": 160,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "floodlights_A_LOD0",
+          "pos": [
+            585,
+            84
+          ],
+          "yaw": 20,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "floodlights_A_LOD0",
+          "pos": [
+            430,
+            128
+          ],
+          "yaw": -20,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            505,
+            -92
+          ],
+          "yaw": 0,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_awning_LOD0",
+          "pos": [
+            505,
+            -92
+          ],
+          "yaw": 180,
+          "dy": 0.2,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            530,
+            -92
+          ],
+          "yaw": 0,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            555,
+            -92
+          ],
+          "yaw": 0,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_awning_LOD0",
+          "pos": [
+            555,
+            -92
+          ],
+          "yaw": 180,
+          "dy": 0.2,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            600,
+            25
+          ],
+          "yaw": 90,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_awning_LOD0",
+          "pos": [
+            600,
+            25
+          ],
+          "yaw": 270,
+          "dy": 0.2,
+          "scale": 1.0
+        },
+        {
+          "mesh": "range_outbuilding_a_LOD0",
+          "pos": [
+            490,
+            40
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "range_outbuilding_b_LOD0",
+          "pos": [
+            505,
+            40
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "range_outbuilding_a_LOD0",
+          "pos": [
+            575,
+            -40
+          ],
+          "yaw": 90,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            520,
+            72
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            530,
+            72
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            540,
+            72
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "launch_site_ground_pipes_LOD0",
+          "pos": [
+            540,
+            135
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "floodlights_A_LOD0",
+          "pos": [
+            -40,
+            -120
+          ],
+          "yaw": 120,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            -60,
+            118
+          ],
+          "yaw": 90,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_awning_LOD0",
+          "pos": [
+            -60,
+            118
+          ],
+          "yaw": 270,
+          "dy": 0.2,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            300,
+            185
+          ],
+          "yaw": 90,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_awning_LOD0",
+          "pos": [
+            300,
+            185
+          ],
+          "yaw": 270,
+          "dy": 0.2,
+          "scale": 1.0
+        },
+        {
+          "mesh": "warehouse_launch_site_a_LOD0",
+          "pos": [
+            360,
+            185
+          ],
+          "yaw": 90,
+          "dy": 0.3,
+          "scale": 1.0
+        },
+        {
+          "mesh": "range_outbuilding_a_LOD0",
+          "pos": [
+            345,
+            215
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "range_outbuilding_b_LOD0",
+          "pos": [
+            318,
+            222
+          ],
+          "yaw": 90,
+          "dy": 0.0,
+          "scale": 1.0
+        },
+        {
+          "mesh": "floodlights_A_LOD0",
+          "pos": [
+            390,
+            232
+          ],
+          "yaw": 60,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            270,
+            168
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "large_vent_LOD0",
+          "pos": [
+            270,
+            178
+          ],
+          "yaw": 0,
+          "dy": -0.1,
+          "scale": 1.0
+        },
+        {
+          "mesh": "launch_site_ground_pipes_LOD0",
+          "pos": [
+            260,
+            245
+          ],
+          "yaw": 0,
+          "dy": 0.0,
+          "scale": 1.0
         }
       ],
       "tuned": "2026-10-09 world_r2 renders, by eye"
@@ -560,7 +864,7 @@
         [
           200,
           -62,
-          480,
+          620,
           -62
         ],
         [
@@ -572,7 +876,7 @@
         [
           180,
           108,
-          470,
+          620,
           108
         ],
         [
@@ -586,13 +890,207 @@
           -62,
           300,
           108
+        ],
+        [
+          560,
+          -62,
+          560,
+          108
+        ],
+        [
+          330,
+          108,
+          330,
+          215
         ]
       ],
-      "tuned": "2026-10-09 world_r2 renders, by eye"
+      "tuned": "2026-10-09 world_r3 renders, by eye (extended to the props past the end pad)"
     },
     "blend_materials": [
       "terrain_blend",
       "land_slide_blend"
     ]
-  }
+  },
+  "trim": {
+    "_doc": "Steel strips along each ramp face's exposed edges (both edges of a ridge face, the rim of a valley), scenery only: the collision stays the bare prism. width and offset in metres (offset lifts the strip off the face so it never z-fights); v0 is the metre offset into the material's texture where the strip starts (0.1 m at uv_scale 3 is the painted, riveted band at the top of site_steel_trims).",
+    "material": "trim_steel",
+    "width": 0.35,
+    "offset": 0.03,
+    "v0": 0.1,
+    "tuned": "2026-10-09 world_r3 renders, by eye"
+  },
+  "paint_columns": [
+    "id",
+    "texture",
+    "rect",
+    "pos",
+    "yaw",
+    "length",
+    "width",
+    "opacity",
+    "tuned"
+  ],
+  "paint_doc": "Painted lines and patch repairs on the end pad, as Decals cut from a Rust decal atlas: rect is u0, v0, u1, v1 of the texture (the atlas bands were found by reading the png's alpha: worn white line v 0.387-0.413, yellow 0.443-0.470, crack 0.320-0.342, asphalt patch 0.149-0.272); pos is the decal centre in course metres (the end pad top is y 4.25), length runs along yaw, width across. Our layout, not a Rust pad's markings (unverified).",
+  "paint": [
+    {
+      "id": "edge_line_south",
+      "texture": "tex_road_decals",
+      "rect": [
+        0,
+        0.4434,
+        1,
+        0.4697
+      ],
+      "pos": [
+        362,
+        4.3,
+        -12.6
+      ],
+      "yaw": 0,
+      "length": 42,
+      "width": 0.3,
+      "opacity": 1.0,
+      "tuned": "2026-10-09 world_r3 floor render, by eye"
+    },
+    {
+      "id": "edge_line_north",
+      "texture": "tex_road_decals",
+      "rect": [
+        0,
+        0.4434,
+        1,
+        0.4697
+      ],
+      "pos": [
+        362,
+        4.3,
+        12.6
+      ],
+      "yaw": 0,
+      "length": 42,
+      "width": 0.3,
+      "opacity": 1.0,
+      "tuned": "2026-10-09 world_r3 floor render, by eye"
+    },
+    {
+      "id": "stop_line",
+      "texture": "tex_road_decals",
+      "rect": [
+        0,
+        0.3867,
+        1,
+        0.4131
+      ],
+      "pos": [
+        372,
+        4.3,
+        0
+      ],
+      "yaw": 90,
+      "length": 25,
+      "width": 0.45,
+      "opacity": 0.95,
+      "tuned": "2026-10-09 world_r3 floor render, by eye"
+    },
+    {
+      "id": "lane_line",
+      "texture": "tex_road_decals",
+      "rect": [
+        0,
+        0.3867,
+        1,
+        0.4131
+      ],
+      "pos": [
+        356,
+        4.3,
+        0
+      ],
+      "yaw": 0,
+      "length": 24,
+      "width": 0.25,
+      "opacity": 0.9,
+      "tuned": "2026-10-09 world_r3 floor render, by eye"
+    },
+    {
+      "id": "patch_a",
+      "texture": "tex_road_decals",
+      "rect": [
+        0,
+        0.1494,
+        1,
+        0.2715
+      ],
+      "pos": [
+        366,
+        4.3,
+        -6
+      ],
+      "yaw": 12,
+      "length": 7,
+      "width": 2.2,
+      "opacity": 0.55,
+      "tuned": "2026-10-09 world_r3 floor render, by eye"
+    },
+    {
+      "id": "patch_b",
+      "texture": "tex_road_decals",
+      "rect": [
+        0,
+        0.1494,
+        1,
+        0.2715
+      ],
+      "pos": [
+        350,
+        4.3,
+        7
+      ],
+      "yaw": -8,
+      "length": 6,
+      "width": 2.0,
+      "opacity": 0.55,
+      "tuned": "2026-10-09 world_r3 floor render, by eye"
+    },
+    {
+      "id": "crack_a",
+      "texture": "tex_road_decals",
+      "rect": [
+        0,
+        0.3203,
+        1,
+        0.3418
+      ],
+      "pos": [
+        361,
+        4.3,
+        -3
+      ],
+      "yaw": 38,
+      "length": 12,
+      "width": 0.22,
+      "opacity": 0.7,
+      "tuned": "2026-10-09 world_r3 floor render, by eye"
+    },
+    {
+      "id": "crack_b",
+      "texture": "tex_road_decals",
+      "rect": [
+        0,
+        0.3203,
+        1,
+        0.3418
+      ],
+      "pos": [
+        377,
+        4.3,
+        6
+      ],
+      "yaw": -60,
+      "length": 9,
+      "width": 0.22,
+      "opacity": 0.7,
+      "tuned": "2026-10-09 world_r3 floor render, by eye"
+    }
+  ]
 }

@@ -22,6 +22,7 @@
   "inacc_crouch",
   "inacc_move",
   "inacc_jump",
+  "inacc_land",
   "inacc_fire",
   "scoped_inacc_scale",
   "recoil_angle",
@@ -58,6 +59,7 @@
    "inacc_crouch": 3.7,
    "inacc_move": 140,
    "inacc_jump": 150,
+   "inacc_land": 0.24,
    "inacc_fire": 7,
    "scoped_inacc_scale": 0.4,
    "recoil_angle": 0,
@@ -93,6 +95,7 @@
    "inacc_crouch": 45,
    "inacc_move": 170,
    "inacc_jump": 300,
+   "inacc_land": 0.3,
    "inacc_fire": 50,
    "scoped_inacc_scale": 0.05,
    "recoil_angle": 0,
@@ -128,6 +131,7 @@
    "inacc_crouch": 7,
    "inacc_move": 60,
    "inacc_jump": 90,
+   "inacc_land": 0.2,
    "inacc_fire": 4,
    "scoped_inacc_scale": 1,
    "recoil_angle": 0,
@@ -163,6 +167,7 @@
    "inacc_crouch": 5,
    "inacc_move": 40,
    "inacc_jump": 90,
+   "inacc_land": 0.2,
    "inacc_fire": 15,
    "scoped_inacc_scale": 1,
    "recoil_angle": 0,
@@ -198,6 +203,7 @@
    "inacc_crouch": 5,
    "inacc_move": 15,
    "inacc_jump": 120,
+   "inacc_land": 0.18,
    "inacc_fire": 50,
    "scoped_inacc_scale": 1,
    "recoil_angle": 0,
@@ -233,6 +239,7 @@
    "inacc_crouch": 2,
    "inacc_move": 2,
    "inacc_jump": 2,
+   "inacc_land": 0.0,
    "inacc_fire": 0,
    "scoped_inacc_scale": 1,
    "recoil_angle": 0,
@@ -268,6 +275,7 @@
    "inacc_crouch": 0,
    "inacc_move": 0,
    "inacc_jump": 0,
+   "inacc_land": 0.0,
    "inacc_fire": 0,
    "scoped_inacc_scale": 1,
    "recoil_angle": 0,
@@ -456,7 +464,7 @@
    "id": "zoom_sensitivity_ratio",
    "value": 1.0,
    "used_in": "scoped mouse sensitivity = sensitivity x ratio x zoom fov / 90",
-   "source": "CS2 convar zoom_sensitivity_ratio default 1",
+   "source": "CS2 convar zoom_sensitivity_ratio default 1; the player's own convar replaces it at start and the settings menu changes it",
    "verified": "unverified formula (CS:GO behaviour)"
   },
   {
@@ -661,6 +669,111 @@
    "used_in": "Viewmodel.gd: the rig is drawn this many times smaller and closer (same projection) and the camera near plane scales with it, so walls never cut the arms or gun",
    "source": "mashup: stands in for CS2's separate viewmodel pass",
    "verified": "mashup choice; checked 2026-10-09: start/sun renders unchanged, --wtest viewmodel_inside_hull keeps the drawn rig nearer than the player hull lets a wall come"
+  },
+  {
+   "id": "air_inacc_apex_share",
+   "value": 0.25,
+   "used_in": "airborne inaccuracy is zero below this share of sqrt(jump impulse) in sqrt(vertical speed) (the jump apex), full at take-off speed",
+   "source": "CS:GO GetInaccuracy RemapVal on sqrt(|vz|) (from memory of the SDK; the reference speed is movement.json jump_impulse)",
+   "verified": "unverified for CS2 (CS:GO SDK from memory)"
+  },
+  {
+   "id": "air_inacc_max_scale",
+   "value": 2.0,
+   "used_in": "airborne inaccuracy is capped at this many times the take-off value (fast falls, surf descents)",
+   "source": "CS:GO GetInaccuracy clamp to 2x inaccuracy jump initial (from memory)",
+   "verified": "unverified for CS2 (CS:GO SDK from memory)"
+  },
+  {
+   "id": "land_velocity_scale",
+   "value": 1.0,
+   "used_in": "landing penalty = inaccuracy land x fall speed (units/s) x this, added to the fire inaccuracy",
+   "source": "mashup reading of CS:GO CWeaponCSBase::OnLand (penalty = inaccuracy land x fall velocity); whether CS scales the velocity first was not checked",
+   "verified": "unverified: the velocity scaling of CS's landing penalty was not checked"
+  },
+  {
+   "id": "shotgun_spread_patterns",
+   "value": 1,
+   "used_in": "1: a shotgun's pellets keep one fixed pattern per weapon every blast (the whole pattern still moves by the inaccuracy ring); 0: random pellets",
+   "source": "CS:GO/CS2 cvar weapon_accuracy_shotgun_spread_patterns 1",
+   "verified": "unverified: the cvar is from memory and CS2's pattern geometry was not read; the pattern here is drawn once from the weapon's seed"
+  },
+  {
+   "id": "shotgun_pattern_seed_offset",
+   "value": 1,
+   "used_in": "the fixed pellet pattern is drawn from Source's random stream on recoil seed + this (so it differs from the recoil table's stream)",
+   "source": "mashup choice",
+   "verified": "mashup choice, not a CS2 value"
+  },
+  {
+   "id": "taser_recharge",
+   "value": 30.0,
+   "used_in": "seconds after its shot before an empty Zeus x27 has its charge back",
+   "source": "CS2 Zeus recharge (CS2 release notes, from memory)",
+   "verified": "unverified: from memory of CS2 patch notes, not checked"
+  },
+  {
+   "id": "no_crosshair_classes",
+   "value": "sniper",
+   "used_in": "weapon classes (comma list) that draw no crosshair unscoped; every weapon hides it while scoped",
+   "source": "CS2 play knowledge: the AWP, SSG 08, SCAR-20 and G3SG1 show no crosshair without the scope",
+   "verified": "unverified: from memory of CS2, not checked in game"
+  },
+  {
+   "id": "vm_bob_cycle",
+   "value": 0.98,
+   "used_in": "Viewmodel.gd: seconds of one movement bob cycle at full speed",
+   "source": "CS:GO cvar cl_bobcycle default (from memory)",
+   "verified": "unverified for CS2 (CS:GO cvar from memory)"
+  },
+  {
+   "id": "vm_bob_lat",
+   "value": 0.4,
+   "used_in": "Viewmodel.gd: side-to-side bob at full speed, Source units",
+   "source": "CS:GO cvar cl_bobamt_lat default (from memory), used here directly as units",
+   "verified": "unverified: CS:GO default from memory, mashup use of it"
+  },
+  {
+   "id": "vm_bob_vert",
+   "value": 0.25,
+   "used_in": "Viewmodel.gd: up-down bob at full speed, Source units",
+   "source": "CS:GO cvar cl_bobamt_vert default (from memory), used here directly as units",
+   "verified": "unverified: CS:GO default from memory, mashup use of it"
+  },
+  {
+   "id": "vm_bob_ref_speed",
+   "value": 250,
+   "used_in": "Viewmodel.gd: ground speed (units/s) of the full bob; none in the air",
+   "source": "knife run speed (movement.json max_ground_speed)",
+   "verified": "mashup choice tied to movement.json"
+  },
+  {
+   "id": "vm_bob_ease",
+   "value": 8.0,
+   "used_in": "Viewmodel.gd: how fast the bob fades in and out with speed, per second",
+   "source": "mashup tuning",
+   "verified": "unverified: mashup tuning, not a CS2 value"
+  },
+  {
+   "id": "vm_sway_scale",
+   "value": 0.35,
+   "used_in": "Viewmodel.gd: degrees the rig trails behind per degree the view turned this frame",
+   "source": "mashup stand-in for CS's viewmodel lag (cl_wpn_sway_scale)",
+   "verified": "unverified: mashup tuning, not a CS2 value"
+  },
+  {
+   "id": "vm_sway_max",
+   "value": 3.0,
+   "used_in": "Viewmodel.gd: most the rig trails behind the view, degrees",
+   "source": "mashup tuning",
+   "verified": "unverified: mashup tuning, not a CS2 value"
+  },
+  {
+   "id": "vm_sway_ease",
+   "value": 10.0,
+   "used_in": "Viewmodel.gd: how fast the rig catches up with the view, per second",
+   "source": "mashup tuning",
+   "verified": "unverified: mashup tuning, not a CS2 value"
   }
  ]
 }

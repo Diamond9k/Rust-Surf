@@ -80,6 +80,13 @@
       "verified": "design value; position and size unverified: not checked against the CS2 client"
     },
     {
+      "id": "font_narrow",
+      "value": 0.9,
+      "unit": "x width",
+      "note": "horizontal scale of the fallback font when neither CS2's own font nor Bahnschrift is installed, so a wide sans keeps Stratum's condensed look",
+      "verified": "design value judged on the ui_r3 renders, unverified against the CS2 client"
+    },
+    {
       "id": "bar_height",
       "value": 64,
       "unit": "px",
@@ -106,6 +113,27 @@
       "unit": "ap",
       "note": "shown armor (Kevlar), fixed",
       "verified": "fixed by design (no player damage in the mashup)"
+    },
+    {
+      "id": "low_health",
+      "value": 20,
+      "unit": "hp",
+      "note": "at or under this the health number and bar turn red",
+      "verified": "design value matched by eye to CS2 from memory, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "vital_bar_width",
+      "value": 72,
+      "unit": "px",
+      "note": "health and armor bars under the numbers (full at 100)",
+      "verified": "design value matched by eye to CS2 from memory, unverified: not checked against the CS2 client"
+    },
+    {
+      "id": "vital_bar_height",
+      "value": 4,
+      "unit": "px",
+      "note": "health and armor bar thickness (min 2 px)",
+      "verified": "design value, unverified: not checked against the CS2 client"
     },
     {
       "id": "low_ammo_frac",
@@ -192,6 +220,13 @@
       "verified": "checked: sounds.json has no 'hitmarker' row on 2026-10-09"
     },
     {
+      "id": "xh_hidden_slots",
+      "value": "sniper",
+      "unit": "weapons.json slot list (comma separated)",
+      "note": "held weapons of these slots draw no crosshair (unscoped); scoped, Weapons hides the crosshair for the lens",
+      "verified": "CS:GO behaviour (snipers have no unscoped crosshair) from memory; CS2 unverified: not checked against the CS2 client"
+    },
+    {
       "id": "menu_ref_height",
       "value": 720,
       "unit": "px",
@@ -232,6 +267,13 @@
       "unit": "px",
       "note": "settings column width (clamped to the window)",
       "verified": "design value"
+    },
+    {
+      "id": "menu_panel_alpha",
+      "value": 0.82,
+      "unit": "0-1",
+      "note": "opacity of the dark panel behind the settings column (over the blurred game)",
+      "verified": "design value after Gauntlet round 2 reviewers asked for a darker, more opaque panel; unverified against the CS2 client"
     }
   ]
 }

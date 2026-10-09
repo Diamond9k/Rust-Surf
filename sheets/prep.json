@@ -52,18 +52,34 @@
     },
     {
       "id": "stats_required",
-      "value": "damage,cycletime",
+      "value": "damage,cycletime,primary clip size,is full auto,armor ratio,penetration,range modifier,spread,inaccuracy stand,inaccuracy crouch,inaccuracy move,inaccuracy fire,recoil angle,recoil angle variance,recoil magnitude,recoil magnitude variance,recoil seed,recovery time stand,recovery time crouch,max player speed",
       "unit": "items_game attributes",
-      "used_by": "prep_cs2.write_stats: a weapon without every one of these (from items_game.txt or weapons.vdata) stops setup, so no install runs its guns on weapon_defaults.json class averages",
-      "note": "the other attributes fall back to weapon_defaults.json and are listed as a warning in prep_status.json",
-      "verified": "build choice; tested in prep/tests/test_prep.py (missing damage blocks the done file)"
+      "used_by": "prep_cs2.write_stats: every weapons.json gun (slot not in stats_light_slots) needs every one of these as a number, from items_game.txt or weapons.vdata, or setup stops with the weapon and the missing names on screen and in prep_status.json",
+      "note": "every stat Weapons.gd reads for damage, armor, penetration, falloff, fire mode, spread, inaccuracy, recoil pattern and recovery: a CS2 update that moves one of them fails loudly instead of running the gun on weapon_defaults.json class averages",
+      "verified": "build choice; tested in prep/tests/test_prep.py (one missing or non-numeric attribute blocks the done file). Which keys the real CS2 items_game.txt/weapons.vdata carry per gun is unverified here: CS:GO's items_game.txt gave all of them per weapon prefab chain"
+    },
+    {
+      "id": "stats_light_slots",
+      "value": "gear",
+      "unit": "weapons.json slot values",
+      "used_by": "prep_cs2.write_stats: guns in these slots need only stats_required_light",
+      "note": "the Zeus x27 fires one charge with no recoil pattern, so its recoil and inaccuracy keys are not required",
+      "verified": "build choice; tested in prep/tests/test_prep.py"
+    },
+    {
+      "id": "stats_required_light",
+      "value": "damage,cycletime,primary clip size,range",
+      "unit": "items_game attributes",
+      "used_by": "prep_cs2.write_stats: the required stats for stats_light_slots guns",
+      "note": "damage, rate, charge count and the Zeus's short reach; everything else of the Zeus comes from the gear row of weapon_defaults.json",
+      "verified": "build choice; whether CS2's taser entry carries 'range' is unverified (CS:GO's did)"
     },
     {
       "id": "stats_expected",
-      "value": "primary clip size,spread,inaccuracy fire,recoil magnitude,max player speed",
+      "value": "headshot multiplier,primary reserve ammo max,range,inaccuracy jump initial,inaccuracy land",
       "unit": "items_game attributes",
-      "used_by": "prep_cs2.write_stats: a weapon missing any of these still finishes setup, with a warning in prep_status.json naming it (those values come from weapon_defaults.json class averages)",
-      "note": "every gun has these in CS:GO's items_game.txt; zoom and alt keys are left out because only some guns have them",
+      "used_by": "prep_cs2.write_stats: a gun missing any of these still finishes setup, with a warning in prep_status.json naming the weapon and the keys (those values come from weapon_defaults.json class columns)",
+      "note": "keys with one engine-wide value in CS:GO (headshot x4) or that only shape secondary feel; zoom and alt keys are left out because only some guns have them",
       "verified": "build choice; the CS:GO key names are from its items_game.txt, the CS2 file is unverified here"
     }
   ],
@@ -246,6 +262,18 @@
       "id": "m_flZoomTime1",
       "attribute": "zoom time 1",
       "attribute_alt": "-",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_flInaccuracyJumpInitial",
+      "attribute": "inaccuracy jump initial",
+      "attribute_alt": "inaccuracy jump initial alt",
+      "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
+    },
+    {
+      "id": "m_flInaccuracyLand",
+      "attribute": "inaccuracy land",
+      "attribute_alt": "inaccuracy land alt",
       "verified": "unverified: CS2 weapon vdata field name from memory of schema dumps; read only when items_game.txt lacks the attribute"
     }
   ]

@@ -123,6 +123,26 @@
       "verified": "2026-10-09 present in the local prep output (exported with the backdrop materials, listed in launch_site_placements.json materials); seen in world_r1 renders"
     },
     {
+      "id": "tex_site_steel_trims",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material site_steel_trims (Launch Site, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/site_steel_trims_{albedo,normal}.png",
+      "used_by": "materials.trim_steel (steel edge trims on the surf ramps)",
+      "verified": "2026-10-09 present in the local prep output (listed in launch_site_placements.json materials); seen in world_r3 renders"
+    },
+    {
+      "id": "tex_road_decals",
+      "game": "rust",
+      "kind": "texture",
+      "source": "material road_decals (Launch Site, placed by the monument prefab) :: _MainTex,_BumpMap",
+      "reader": "unitypy (exported with the backdrop materials)",
+      "out": "rust/tex/road_decals_{albedo,normal}.png",
+      "used_by": "course.json paint (painted lines on the end pad)",
+      "verified": "2026-10-09 present in the local prep output (listed in launch_site_placements.json materials); atlas layout read by eye from the png, unverified against Rust's decal UVs"
+    },
+    {
       "id": "amb_wind_rust",
       "game": "rust",
       "kind": "audio",

@@ -80,23 +80,23 @@
     },
     {
       "id": "ramp_concrete",
-      "albedo": "tex_concrete_d_site",
-      "normal": "tex_concrete_d_site",
-      "uv_scale": 5.0,
+      "albedo": "tex_concrete_f_site",
+      "normal": "tex_concrete_f_site",
+      "uv_scale": 10.0,
       "roughness": 0.85,
       "weather": "tex_concrete_d_chute",
-      "weather_cover": 0.5,
+      "weather_cover": 0.45,
       "grime": 0.85,
       "detail": 0.3,
       "panel": 4.0,
       "tint": [
-        0.74,
-        0.75,
-        0.79
+        0.8,
+        0.8,
+        0.82
       ],
       "crease_ao": 0.6,
       "filter": "aniso",
-      "verified": "2026-10-09 world_r2 renders: greyer tint and more cracked cover (r1 critics: flat beige, no wear)"
+      "verified": "2026-10-09 world_r3 renders: Launch Site panel concrete instead of the beige concrete_d_site (r2 critics: untextured beige ramp), by eye"
     },
     {
       "id": "ramp_panels",
@@ -117,6 +117,26 @@
       "crease_ao": 0.5,
       "filter": "aniso",
       "verified": "2026-10-09 Gauntlet captures"
+    },
+    {
+      "id": "trim_steel",
+      "albedo": "tex_site_steel_trims",
+      "normal": "tex_site_steel_trims",
+      "uv_scale": 3.0,
+      "roughness": 0.55,
+      "weather": "(none)",
+      "weather_cover": 0,
+      "grime": 0,
+      "detail": 0,
+      "panel": 0,
+      "tint": [
+        0.55,
+        0.56,
+        0.58
+      ],
+      "crease_ao": 0,
+      "filter": "aniso",
+      "verified": "2026-10-09 world_r3 renders: ramp edge trims (r2 critics: no edge trim), by eye"
     },
     {
       "id": "pad",
