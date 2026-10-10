@@ -117,6 +117,18 @@ class Prep(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertTrue(any("items_game.txt did not export" in p for p in self.status()["problems"]))
 
+    def test_items_game_missing_blocks_done_even_when_vdata_has_every_stat(self):
+        """weapons.vdata fills gaps; it never stands in for an items_game.txt that failed to export."""
+        fields = " ".join("%s = 1" % r["id"] for r in prep_cs2.sheet("prep")["vdata_keys"])
+        vd = ('<!-- kv3 encoding:text:version{e21c7f3c} format:generic:version{7412167c} -->\n{ %s }'
+              % " ".join("%s = { %s }" % (w["item"], fields) for w in WEAPONS))
+        code, out = self.main(FakeVRF(items_game_for(WEAPONS), bad=[prep_cs2.ITEMS_GAME], vdata=vd))
+        self.assertEqual(code, 1, out)
+        self.assertFalse(self.done())
+        self.assertIn("weapons.vdata", out)  # it was read
+        self.assertTrue(any("items_game.txt did not export whole" in p for p in self.status()["problems"]), self.status())
+        self.assertTrue(any(l.startswith("Prep: CS2's scripts/items/items_game.txt") for l in self.status()["player"]))
+
     def test_weapon_not_in_items_game_blocks_done(self):
         code, out = self.main(FakeVRF(items_game_for(WEAPONS, skip=["weapon_awp"]).replace('"weapon_awp_prefab"', '"x_prefab"')))
         self.assertEqual(code, 1)

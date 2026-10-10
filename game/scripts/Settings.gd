@@ -47,6 +47,14 @@ void fragment() {
 	vec2 d = (SCREEN_UV - 0.5) * vec2(1.0, 0.8);
 	COLOR = vec4(col * (1.0 - vignette * smoothstep(0.15, 0.75, length(d) * 1.4)), 1.0);
 }"""
+const PANEL := """shader_type canvas_item;
+uniform float top = 0.6;
+uniform float bottom = 0.8;
+void fragment() {
+	float a = mix(top, bottom, smoothstep(0.0, 1.0, UV.y));
+	float rule = 1.0 - step(1.0, UV.y / max(abs(dFdy(UV.y)), 1e-6));  // the top pixel row
+	COLOR = mix(vec4(0.016, 0.019, 0.024, a), vec4(1.0, 1.0, 1.0, 0.14), rule);
+}"""
 
 var main: Node
 var is_open := false
@@ -288,17 +296,20 @@ func _apply(k: String) -> void:
 		"hud_scale": h.set_hud_scale(v)
 		"hit_marker": h.hit_marker = v
 		"cl_showfps": h.set_fps_visible(v)
-		"sensitivity": main.player.input.sensitivity = v
+		"sensitivity":
+			var w := _scoped_weapons()
+			if w != null:  # scoped under the menu: the value is the unscoped base; Weapons works the scope's out of it
+				w._base_sens = v
+				w.refresh_zoom_sens()
+			else:
+				main.player.input.sensitivity = v
 		"m_yaw": main.player.input.m_yaw = v
 		"zoom_sensitivity_ratio":
 			var w: Variant = main.get("weapons")
 			if w != null and w.get("X") is Dictionary:
 				w.X["zoom_sensitivity_ratio"] = v  # Weapons._set_zoom reads it on the next scope
-				if w.has_method("scoped") and w.scoped() and float(w.get("_base_sens")) > 0.0:
-					# scoped under the menu: the scope's sensitivity follows at once, not on the next scope
-					var zf := float(w.stat(w.held(), "zoom fov %d" % int(w.get("_zoom"))))
-					main.player.input.sensitivity = float(w._base_sens) * float(v) * zf / float(Sheets.movement()["fov_default"])
-					w._scoped_sens = main.player.input.sensitivity
+				if _scoped_weapons() != null:
+					w.refresh_zoom_sens()  # the scope's sensitivity follows at once, by Weapons' own formula
 		"invert_mouse": main.player.input.m_pitch = -absf(main.player.input.m_pitch) if v else absf(main.player.input.m_pitch)
 		"volume":
 			AudioServer.set_bus_mute(0, v <= 0.0)
@@ -313,6 +324,13 @@ func _apply(k: String) -> void:
 		"fps_max": Engine.max_fps = maxi(int(v), 0)
 		"msaa": get_viewport().msaa_3d = int(v) as Viewport.MSAA
 		"render_scale": get_viewport().scaling_3d_scale = v
+
+## Weapons while a scope is up with an unscoped base sensitivity recorded, else null.
+func _scoped_weapons() -> Node:
+	var w: Variant = main.get("weapons")
+	if w is Node and w.has_method("scoped") and w.has_method("refresh_zoom_sens") and w.scoped() and float(w.get("_base_sens")) > 0.0:
+		return w
+	return null
 
 ## sounds.json players at their row level times v (0 is silent).
 func _channel(ids: Array, v: float) -> void:
@@ -706,9 +724,16 @@ func _build() -> void:
 	area.offset_bottom = -margin
 	_root.add_child(area)
 	_area = area
-	var back := Panel.new()  # the darker, near-opaque column behind the rows
+	# the translucent page behind the rows: lighter at the top, darker toward the bottom, the blurred game showing
+	# through, a faint light rule along its top edge
+	var back := ColorRect.new()
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	back.add_theme_stylebox_override("panel", _sb(Color(0.016, 0.019, 0.024, float(main.hud.H["menu_panel_alpha"])), 0))
+	var pm := ShaderMaterial.new()
+	pm.shader = Shader.new()
+	pm.shader.code = PANEL
+	pm.set_shader_parameter("top", float(main.hud.H["menu_panel_alpha"]))
+	pm.set_shader_parameter("bottom", float(main.hud.H["menu_panel_alpha_bottom"]))
+	back.material = pm
 	back.set_anchors_preset(Control.PRESET_FULL_RECT)
 	back.offset_left = -_px(12)
 	back.offset_right = _px(12)
@@ -1321,6 +1346,20 @@ func _uitest() -> void:
 	_change("zoom_sensitivity_ratio", 0.5, false)
 	var zexp := 2.0 * 0.5 * float(zw.stat("cs2_awp", "zoom fov 1")) / float(Sheets.movement()["fov_default"])
 	ok.call(is_equal_approx(main.player.input.sensitivity, zexp) and is_equal_approx(float(zw._scoped_sens), zexp), "zoom ratio changed while scoped applies at once (%.4f, want %.4f)" % [main.player.input.sensitivity, zexp])
+	# a sensitivity set while scoped is the unscoped one, even when it equals the scoped value; unscoping restores it
+	var zsens: float = main.player.input.sensitivity
+	_change("sensitivity", zsens, false)
+	var zexp2 := zsens * 0.5 * float(zw.stat("cs2_awp", "zoom fov 1")) / float(Sheets.movement()["fov_default"])
+	var zin: float = main.player.input.sensitivity
+	var zfov: Array = [zw._base_fov, main.player.cam.fov]
+	zw._base_fov = main.player.cam.fov
+	zw._set_zoom(0)
+	ok.call(is_equal_approx(zin, zexp2) and is_equal_approx(main.player.input.sensitivity, zsens), "sensitivity %.4f set while scoped: scope %.4f (want %.4f), unscoped %.4f after" % [zsens, zin, zexp2, main.player.input.sensitivity])
+	if zw._fov_tween:
+		zw._fov_tween.kill()
+	zw._base_fov = zfov[0]
+	main.player.cam.fov = zfov[1]
+	_changed.erase("sensitivity")
 	zw.current = zs[0]
 	zw.slots["primary"] = zs[1]
 	zw._zoom = zs[2]
@@ -1453,6 +1492,30 @@ func _uitest() -> void:
 	cam.fov = fov0
 	ok.call(px1 > px0 * 1.9, "dynamic gap widens when the fov narrows (%.1f -> %.1f px)" % [px0, px1])
 	ok.call(absf(px0 - 0.01 * 540.0 / tan(deg_to_rad(fov0) * 0.5)) < 0.01, "spread px is the camera projection (%.2f px)" % px0)
+	# an unscope still easing the camera out: the arms use the fov it eases back to, not the narrow zoom fov
+	var uw: Node = main.weapons
+	var ub: Array = [uw._base_fov, uw._fov_tween, uw._zoom]
+	uw._zoom = 0
+	uw._base_fov = fov0
+	cam.fov = fov0 * 0.3
+	uw._fov_tween = create_tween()
+	uw._fov_tween.tween_property(cam, "fov", fov0, 5.0)
+	var px2: float = main.hud.spread_to_px(0.01, 1080)
+	uw._fov_tween.kill()
+	cam.fov = fov0
+	uw._base_fov = ub[0]
+	uw._fov_tween = ub[1]
+	uw._zoom = ub[2]
+	ok.call(is_equal_approx(px2, px0), "unscope easing out: crosshair uses the unscoped fov (%.1f px, want %.1f)" % [px2, px0])
+	# dynamic_rate 0: the arms are the spread itself the same frame, no lag behind the bullets' cone
+	if float(main.hud.H["dynamic_rate"]) <= 0.0:
+		main.hud._dyn = 50.0  # far from any live spread: one frame must bring it there
+		main.hud._process(0.016)
+		var want: float = 0.0
+		var hw: Node = main.weapons
+		if hw.held() != "":
+			want = main.hud.spread_to_px(float(hw._spread(hw.held())) * float(hw.X.get("inaccuracy_to_rad", 0.001)), get_viewport().get_visible_rect().size.y)
+		ok.call(is_equal_approx(main.hud._dyn, want), "dynamic crosshair is the live spread in one frame (%.2f px, want %.2f)" % [main.hud._dyn, want])
 	# float-printed convar bools read as on; a hand-edited short xh_colors entry keeps its slot instead of crashing
 	ok.call(Hud.on({"cl_crosshairdot": "1.000000"}, "cl_crosshairdot", "0") and not Hud.on({"cl_crosshairdot": "0.000000"}, "cl_crosshairdot", "1"), "'1.000000' is on, '0.000000' off")
 	var pr: Array = Hud.presets({"xh_colors": "250,50,50|50,250|250,250,50"})

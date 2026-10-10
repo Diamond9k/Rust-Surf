@@ -19,7 +19,8 @@ const COL := {"damage": "damage", "cycletime": "cycletime", "cycletime alt": "cy
 	"recoil angle variance": "recoil_angle_var", "recoil magnitude": "recoil_mag", "recoil magnitude variance": "recoil_mag_var",
 	"recovery time stand": "recovery_stand", "recovery time crouch": "recovery_crouch", "zoom levels": "zoom_levels",
 	"zoom fov 1": "zoom_fov_1", "zoom fov 2": "zoom_fov_2", "zoom time 1": "zoom_time"}
-## Keys with an " alt" twin in items_game: the scoped / silenced / burst / fan value.
+## Keys with an " alt" twin in items_game: the scoped / silenced / burst / fan value. cycletime is one: like CS's
+## GetCycleTime(m_weaponMode), the held mode's rate of fire is its "cycletime alt" when items_game gives one.
 const ALT_KEYS := ["spread", "inaccuracy stand", "inaccuracy crouch", "inaccuracy move", "inaccuracy jump", "inaccuracy jump initial",
 	"inaccuracy land", "inaccuracy fire",
 	"recoil angle", "recoil angle variance", "recoil magnitude", "recoil magnitude variance", "cycletime", "max player speed"]
@@ -103,6 +104,7 @@ var _inacc_log: Variant = null # --wtest: an Array that records each shot's cone
 var _decay_at := -1.0    # weapons-clock time the fire inaccuracy and recoil index were last recovered to
 var _burst_pull := 0.0   # when the burst under way was pulled
 var _zoom_full_at := 0.0 # weapons-clock time the scope in progress is fully zoomed (CS's m_zoomFullyActiveTime)
+var _scope_band := 0.0   # the scope cross's blur band last drawn, px (redrawn while it changes)
 
 func setup(m: Node) -> void:
 	main = m
@@ -254,13 +256,21 @@ func alt_kind(id: String) -> String:
 func _zoom_levels(id: String) -> int:
 	return int(stat(id, "zoom levels")) if alt_kind(id) == "scope" else 0
 
-## Full magazine and reserve for every weapon (each aim lobby round).
+## Full magazine and reserve for every weapon (each aim lobby round). A reload or shell load under way ends with
+## its clip (the gun is full, so the arms go back to idle instead of reloading while it fires), and a burst still
+## firing or a queued attack2 from the last round does not carry into the new one. A bolt's pending rezoom and a
+## silencer turn are the gun's own state, not ammo: they finish as they would.
 func refill() -> void:
 	for id in rows:
 		ammo[id] = [int(stat(id, "primary clip size")), int(stat(id, "primary reserve ammo max"))]
 	_recharge.clear()
+	var loading := _reload_until > 0.0 or _shell_next > 0.0
 	_reload_until = 0.0
 	_shell_next = 0.0
+	_burst_left = 0
+	_alt_wait = false
+	if loading and main and main.get("viewmodel") != null:
+		main.viewmodel.settle()
 	_hud()
 
 func held() -> String:
@@ -368,6 +378,8 @@ func _process(dt: float) -> void:
 	_decay_to(held(), t)  # after the frame's rounds: each of them recovered only up to its own slot time
 	_punch_to(t)  # the rounds of this frame read the punch at their own slot times; the camera reads it now
 	_camera()
+	if _scope_layer and _scope_layer.visible and scope_style(held()) == "sniper" and absf(scope_blur_px(_scope.size.y) - _scope_band) > 0.25:
+		_scope.queue_redraw()  # the cross follows the cone as it opens and settles
 
 func _tick(id: String, t: float, dt: float) -> void:
 	if main.viewmodel and main.viewmodel.has_method("move"):
@@ -396,10 +408,6 @@ func _tick(id: String, t: float, dt: float) -> void:
 	_auto_reload(held(), t)
 	while _burst_left > 0 and t >= _burst_at:
 		_shoot(held(), _burst_at, true)  # each round on its slot, not the frame's time
-	if _rezoom > 0 and t >= _next_fire and _reload_until == 0.0 and _shell_next == 0.0:
-		var rz := _rezoom
-		_rezoom = 0
-		_set_zoom(rz)
 	id = held()
 	if id == "knife":
 		if Input.is_action_pressed("surf_attack"):
@@ -411,10 +419,14 @@ func _tick(id: String, t: float, dt: float) -> void:
 		_alt_wait = not _attack2(id)
 	elif _alt_wait:
 		_alt_wait = Input.is_action_pressed("surf_attack2") and not _attack2(id)  # CS reads attack2 held: it acts once the gun is ready
+	# after attack2: a press that acts on the frame the bolt ends takes one scope step from where the player sees
+	# the scope (out) and drops the pending rezoom, so one press never makes two steps
+	_rezoom_tick(t)
 	_fan = alt_kind(id) == "revolver" and Input.is_action_pressed("surf_attack2") and not Input.is_action_pressed("surf_attack")
 	if alt_kind(id) == "revolver" and not _fan:
-		if hammer(Input.is_action_pressed("surf_attack"), t):
-			fire()
+		var slot := hammer(Input.is_action_pressed("surf_attack"), t, t if Input.is_action_just_pressed("surf_attack") else t - dt)
+		if slot >= 0.0:
+			_shoot(id, slot, false)
 		return
 	var auto := stat(id, "is full auto") > 0.5
 	if Input.is_action_just_pressed("surf_attack"):
@@ -435,18 +447,29 @@ func hold_fire(id: String, t: float, dt: float) -> int:
 		n += 1
 	return n
 
+## A bolt gun back in the scope it left for the shot, once the bolt is done (and no reload is under way).
+func _rezoom_tick(t: float) -> void:
+	if _rezoom > 0 and t >= _next_fire and _reload_until == 0.0 and _shell_next == 0.0:
+		var rz := _rezoom
+		_rezoom = 0
+		_set_zoom(rz)
+
 ## R8 primary: holding attack pulls the hammer once the gun is ready and the round goes off revolver_cock
-## seconds later; letting go first cancels it. Held on, it pulls again after each shot. True when it fires.
-func hammer(held_down: bool, t: float) -> bool:
+## seconds later; letting go first cancels it. Held on, it pulls again after each shot. The pull starts at the
+## later of the gun being ready and since (the earliest the hold can have begun: the frame's time for a fresh
+## press, the previous frame's for a held one), so a held R8 fires every cycletime + revolver_cock on its own
+## slot, not a frame late. Returns that slot time when the round goes off, else -1.
+func hammer(held_down: bool, t: float, since: float = -1.0) -> float:
 	if not held_down or t < _next_fire or _reload_until > 0.0 or t < _toggle_until:
 		_cock = -1.0
-		return false
+		return -1.0
 	if _cock < 0.0:
-		_cock = t
-	if t - _cock < float(X["revolver_cock"]):
-		return false
+		_cock = maxf(_next_fire, since if since >= 0.0 else t)
+	var slot := _cock + float(X["revolver_cock"])
+	if t < slot:
+		return -1.0
 	_cock = -1.0
-	return true
+	return slot
 
 ## attack2 on a gun: scope level, silencer on/off, burst/semi, or (revolver) fan fire while held. Like CS's
 ## m_flNextSecondaryAttack (set with every shot, draw and toggle) it waits for the gun: false when refused
@@ -1068,7 +1091,9 @@ func _set_zoom(level: int) -> void:
 			_base_fov = p.cam.fov  # an unscope still easing out keeps the fov it is easing back to
 		_base_sens = p.input.sensitivity
 	var fov := _base_fov
-	if level > 0 and _zoom == 0:
+	# every zoom-in waits out its zoom time (scope_wait_each_step: the 1 -> 2 step too, and a bolt's rezoom), so a
+	# shot fired straight after the second click still has the unscoped cone
+	if level > 0 and (_zoom == 0 or float(X["scope_wait_each_step"]) > 0.0):
 		_zoom_full_at = _now() + (zoom_time(id, level) if float(X["scope_accuracy_wait"]) > 0.0 else 0.0)
 	if level > 0:
 		var zf := stat(id, "zoom fov %d" % level)
@@ -1299,9 +1324,13 @@ func _reload_tick(t: float) -> void:
 			vm.kick("shell")
 		if int(a[1]) <= 0 or int(a[0]) >= int(stat(id, "primary clip size")):
 			_shell_next = 0.0
+			# the last shell's push plays out before the gun can fire: its reload_loop clip (else shell_each, the
+			# procedural push), then reload_end when exported
+			var push := vm.clip_length("reload_loop") if vm.has_clip("reload_loop") else float(X["shell_each"])
 			if vm.has_clip("reload_end"):
 				vm.queue_clip("reload_end")
-				_next_fire = maxf(_next_fire, t + vm.clip_length("reload_loop") + vm.clip_length("reload_end"))
+				push += vm.clip_length("reload_end")
+			_next_fire = maxf(_next_fire, t + push)
 		else:
 			_shell_next += vm.clip_length("reload_loop") if vm.has_clip("reload_loop") else float(X["shell_each"])
 		_hud()
@@ -1442,8 +1471,33 @@ func _draw_scope() -> void:
 		_scope.draw_circle(c, maxf(float(X["scope_dot_px"]) * px, 1.0), Color(float(col[0]), float(col[1]), float(col[2])), true, -1.0, true)
 		return
 	var lw := maxf(float(X["scope_line_px"]) * px, 1.0)
-	_scope.draw_line(Vector2(0, c.y), Vector2(sz.x, c.y), Color.BLACK, lw, true)
-	_scope.draw_line(Vector2(c.x, 0), Vector2(c.x, sz.y), Color.BLACK, lw, true)
+	# CS blurs the scope's cross with the cone: moving, jumping or just after a shot the lines spread into a
+	# soft band (scope_blur_scale of the cone's on-screen radius, at most scope_blur_max_px) and fade, so only a
+	# still, settled rifle shows the crisp cross
+	var band := minf(scope_blur_px(sz.y), float(X["scope_blur_max_px"]) * px)
+	var layers := int(X["scope_blur_layers"]) if band > lw else 0
+	var core := lw / maxf(lw + band, lw)
+	_scope.draw_line(Vector2(0, c.y), Vector2(sz.x, c.y), Color(0, 0, 0, core), lw, true)
+	_scope.draw_line(Vector2(c.x, 0), Vector2(c.x, sz.y), Color(0, 0, 0, core), lw, true)
+	for i in layers:
+		var k := float(i + 1) / float(layers)
+		var bw := lw + band * k
+		var a := (1.0 - core) * (1.0 - k * 0.7) / float(layers)
+		_scope.draw_line(Vector2(0, c.y), Vector2(sz.x, c.y), Color(0, 0, 0, a), bw, true)
+		_scope.draw_line(Vector2(c.x, 0), Vector2(c.x, sz.y), Color(0, 0, 0, a), bw, true)
+	_scope_band = band
+
+## The cross's blur band now, px on a window h pixels tall: scope_blur_scale x the on-screen radius by which the
+## held gun's cone (spread + inaccuracy) is wider than its settled cone (spread + the stand or crouch base) at the
+## camera's live fov, so a still, recovered rifle draws the crisp cross.
+func scope_blur_px(h: float) -> float:
+	var p: SurfPlayer = main.player if main else null
+	var id := held()
+	if p == null or p.cam == null or id == "" or id == "knife":
+		return 0.0
+	var k := float(X["inaccuracy_to_rad"])
+	var over := tan(_spread(id) * k) - tan((mstat(id, "spread") + base_inacc(id)) * k)
+	return maxf(over, 0.0) / tan(deg_to_rad(p.cam.fov) * 0.5) * h * 0.5 * float(X["scope_blur_scale"])
 
 ## --wpose <id>[:zoom]: holds a weapon for a render without its files (scoped weapons hide the viewmodel).
 func _pose(arg: String) -> void:
@@ -1467,6 +1521,136 @@ func _check(what: String, ok: bool, detail: String) -> void:
 	if not ok:
 		_fails += 1
 	print("WTEST %s %s %s" % ["PASS" if ok else "FAIL", what, detail])
+
+## --wtest, Gauntlet round 2 checks: one scope step per attack2 press at the bolt's end, the R8 held on its own
+## slots, a round start ending a reload and a burst, the last shell's push, the scope cross blur, frame-rate free
+## viewmodel sway and an idle clip named "idle".
+func _selftest_r2() -> void:
+	var p: SurfPlayer = main.player
+	var keep := [slots["primary"], slots["secondary"], current, _next_fire]
+	# bolt end + attack2 on the same frame: one press, one step (0 -> 1 from the unscoped bolt), the rezoom dropped
+	slots["primary"] = "cs2_awp"
+	current = "primary"
+	ammo["cs2_awp"] = [5, 30]
+	_set_zoom(0)
+	_rezoom = 1
+	_next_fire = _now() - 0.001
+	var blocked := _blocked()
+	Input.action_press("surf_attack2")
+	_tick("cs2_awp", _now(), 1.0 / 60.0)
+	Input.action_release("surf_attack2")
+	var z_after := _zoom
+	var rz_after := _rezoom
+	_check("bolt_rezoom_one_step", blocked or (z_after == 1 and rz_after == 0), "zoom %d, rezoom %d after one attack2 press on the frame the bolt ends%s" % [z_after, rz_after, " (skipped: player frozen)" if blocked else ""])
+	_set_zoom(0)
+	_rezoom = 0
+	if _fov_tween:
+		_fov_tween.kill()
+	p.cam.fov = _base_fov if _base_fov > 0.0 else p.cam.fov
+	# R8 held on at 60 fps: every round on cycletime + revolver_cock exactly, not a frame late
+	slots["secondary"] = "cs2_revolver"
+	current = "secondary"
+	ammo["cs2_revolver"] = [8, 0]
+	_next_fire = 0.0
+	_cock = -1.0
+	var rt := _now()
+	var fired: Array = []
+	for i in 180:
+		var slot := hammer(true, rt, rt - 1.0 / 60.0)
+		if slot >= 0.0:
+			_shoot("cs2_revolver", slot, false)
+			fired.append(slot)
+		rt += 1.0 / 60.0
+	var want := mstat("cs2_revolver", "cycletime") + float(X["revolver_cock"])
+	var gaps_ok := fired.size() >= 3
+	for i in range(1, fired.size()):
+		gaps_ok = gaps_ok and absf(float(fired[i]) - float(fired[i - 1]) - want) < 0.0001
+	_check("r8_held_on_slot", gaps_ok, "%d rounds in 3 s at 60 fps, gaps %s (want %.4f)" % [fired.size(), str(fired.slice(0, 4)), want])
+	# a round start (refill) mid reload and mid burst: the reload clip and the burst end
+	_burst_left = 2
+	_shell_next = _now() + 5.0
+	_alt_wait = true
+	refill()
+	var vmc: String = main.viewmodel.current() if main.viewmodel else ""
+	_check("refill_ends_reload_burst", _burst_left == 0 and _shell_next == 0.0 and not _alt_wait and (vmc == "" or vmc == "idle"), "burst %d, shell %.1f, alt wait %s, clip '%s'" % [_burst_left, _shell_next, _alt_wait, vmc])
+	# the last shell of a gun with no reload_end clip: its push plays out before the next shot
+	slots["primary"] = "cs2_nova"
+	current = "primary"
+	var full := int(stat("cs2_nova", "primary clip size"))
+	ammo["cs2_nova"] = [full - 1, 5]
+	_next_fire = 0.0
+	reload()
+	var st := _shell_next + 0.001
+	_reload_tick(st)
+	var has_end: bool = main.viewmodel.has_clip("reload_end")
+	var push: float = main.viewmodel.clip_length("reload_loop") if main.viewmodel.has_clip("reload_loop") else float(X["shell_each"])
+	_check("last_shell_push", int(ammo["cs2_nova"][0]) == full and _shell_next == 0.0 and _next_fire >= st + push - 0.0001, "clip %d/%d, next shot %.3f s after the last shell (push %.3f, reload_end clip %s)" % [ammo["cs2_nova"][0], full, _next_fire - st, push, has_end])
+	_next_fire = 0.0
+	# the scope cross blurs with the cone: wider moving / after shots than settled
+	slots["primary"] = "cs2_awp"
+	current = "primary"
+	_set_zoom(1)
+	_zoom_full_at = 0.0
+	_penalty = base_inacc("cs2_awp")
+	var crisp := scope_blur_px(1080.0)
+	_inaccuracy = mstat("cs2_awp", "inaccuracy fire") * 2.0
+	var blurred := scope_blur_px(1080.0)
+	_deploy_reset()
+	_set_zoom(0)
+	if _fov_tween:
+		_fov_tween.kill()
+	p.cam.fov = _base_fov
+	_check("scope_blur", blurred > 1.0 and crisp < 0.01, "settled %.1f px, after 2 shots %.1f px at 1080p" % [crisp, blurred])
+	# the 1 -> 2 step waits out its own zoom time before the fully scoped cone
+	_set_zoom(1)
+	_zoom_full_at = 0.0
+	_set_zoom(2)
+	var step_wait := not zoom_ready()
+	_set_zoom(0)
+	if _fov_tween:
+		_fov_tween.kill()
+	p.cam.fov = _base_fov
+	var want_wait := float(X["scope_wait_each_step"]) > 0.0 and float(X["scope_accuracy_wait"]) > 0.0
+	_check("scope_step_waits", step_wait == want_wait, "awp zoom 2 fully active at once after the second click: %s (scope_wait_each_step=%s)" % [not step_wait, X["scope_wait_each_step"]])
+	# viewmodel sway: the same 300 deg/s turn (under vm_sway_max) trails the rig the same at 60 and 300 fps
+	var vm: Viewmodel = main.viewmodel
+	if vm and not vm.B.is_empty():
+		var sw: Array = []
+		for fps in [60.0, 300.0]:
+			vm._sway = Vector2.ZERO
+			vm._last_view = Vector2.INF
+			var yaw := 0.0
+			for i in int(fps * 0.5):
+				yaw += 300.0 / fps
+				vm.move(0.0, Vector2(0.0, yaw), 1.0 / fps)
+			sw.append(vm._sway.y)
+		vm._sway = Vector2.ZERO
+		vm._last_view = Vector2.INF
+		_check("sway_fps_independent", absf(float(sw[0]) - float(sw[1])) < 0.05 * absf(float(sw[0])) + 0.01 and absf(float(sw[0])) > 0.1, "rig trail after 0.5 s of 300 deg/s: %.2f deg at 60 fps, %.2f at 300" % [sw[0], sw[1]])
+		# an idle glb whose clip is itself named "idle" is still the idle
+		var ap := AnimationPlayer.new()
+		var lib := AnimationLibrary.new()
+		lib.add_animation("RESET", Animation.new())
+		lib.add_animation("idle", Animation.new())
+		ap.add_animation_library("", lib)
+		var got := vm._idle_of(ap, {"idle": "a.glb", "draw": "b.glb"})
+		ap.free()
+		_check("idle_named_idle", got == "idle", "idle clip found: '%s'" % got)
+	# the knife sits in the fist like CS2's own clip: its weapon bone lands on the arms' attachHand_R (the palm
+	# point CS2's clip keeps on wpn), on the knife's draw / idle clips as they play
+	if vm and vm.ok and vm._weapon_name == Viewmodel.KNIFE_SKEL:
+		var ask: Skeleton3D = vm._arms_skel
+		var ah := ask.find_bone("attachHand_R")
+		var kw := vm._knife_skel.find_bone("weapon") if vm._knife_skel else -1
+		if ah >= 0 and kw >= 0:
+			var palm := ask.global_transform * ask.get_bone_global_pose(ah).origin
+			var root := vm._knife_skel.global_transform * vm._knife_skel.get_bone_global_pose(kw).origin
+			var gap := palm.distance_to(root) / maxf(vm.shrink, 0.001)
+			_check("knife_in_palm", gap < 0.005, "knife root %.4f m (rig scale) from attachHand_R" % gap)
+	slots["primary"] = keep[0]
+	slots["secondary"] = keep[1]
+	current = keep[2]
+	_next_fire = keep[3]
 
 ## --wtest's stand-in for an aim lobby part: one hittable body that records the hits it takes.
 class TestPart extends StaticBody3D:
@@ -1736,7 +1920,7 @@ func _selftest() -> void:
 	current = "secondary"
 	_next_fire = 0.0
 	var ck := float(X["revolver_cock"])
-	var h := [hammer(true, 10.0), hammer(true, 10.0 + ck * 0.9), hammer(true, 10.0 + ck + 0.001), hammer(true, 20.0), hammer(false, 20.0 + ck * 0.5), hammer(true, 20.0 + ck * 0.6), hammer(true, 20.0 + ck * 1.5)]
+	var h := [hammer(true, 10.0) >= 0.0, hammer(true, 10.0 + ck * 0.9) >= 0.0, hammer(true, 10.0 + ck + 0.001) >= 0.0, hammer(true, 20.0) >= 0.0, hammer(false, 20.0 + ck * 0.5) >= 0.0, hammer(true, 20.0 + ck * 0.6) >= 0.0, hammer(true, 20.0 + ck * 1.5) >= 0.0]
 	_check("r8_hammer", h == [false, false, true, false, false, false, false], "pull, early, after %.2f s, re-pull, let go, re-pull, still short = %s" % [ck, str(h)])
 	# burst: one pull of the Glock in burst mode fires burst_shots rounds
 	slots["secondary"] = "cs2_glock"
@@ -2149,6 +2333,7 @@ func _selftest() -> void:
 			compared += 1
 			if absf(stat(wid, String(r["key"])) - float(r["value"])) > 0.0005:
 				wrong.append("%s %s=%s (want %s)" % [wid, r["key"], stat(wid, String(r["key"])), r["value"]])
+	_selftest_r2()
 	_check("stats_reference", wrong.is_empty(), "%d known value(s) compared with the files, %s" % [compared, "all equal" if wrong.is_empty() else "; ".join(wrong)] + ("" if compared > 0 else " (no CS2 stats in this data folder)"))
 	# the aim lobby counts a real traced shot on a target the eye can see, one hit per shot
 	var lob: Node = main.lobby

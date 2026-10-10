@@ -116,6 +116,8 @@ func _lighting() -> void:
 	bounce.light_energy = float(L["bounce_energy"])
 	bounce.light_specular = 0.0
 	bounce.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
+	if not bool(L["bounce_land"]):
+		bounce.light_cull_mask &= ~Backdrop.LAND_LAYER  # hills facing away from the sun stay in shade
 	add_child(bounce)
 	var env := WorldEnvironment.new()
 	var e := Environment.new()

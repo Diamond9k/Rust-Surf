@@ -299,17 +299,17 @@
       "far_start": 50,
       "far_scale": 4,
       "tint_a": [
-        0.8,
-        0.88,
-        0.66
+        0.7,
+        0.82,
+        0.55
       ],
       "tint_b": [
-        0.95,
-        0.9,
-        0.8
+        0.86,
+        0.84,
+        0.7
       ],
       "tint_period": 260,
-      "_doc": "terrain shader uniforms. site_shade darkens the site concrete patches (pale patches read as snow); tint_a/tint_b: olive and khaki colour patches over the open ground every ~tint_period metres (a look, unverified against Rust's biome colours); scrub_*: dry scrub blobs on the open ground (one per scrub_cell metres with probability scrub_density, patchy by noise, colour is an albedo multiplier); stone_*: small pale loose stones the same way. A look standing in for ground scatter we have no meshes for (unverified against Rust's arid biome). grass_*: dry green grass patches over the open ground (cover is the fraction, period the patch size in metres, colour an albedo multiplier) with a fine blade grain near the camera; rock_*: bare grey rock on hill flanks steeper than rock_slope (1 - normal.y); hill_shade: broad light and shade over the hills outside site_rect. Grass, rock and hill shade are a look standing in for Rust's splat map and grass meshes, which prep does not extract (unverified) dry_*: straw-coloured sun-dried patches over the open ground (colour an albedo multiplier, cover the fraction, period the patch size in metres); mottle: strength of a clump-scale light and dark mottle (mottle_cell metres) that reads as grass tufts from the course and fades to its average when smaller than a pixel. A look for Rust's grassland seen from height (r2 critics: flat olive grass), unverified. relief: strength of a noise relief (gullies and humps relief_period metres across, finer than the mesh) tilting the ground normals and shading its hollows, strongest on the hills outside site_rect, so far hills light as folded land (r1 critics: flat beige hills; a look, unverified against Rust's terrain).",
+      "_doc": "terrain shader uniforms. site_shade darkens the site concrete patches (pale patches read as snow); tint_a/tint_b: olive and khaki colour patches over the open ground every ~tint_period metres (a look, unverified against Rust's biome colours); scrub_*: dry scrub blobs on the open ground (one per scrub_cell metres with probability scrub_density, patchy by noise, colour is an albedo multiplier); stone_*: small pale loose stones the same way. A look standing in for ground scatter we have no meshes for (unverified against Rust's arid biome). grass_*: dry green grass patches over the open ground (cover is the fraction, period the patch size in metres, colour an albedo multiplier) with a fine blade grain near the camera; rock_*: bare grey rock on hill flanks steeper than rock_slope (1 - normal.y); hill_shade: broad light and shade over the hills outside site_rect. Grass, rock and hill shade are a look standing in for Rust's splat map and grass meshes, which prep does not extract (unverified) dry_*: straw-coloured sun-dried patches over the open ground (colour an albedo multiplier, cover the fraction, period the patch size in metres); mottle: strength of a clump-scale light and dark mottle (mottle_cell metres) that reads as grass tufts from the course and fades to its average when smaller than a pixel. A look for Rust's grassland seen from height (r2 critics: flat olive grass), unverified. relief: strength of a noise relief (gullies and humps relief_period metres across, finer than the mesh) tilting the ground normals and shading its hollows, strongest on the hills outside site_rect, so far hills light as folded land (r1 critics: flat beige hills; a look, unverified against Rust's terrain). ground_specular: the open ground's specular (Godot SPECULAR, 0.5 default kept on roads and site concrete); low so the land toward the sun does not sheen pale (gauntlet r1 critics: washed-out, speckled hills under the sun), a look, unverified.",
       "site_shade": 0.8,
       "scrub_cell": 4.0,
       "scrub_density": 0.14,
@@ -321,16 +321,16 @@
       "stone_cell": 1.3,
       "stone_density": 0.22,
       "stone_color": [
-        1.18,
-        1.14,
-        1.06
+        1.1,
+        1.07,
+        1.0
       ],
       "grass_color": [
         0.78,
         0.95,
         0.52
       ],
-      "grass_cover": 0.45,
+      "grass_cover": 0.55,
       "grass_period": 55,
       "rock_color": [
         0.62,
@@ -338,20 +338,21 @@
         0.57
       ],
       "rock_slope": 0.25,
-      "hill_shade": 0.3,
+      "hill_shade": 0.4,
       "dry_color": [
-        1.18,
-        1.06,
-        0.78
+        1.08,
+        1.0,
+        0.8
       ],
-      "dry_cover": 0.3,
+      "dry_cover": 0.22,
       "dry_period": 38,
       "mottle": 0.22,
       "mottle_cell": 1.6,
       "relief": 0.35,
-      "relief_period": 28
+      "relief_period": 28,
+      "ground_specular": 0.08
     },
-    "tuned": "2026-10-09 world_r2_3x renders (gauntlet round 2): relief 0.35 / 28 m, by eye; 2026-10-09 world_r3_1x (gauntlet 3): dry patches and clump mottle on the open ground, by eye; 2026-10-09 world_r2 (gauntlet 2): site_cover 0.32 -> 0.55 (r1 critics: the site reads as a bare field); 2026-10-09 world_r1 (gauntlet 2): scrub_density 0.32 -> 0.14 now 3D bushes stand on the ground (r3 critics saw a repeating dot pattern); world_r3 renders: grass, rock, hill shade, edge trims and the props past the end pad checked by eye in start/ramp1/valley2/site_overview/floor/sun; earlier rounds: props, roads, scatter, blended mounds, pit edges, far ridgeline. Hill heights, tints, grass, scatter and roads are a look, not Rust's terrain (unverified)",
+    "tuned": "2026-10-10 world_r2b renders (gauntlet round 2): greener, darker open ground (tint_a 0.8,0.88,0.66 -> 0.7,0.82,0.55; tint_b 0.95,0.9,0.8 -> 0.86,0.84,0.7; grass_cover 0.45 -> 0.55; dry_color 1.18,1.06,0.78 -> 1.08,1.0,0.8 and dry_cover 0.3 -> 0.22; stone_color 1.18 -> 1.1; hill_shade 0.3 -> 0.4) and ground_specular 0.08 (r1 critics: washed-out, overexposed beige terrain; snow-like speckle on the hills under the sun), by eye; 2026-10-09 world_r2_3x renders (gauntlet round 2): relief 0.35 / 28 m, by eye; 2026-10-09 world_r3_1x (gauntlet 3): dry patches and clump mottle on the open ground, by eye; 2026-10-09 world_r2 (gauntlet 2): site_cover 0.32 -> 0.55 (r1 critics: the site reads as a bare field); 2026-10-09 world_r1 (gauntlet 2): scrub_density 0.32 -> 0.14 now 3D bushes stand on the ground (r3 critics saw a repeating dot pattern); world_r3 renders: grass, rock, hill shade, edge trims and the props past the end pad checked by eye in start/ramp1/valley2/site_overview/floor/sun; earlier rounds: props, roads, scatter, blended mounds, pit edges, far ridgeline. Hill heights, tints, grass, scatter and roads are a look, not Rust's terrain (unverified)",
     "props": {
       "_doc": "Course scenery: extra copies of meshes prep already extracts for the real Launch Site (rust/mesh), set where the fixed views look so the land round the course reads as an industrial site. Our arrangement, not Rust's layout (the real placements are scene_launch_site). pos is course [x, z]; the prop stands on the ground level at x plus dy (dy copies the real placements' offsets: warehouses 0.3, awnings 0.2, floodlights and vents -0.1); awnings share their warehouse's origin, turned 180 deg as in the real placements. apron_meshes: props of these meshes get a ragged concrete apron apron metres wide round their footprint in the terrain shader, like the halls (r2 critics: missing concrete aprons; our look, unverified against Rust's own site ground).",
       "tuned": "2026-10-09 world_r1_g (gauntlet round 1, b4): 22 more sheds and vents (range_outbuilding_a/b, large_vent) in the open ground between the course and the roads, spots checked clear of every placement, prop, hall, road and course piece by a footprint test, by eye in renders; 2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): 28 more props (a warehouse yard and floodlights in the sun view, sheds and vents beside the lower ramps, a warehouse and vents in the site overview, vents, a floodlight and a warehouse east of the end pad), by eye; 2026-10-09 world_r2 renders, by eye",
@@ -1392,9 +1393,10 @@
       ]
     },
     "scatter": {
-      "_doc": "Trees, bushes, grass tufts and rocks Backdrop.gd builds and scatters over the ground (Rust's own vegetation and rock meshes are not extracted). shape: conifer, conifer_far, broadleaf, broadleaf_far, bush, grass, rock, rubble (a broken concrete lump) or drum (a 0.88 m steel drum) (the _far shapes are low-detail for trees only seen a few pixels tall) (built about 1 m tall and scaled by size, metres). Points are drawn in rect (course [x0, z0, x1, z1]) and kept when their distance outside site_rect is within ring (negative = that deep inside it), when the cluster noise (cluster_period metres) clears 1 - cover, when the ground is no steeper than max_slope (summed rise over 2 m both ways), and when they are road_margin off a road and building_margin off any placed building or prop. color is an sRGB tint, varied by color_jitter; sink buries the base by that fraction of the size; texture names a materials.json row drawn triplanar (rocks) or (none); shadows: cast sun shadows; chunk: metres per MultiMesh (culled as a unit); view_range: metres after which a chunk fades out (0 = always drawn).",
+      "_doc": "Trees, bushes, grass tufts and rocks Backdrop.gd builds and scatters over the ground (Rust's own vegetation and rock meshes are not extracted). shape: conifer, conifer_far, broadleaf, broadleaf_far, bush, grass, rock, rubble (a broken concrete lump) or drum (a 0.88 m steel drum) (the _far shapes are low-detail for trees only seen a few pixels tall) (built about 1 m tall and scaled by size, metres). Points are drawn in rect (course [x0, z0, x1, z1]) and kept when their distance outside site_rect is within ring (negative = that deep inside it), when the cluster noise (cluster_period metres) clears 1 - cover, when the ground is no steeper than max_slope (summed rise over 2 m both ways), and when they are road_margin off a road and building_margin off any placed building or prop. color is an sRGB tint, varied by color_jitter; sink buries the base by that fraction of the size; texture names a materials.json row drawn triplanar (rocks) or (none); shadows: cast sun shadows; chunk: metres per MultiMesh (culled as a unit); view_range: metres after which a chunk fades out (0 = always drawn). foliage_specular: the specular of the untextured plants (trees, bushes, grass); at Godot's 0.5 the crowns seen toward the sun sheened into pale ghosts (gauntlet r1 critics), a look, unverified.",
       "road_margin": 2.0,
       "building_margin": 4.0,
+      "foliage_specular": 0.1,
       "columns": [
         "id",
         "shape",
@@ -1456,7 +1458,7 @@
         {
           "id": "forest_near",
           "shape": "conifer",
-          "count": 1800,
+          "count": 2600,
           "seed": 102,
           "rect": [
             -450,
@@ -1469,7 +1471,7 @@
             460
           ],
           "cluster_period": 150,
-          "cover": 0.38,
+          "cover": 0.45,
           "size": [
             9,
             18
@@ -1487,7 +1489,79 @@
           "shadows": true,
           "chunk": 250,
           "view_range": 0,
-          "tuned": "2026-10-09 world_r1 (gauntlet 2) renders, by eye; a look standing in for Rust's own trees, bushes, grass and rocks, which prep does not extract (unverified against Rust's biomes)"
+          "tuned": "2026-10-10 world_r2b renders (gauntlet round 2): count 1800 -> 2600, cover 0.38 -> 0.45 (r1 critics: sparse treeline), by eye; 2026-10-09 world_r1 (gauntlet 2) renders, by eye; a look standing in for Rust's own trees, bushes, grass and rocks, which prep does not extract (unverified against Rust's biomes)"
+        },
+        {
+          "id": "forest_mid",
+          "shape": "conifer",
+          "count": 1600,
+          "seed": 200,
+          "rect": [
+            -900,
+            -1000,
+            1500,
+            1000
+          ],
+          "ring": [
+            420,
+            900
+          ],
+          "cluster_period": 150,
+          "cover": 0.45,
+          "size": [
+            10,
+            20
+          ],
+          "color": [
+            0.24,
+            0.31,
+            0.19
+          ],
+          "color_jitter": 0.18,
+          "sink": 0.03,
+          "max_slope": 1.6,
+          "roughness": 1.0,
+          "texture": "(none)",
+          "shadows": false,
+          "chunk": 400,
+          "view_range": 0,
+          "tuned": "2026-10-10 world_r2b renders (gauntlet round 2): added for the r1 critics (sparse identical tree cones, hills a hazy band with no rock outcrops), by eye; a look standing in for Rust's own trees and cliffs, which prep does not extract (unverified against Rust's biomes)"
+        },
+        {
+          "id": "broadleaf_near",
+          "shape": "broadleaf",
+          "count": 600,
+          "seed": 201,
+          "rect": [
+            -450,
+            -550,
+            1050,
+            550
+          ],
+          "ring": [
+            45,
+            420
+          ],
+          "cluster_period": 200,
+          "cover": 0.4,
+          "size": [
+            7,
+            13
+          ],
+          "color": [
+            0.3,
+            0.37,
+            0.18
+          ],
+          "color_jitter": 0.2,
+          "sink": 0.03,
+          "max_slope": 2.0,
+          "roughness": 1.0,
+          "texture": "(none)",
+          "shadows": true,
+          "chunk": 250,
+          "view_range": 0,
+          "tuned": "2026-10-10 world_r2b renders (gauntlet round 2): added for the r1 critics (sparse identical tree cones, hills a hazy band with no rock outcrops), by eye; a look standing in for Rust's own trees and cliffs, which prep does not extract (unverified against Rust's biomes)"
         },
         {
           "id": "broadleaf",
@@ -1632,6 +1706,42 @@
           "chunk": 150,
           "view_range": 800,
           "tuned": "2026-10-09 world_r1 (gauntlet 2) renders, by eye; a look standing in for Rust's own trees, bushes, grass and rocks, which prep does not extract (unverified against Rust's biomes)"
+        },
+        {
+          "id": "outcrops",
+          "shape": "rock",
+          "count": 500,
+          "seed": 202,
+          "rect": [
+            -1600,
+            -1600,
+            2200,
+            1600
+          ],
+          "ring": [
+            250,
+            1500
+          ],
+          "cluster_period": 300,
+          "cover": 0.35,
+          "size": [
+            6,
+            22
+          ],
+          "color": [
+            0.66,
+            0.65,
+            0.62
+          ],
+          "color_jitter": 0.12,
+          "sink": 0.3,
+          "max_slope": 4.0,
+          "roughness": 0.95,
+          "texture": "dirt",
+          "shadows": false,
+          "chunk": 500,
+          "view_range": 0,
+          "tuned": "2026-10-10 world_r2b renders (gauntlet round 2): added for the r1 critics (sparse identical tree cones, hills a hazy band with no rock outcrops), by eye; a look standing in for Rust's own trees and cliffs, which prep does not extract (unverified against Rust's biomes)"
         },
         {
           "id": "rubble",
@@ -1922,6 +2032,17 @@
         ]
       },
       "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye"
+    },
+    "tints": {
+      "_doc": "Albedo multipliers (linear RGB) for Rust materials on the placed Launch Site meshes, by Rust material name. Under this game's sun the warehouses' plaster walls blew out to flat white boxes (gauntlet r1 critics: untextured white office blocks); dimmed so the plaster's own stains and the leak decals read. A look, unverified against Rust's own exposure.",
+      "materials": {
+        "plaster_walls": [
+          0.78,
+          0.77,
+          0.74
+        ]
+      },
+      "tuned": "2026-10-10 world_r2b renders (gauntlet round 2), by eye"
     },
     "halls": {
       "_doc": "Large industrial halls Backdrop.gd builds from Rust's Launch Site textures, scenery only (no collision), standing where the fixed views look: the extracted set has no Rust building bigger than the 18 x 30 m warehouse, and the critics asked for big hangars. Our arrangement and our buildings, not Rust meshes (unverified against Rust's own Launch Site buildings). pos is course [x, z] (the hall stands on the ground height there plus dy); size is [length along x before yaw, width, eave height] in metres; rise is the gable's height above the eaves (0: flat roof); base is the height of the cinder block course under the corrugated walls; windows is the [bottom, top] of the glazed band in every bay; door is [width, height] of the sheet metal door in each end wall; pilaster is the bay width (concrete posts); lantern is [share of the length, width, height above the ridge] of a glazed roof lantern (width 0: none). materials names the materials.json row for each part; plinth and eave are metres. apron: metres of site concrete laid round each hall's footprint in the terrain shader (at most 32 halls and terrain.props apron_meshes together get one). grime: [shade at the foot, metres it fades out over] of the dirt darkening the bottom of the walls.",
@@ -2221,7 +2342,7 @@
     "tuned": "2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): v0 1.17 -> 1.66 (critics: over-bright white ridge strip), band found by reading the png rows, by eye; 2026-10-09 world_r3_14 ramp1 render (gauntlet 3): v0 0.1 -> 1.17 (r2 critics: smeared wood-brown ridge), by eye; 2026-10-09 world_r3_1x renders (gauntlet 3): a 7 cm thick, 0.4 m capping (r2 critics: no bevel or clean trim), by eye; 2026-10-09 world_r3 renders, by eye"
   },
   "weathering": {
-    "_doc": "Decal atlas the ramp shader hangs leaks and gravel from (materials.json leaks/debris set the strength per material): leak_v is the atlas v at the top and bottom of the drip band (found by reading the png alpha: drips run v 0.595-0.925; the first rows are speckled, so the band starts at 0.607, left half dark green, right half rust), debris_v the v at the middle and edge of the gravel/litter band (alpha 1 at v 0.33, fading out by 0.175). leak_len: metres the drips hang down a face; leak_width: metres of face per half-atlas tile; debris_width: metres up from a face's foot the gravel reaches. Our use of Rust's decals, not a CS2 map's (unverified as a match for any real surf map). groove: how far the normal tilts into each cast-slab joint (a V groove groove_width metres either side, so one lip catches the sun); edge_wear: smooth, polished arris along each face's top metre with rough chipped pits. Our look (unverified against a CS2 surf map's materials). leak_vary: each atlas tile of drips hangs between (1 - leak_vary) and (1 + leak_vary/2) times leak_len; leak_gap: the share of tiles that hang no drips at all (gauntlet 3 critics: the drips read as one decal tiled uniformly along both walls). Our look (unverified). tie_pitch [along, down] metres between form-tie holes on ramp faces, tie_hole their radius; rust_len, rust_width (metres) and rust_keep (share of ties that bleed) shape the rust runs below them, tinted rust_tint (linear multiplier). Our look for cast concrete, unverified against Rust surfaces.",
+    "_doc": "Decal atlas the ramp shader hangs leaks and gravel from (materials.json leaks/debris set the strength per material): leak_v is the atlas v at the top and bottom of the drip band (found by reading the png alpha: drips run v 0.595-0.925; the first rows are speckled, so the band starts at 0.607, left half dark green, right half rust), debris_v the v at the middle and edge of the gravel/litter band (alpha 1 at v 0.33, fading out by 0.175). leak_len: metres the drips hang down a face; leak_width: metres of face per half-atlas tile; debris_width: metres up from a face's foot the gravel reaches. Our use of Rust's decals, not a CS2 map's (unverified as a match for any real surf map). groove: how far the normal tilts into each cast-slab joint (a V groove groove_width metres either side, so one lip catches the sun); edge_wear: smooth, polished arris along each face's top metre with rough chipped pits. Our look (unverified against a CS2 surf map's materials). leak_vary: each atlas tile of drips hangs between (1 - leak_vary) and (1 + leak_vary/2) times leak_len; leak_gap: the share of tiles that hang no drips at all (gauntlet 3 critics: the drips read as one decal tiled uniformly along both walls). Our look (unverified). tie_pitch [along, down] metres between form-tie holes on ramp faces, tie_hole their radius; rust_len, rust_width (metres) and rust_keep (share of ties that bleed) shape the rust runs below them, tinted rust_tint (linear multiplier). Our look for cast concrete, unverified against Rust surfaces. crease_reach: metres up a face over which the crease occlusion fades out; crease_gutter: extra darkening (times crease_ao) in the last 0.3 m that hides the shadow-map leak where two faces meet; crease_bounce: light bounced into the foot of a face (an emission of its own albedo, fading out over 1.5 x crease_reach), so a valley trough shades off softly instead of to a black slit (gauntlet r1 critics). Our look, unverified.",
     "texture": "tex_dirt_stains_leaks",
     "leak_v": [
       0.607,
@@ -2237,7 +2358,10 @@
     "groove": 0.25,
     "groove_width": 0.06,
     "edge_wear": 0.3,
-    "tuned": "2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): leak_vary, leak_gap by eye, edge_wear 0.7 -> 0.3 (critics: an over-bright strip along the ridge, the polished arris glaring in the sun); 2026-10-09 world_r3_1x renders (gauntlet 3): groove, groove_width, edge_wear by eye; 2026-10-09 world_r1 (gauntlet 2) renders, by eye",
+    "crease_reach": 5.0,
+    "crease_gutter": 0.6,
+    "crease_bounce": 0.18,
+    "tuned": "2026-10-10 world_r2b renders (gauntlet round 2): crease_reach 3.5 -> 5, crease_gutter 1.3 -> 0.6, crease_bounce 0.18 (r1 critics: a hard black slit at the valley bottom, no AO falloff or bounce light), by eye; 2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): leak_vary, leak_gap by eye, edge_wear 0.7 -> 0.3 (critics: an over-bright strip along the ridge, the polished arris glaring in the sun); 2026-10-09 world_r3_1x renders (gauntlet 3): groove, groove_width, edge_wear by eye; 2026-10-09 world_r1 (gauntlet 2) renders, by eye",
     "leak_vary": 0.55,
     "leak_gap": 0.3,
     "tie_pitch": [

@@ -124,6 +124,7 @@ func _surface(m: Dictionary) -> Material:
 	sm.set_shader_parameter("grime", float(m["grime"]))
 	sm.set_shader_parameter("detail", float(m["detail"]))
 	sm.set_shader_parameter("roughness_val", float(m["roughness"]))
+	sm.set_shader_parameter("specular_val", float(m["specular"]))
 	sm.set_shader_parameter("panel", float(m["panel"]))
 	sm.set_shader_parameter("crease_ao", float(m["crease_ao"]))
 	sm.set_shader_parameter("normal_depth", float(m["normal_depth"]))
@@ -143,7 +144,7 @@ func _surface(m: Dictionary) -> Material:
 	for k in ["leak_v", "debris_v"]:
 		var a: Array = W[k]
 		sm.set_shader_parameter(k, Vector2(a[0], a[1]))
-	for k in ["leak_len", "leak_width", "debris_width", "groove", "groove_width", "edge_wear", "leak_vary", "leak_gap", "tie_hole", "rust_len", "rust_width", "rust_keep"]:
+	for k in ["leak_len", "leak_width", "debris_width", "groove", "groove_width", "edge_wear", "leak_vary", "leak_gap", "tie_hole", "rust_len", "rust_width", "rust_keep", "crease_reach", "crease_gutter", "crease_bounce"]:
 		sm.set_shader_parameter(k, float(W[k]))
 	sm.set_shader_parameter("ties", float(m["ties"]))
 	var tpi: Array = W["tie_pitch"]
@@ -387,6 +388,7 @@ uniform float weather = 0.3;
 uniform float grime = 0.5;
 uniform float detail = 0.3;
 uniform float roughness_val = 0.85;
+uniform float specular_val = 0.5;
 uniform float panel = 0.0;
 uniform float crease_ao = 0.0;
 uniform float normal_depth = 1.0;
@@ -415,6 +417,9 @@ uniform float tie_hole = 0.03;
 uniform float rust_len = 2.5;
 uniform float rust_width = 0.12;
 uniform float rust_keep = 0.3;
+uniform float crease_reach = 3.5;
+uniform float crease_gutter = 1.3;
+uniform float crease_bounce = 0.0;
 uniform vec3 rust_tint = vec3(0.8, 0.55, 0.38);
 varying vec3 wpos;
 varying vec3 wn;
@@ -577,7 +582,7 @@ void fragment() {
 		c *= 1.0 + 0.2 * bevel - 0.3 * shade;
 		// the crease: wide soft occlusion plus a narrow dark gutter, which also hides the shadow-map
 		// light leak where the two faces of a valley meet
-		occ = mix(1.0 - crease_ao, 1.0, smoothstep(0.0, 3.5, bot)) * mix(1.0 - crease_ao * 1.3, 1.0, smoothstep(0.05, 0.7, bot));
+		occ = mix(1.0 - crease_ao, 1.0, smoothstep(0.0, crease_reach, bot)) * mix(1.0 - crease_ao * crease_gutter, 1.0, smoothstep(0.02, 0.3, bot));
 		occ = clamp(occ, 0.05, 1.0);
 		c *= mix(occ, 1.0, 0.35);
 	}
@@ -613,9 +618,13 @@ void fragment() {
 		rough = mix(rough, 1.0, da);
 	}
 	ALBEDO = c;
+	// light bounced off the sunlit wall opposite into the foot of a valley face, so the crease shades off
+	// into a lit trough instead of a black slit
+	EMISSION = c * crease_bounce * face * (1.0 - smoothstep(0.0, crease_reach * 1.5, bot)) * step(0.001, crease_ao);
 	NORMAL_MAP = nm;
 	NORMAL_MAP_DEPTH = normal_depth;
 	ROUGHNESS = rough;
+	SPECULAR = specular_val;
 	AO = occ;
 	AO_LIGHT_AFFECT = 1.0 - 0.5 * smoothstep(0.0, 1.0, UV2.y);
 }

@@ -7,6 +7,7 @@ extends Node3D
 const EMPTY := -1.0e9
 const MAX_ROADS := 16  # the terrain shader's array sizes
 const MAX_APRONS := 32
+const LAND_LAYER := 2  # render layer bit of the ground and what grows on it: Main._lighting's bounce can skip it
 
 var content: Content
 var meshes := {}
@@ -285,6 +286,7 @@ func _row_mat(id: String) -> StandardMaterial3D:
 	var tn: Array = mr["tint"]
 	m.albedo_color = Color(tn[0], tn[1], tn[2])
 	m.roughness = float(mr["roughness"])
+	m.metallic_specular = float(mr["specular"])
 	m.uv1_scale = Vector3.ONE / float(mr["uv_scale"])
 	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	m.vertex_color_use_as_albedo = true  # hall grime; meshes without colours read white
@@ -362,6 +364,7 @@ func _scatter() -> void:
 			var mmi := MultiMeshInstance3D.new()
 			mmi.multimesh = mm
 			mmi.material_override = mat
+			mmi.layers = LAND_LAYER
 			mmi.top_level = true
 			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if bool(row["shadows"]) else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			var vr := float(row["view_range"])
@@ -591,6 +594,7 @@ func _plant_material(row: Dictionary) -> StandardMaterial3D:
 		m.cull_mode = BaseMaterial3D.CULL_BACK
 	else:
 		m.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT_WRAP  # foliage lets light through: no black shaded side
+		m.metallic_specular = float(T["scatter"]["foliage_specular"])  # leaves seen toward the sun sheened white at 0.5
 	return m
 
 func _mesh(name: String) -> Mesh:
@@ -684,6 +688,10 @@ func _fix(m: Material) -> Material:
 	if sh.has(key):
 		b.metallic = float(sh[key][0])
 		b.roughness = float(sh[key][1])
+	var tt: Dictionary = T["tints"]["materials"]
+	if tt.has(key):
+		var tc: Array = tt[key]
+		b.albedo_color = b.albedo_color * Color(tc[0], tc[1], tc[2])
 	if key != "":
 		mats[key] = b
 	return b
@@ -877,6 +885,7 @@ func _terrain() -> void:
 	terrain.mesh = mesh
 	terrain.top_level = true  # built in course coordinates, not the prefab's
 	terrain.material_override = _ground_material()
+	terrain.layers = LAND_LAYER
 	add_child(terrain)
 	terrain.global_transform = Transform3D.IDENTITY
 
@@ -996,6 +1005,7 @@ uniform float mottle = 0.0;
 uniform float mottle_cell = 1.6;
 uniform float relief = 0.0;
 uniform float relief_period = 30.0;
+uniform float ground_specular = 0.5;
 varying vec3 wpos;
 varying vec3 wn;
 
@@ -1154,6 +1164,9 @@ void fragment() {
 	ALBEDO = c;
 	NORMAL_MAP = nm;
 	ROUGHNESS = mix(roughness_val, 0.75, road);
+	// grass and dry earth scatter almost no mirror light: at the default 0.5 the ground looking toward the
+	// sun took a grazing sheen of sun and bright sky and the hills under it read as pale snow
+	SPECULAR = mix(ground_specular, 0.5, max(road, site));
 }
 "
 
@@ -1193,7 +1206,7 @@ static func sun_shafts(L: Dictionary, toward_sun: Vector3) -> MeshInstance3D:
 	var c: Array = L["shaft_color"]
 	sm.set_shader_parameter("shaft_color", Vector3(c[0], c[1], c[2]))
 	sm.set_shader_parameter("samples", int(L["shaft_samples"]))
-	for k in ["shaft_strength", "shaft_reach", "shaft_decay", "shaft_spread_deg", "shaft_air", "shaft_sky"]:
+	for k in ["shaft_strength", "shaft_reach", "shaft_decay", "shaft_spread_deg", "shaft_air", "shaft_sky", "shaft_ground"]:
 		sm.set_shader_parameter(k, float(L[k]))
 	mi.material_override = sm
 	return mi
@@ -1210,6 +1223,7 @@ uniform float shaft_decay = 0.96;
 uniform float shaft_spread_deg = 45.0;
 uniform float shaft_air = 80.0;
 uniform float shaft_sky = 0.4;
+uniform float shaft_ground = 1.0;
 
 void vertex() {
 	POSITION = vec4(VERTEX.xy, 1.0, 1.0);
@@ -1232,9 +1246,10 @@ void fragment() {
 		discard;
 	}
 	float sky = step(d, 1.0e-6);
-	float air = sky > 0.5 ? shaft_sky : 1.0 - exp(-length(vp.xyz / vp.w) / shaft_air);
-	// jittered start per pixel: the march's steps would band into rings otherwise
-	float jit = fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715))));
+	float air = sky > 0.5 ? shaft_sky : shaft_ground * (1.0 - exp(-length(vp.xyz / vp.w) / shaft_air));
+	// jittered start per pixel over open sky, where the march's steps would band into rings; over land a
+	// fixed start: there the jitter crossing tree-dotted ridges read as white speckle on the far hills
+	float jit = sky > 0.5 ? fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715)))) : 0.5;
 	vec2 stp = (suv - uv) * shaft_reach / float(samples);
 	vec2 p = uv + stp * jit;
 	float acc = 0.0;

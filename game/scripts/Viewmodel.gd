@@ -141,8 +141,8 @@ func equip(model_path: String, clip_paths: Dictionary) -> bool:
 		if ch is Node3D and ch.name != ARMS_SKEL and _find(ch, "Skeleton3D") != null:
 			wname = String(ch.name)
 	# out with the old weapon and clips
-	if _arms_skel.skeleton_updated.is_connected(_attach_weapon):
-		_arms_skel.skeleton_updated.disconnect(_attach_weapon)
+	if anim and anim.mixer_applied.is_connected(_attach_weapon):
+		anim.mixer_applied.disconnect(_attach_weapon)
 	if _weapon_name != "" and rig.get_node_or_null(_weapon_name):
 		var old := rig.get_node(_weapon_name)
 		rig.remove_child(old)
@@ -210,14 +210,21 @@ func equip(model_path: String, clip_paths: Dictionary) -> bool:
 		idle()
 	return true
 
-## The idle clip's own name in a freshly loaded clip player: its first clip that is not RESET or one of ours.
+## The idle clip's own name in a freshly loaded clip player: its first clip that is not RESET. Each equip gives the
+## weapon a library of its own, so the cached glb never holds our added names and an idle glb whose clip is itself
+## named "idle" (or "draw") is still found; a name of ours is only passed over when another clip is there.
 func _idle_of(ap: AnimationPlayer, clip_paths: Dictionary) -> String:
 	if not ap.has_animation_library(""):
 		return ""
+	var any := ""
 	for n in ap.get_animation_library("").get_animation_list():
-		if n != "RESET" and not clip_paths.has(String(n)):
+		if n == "RESET":
+			continue
+		if not clip_paths.has(String(n)) or String(n) == "idle":
 			return n
-	return ""
+		if any == "":
+			any = n
+	return any
 
 func has_clip(clip: String) -> bool:
 	return _clips.has(clip)
@@ -287,7 +294,8 @@ func move(speed_units: float, view: Vector2, dt: float) -> void:
 		_last_view = view
 	var d := Vector2(view.x - _last_view.x, wrapf(view.y - _last_view.y, -180.0, 180.0))
 	_last_view = view
-	var target := (-d * float(B["vm_sway_scale"])).limit_length(float(B["vm_sway_max"]))
+	# the turn rate (deg/s), not this frame's step: a turn trails the rig as far at 60 fps as at 300
+	var target := (-d / dt * float(B["vm_sway_scale"])).limit_length(float(B["vm_sway_max"]))
 	_sway = _sway.lerp(target, 1.0 - exp(-float(B["vm_sway_ease"]) * dt))
 
 ## The bob and sway as a rig transform: a figure-eight of lat x vert Source units over one cycle, and the
@@ -333,8 +341,10 @@ func clip_length(clip: String) -> float:
 		return 0.0
 	return anim.get_animation(_clips[clip]).length
 
-## CS2 hangs the weapon off the wpn bone of the arms: every time the arms skeleton updates, the
-## weapon container is moved so the rest pose of its root bone sits on wpn.
+## CS2 hangs the weapon off the wpn bone of the arms (the clip keeps attachHand_R, the palm point, on it): every
+## time the clip player has applied its pose, the weapon container is moved so the rest pose of its root bone sits
+## on wpn. (Skeleton3D's skeleton_updated does not fire here without modifiers, which left the knife on wpn's
+## rest pose, out of the fist: round 1 critics saw it float past the glove.)
 func _wire_weapon() -> void:
 	var wn := rig.get_node_or_null(_weapon_name)
 	if wn == null or _knife_skel == null:
@@ -346,7 +356,7 @@ func _wire_weapon() -> void:
 	if _wpn < 0:
 		return
 	_weapon_rest = _knife_skel.transform * _knife_skel.get_bone_global_rest(w)
-	_arms_skel.skeleton_updated.connect(_attach_weapon)
+	anim.mixer_applied.connect(_attach_weapon)
 	_attach_weapon()
 
 func _attach_weapon() -> void:

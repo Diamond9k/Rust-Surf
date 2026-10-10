@@ -242,10 +242,10 @@
     },
     {
       "id": "dynamic_rate",
-      "value": 12,
+      "value": 0,
       "unit": "1/s",
-      "note": "how fast the dynamic gap eases toward the current spread: each frame closes 1 - exp(-rate x dt) of the distance, so the motion is the same at any frame rate",
-      "verified": "design value, unverified: not checked against the CS2 client"
+      "note": "0: the dynamic crosshair is drawn straight from Weapons' spread + inaccuracy every frame (that value already opens on the shot and recovers on the gun's recovery curve), so the arms never lag the cone the bullets use; a positive value eases toward it instead, closing 1 - exp(-rate x dt) of the distance per frame",
+      "verified": "0 after Gauntlet round 1 code critics found the 12/s ease drew a tighter crosshair than the bullet cone right after a spray; that CS2 draws its crosshair straight from GetInaccuracy + GetSpread is CS:GO DrawCrosshair as remembered, unverified: not checked against the CS2 client"
     },
     {
       "id": "hit_inner",
@@ -361,10 +361,17 @@
     },
     {
       "id": "menu_panel_alpha",
-      "value": 0.74,
+      "value": 0.6,
       "unit": "0-1",
-      "note": "opacity of the dark panel behind the settings column (over the blurred game)",
-      "verified": "design value: 0.82 after Gauntlet round 2 reviewers asked for a more opaque panel, 0.74 after Gauntlet 4 round 1 reviewers asked to see the blurred game behind the menu; unverified against the CS2 client"
+      "note": "opacity of the dark settings page at its top edge (over the blurred game); it deepens to menu_panel_alpha_bottom down the page",
+      "verified": "design value: 0.82 after Gauntlet round 2 reviewers asked for a more opaque panel, 0.74 after Gauntlet 4 round 1 reviewers asked to see the blurred game, 0.6 at the top of a gradient after Gauntlet ultracode round 1 reviewers called the page a flat near-black box; unverified against the CS2 client"
+    },
+    {
+      "id": "menu_panel_alpha_bottom",
+      "value": 0.84,
+      "unit": "0-1",
+      "note": "opacity of the settings page at its bottom edge (see menu_panel_alpha): a translucent top fading to a deeper bottom keeps the rows readable while the blurred game shows through",
+      "verified": "design value after Gauntlet ultracode round 1 reviewers asked for translucent panels with a gradient instead of a flat box; unverified: not checked against the CS2 client"
     },
     {
       "id": "menu_save_delay",

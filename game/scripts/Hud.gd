@@ -385,9 +385,14 @@ func spread_to_px(rad: float, h: float) -> float:
 	return rad * float(H["spread_units"]) / _tan43() * h / float(H["yres_base"])
 
 ## tan(fov/2) of Source's 4:3 horizontal fov for the live camera (its vertical fov widened by 4:3 = 320:240).
+## While an unscope is still easing the camera back out, the fov it eases to: the crosshair is already shown and
+## the bullets already use the unscoped cone, so the arms must not draw on the narrow zoom fov.
 func _tan43() -> float:
 	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
 	var v := cam.fov if cam != null else Sheets.vfov_43(float(Sheets.movement()["fov_default"]))
+	var w: Node = get_parent().get("weapons") if is_inside_tree() and get_parent() else null
+	if w != null and w.has_method("scoped") and not w.scoped() and w.get("_fov_tween") is Tween and (w._fov_tween as Tween).is_running() and float(w.get("_base_fov")) > 0.0:
+		v = float(w._base_fov)
 	return tan(deg_to_rad(v) * 0.5) * float(H["spread_units"]) / (float(H["yres_base"]) * 0.5)
 
 ## cl_crosshair_recoil: where the bullets go against the screen centre, px (the aim punch the camera does not show).
@@ -441,7 +446,10 @@ func _process(delta: float) -> void:
 				_wgap = float(w.stat(id, "crosshair min distance"))
 	_live_vitals()
 	var h := get_viewport().get_visible_rect().size.y
-	var k := 1.0 - exp(-delta * float(H["dynamic_rate"]))  # time-based ease: the same motion at 30 fps or 300
+	# the spread itself already recovers on the gun's own curve, so the arms follow it straight (dynamic_rate 0);
+	# a positive rate eases toward it instead, the same motion at any frame rate
+	var rate := float(H["dynamic_rate"])
+	var k := 1.0 - exp(-delta * rate) if rate > 0.0 else 1.0
 	_dyn = lerpf(_dyn, spread_to_px(spread, h), k)
 	_fire = lerpf(_fire, spread_to_px(fire, h), k)
 	crosshair.position = (get_viewport().get_visible_rect().size * 0.5).floor() + _recoil_px(w, h).round()

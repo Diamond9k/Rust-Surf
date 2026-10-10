@@ -164,6 +164,12 @@
       "verified": "2026-10-09 design value (Gauntlet round 2 ultracode, lobby_r2 renders): scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
+      "id": "track_test_punch",
+      "value": 10.0,
+      "what": "--lobbytest only: degrees of aim punch (before recoil_scale) put on Weapons while the view rests on the track bot's chest; the aim ray must then pass over the bot, so a spray that climbs off it earns no time on target",
+      "verified": "2026-10-10 design value (lobby Gauntlet round 2): checked headless (--lobbytest 'aim punch over it earns nothing')"
+    },
+    {
       "id": "points_miss",
       "value": 10,
       "what": "every mode: score lost per shot that hit nothing (track takes it off the time-on-target points). A shot fired from in front of the firing line counts as a shot and can never hit (its hits are refused), so it always costs this; the score never goes below 0",
@@ -174,6 +180,38 @@
       "value": "user://aim_best.json",
       "what": "best score per mode and weapon",
       "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "best_rules",
+      "value": [
+        "points_kill",
+        "points_hs_kill",
+        "points_flick",
+        "points_track_s",
+        "points_miss",
+        "round_s",
+        "bot_hp",
+        "bot_armor",
+        "bot_helmet",
+        "bot_heal_s",
+        "bot_respawn_s",
+        "hitgroup_chest",
+        "hitgroup_stomach",
+        "hitgroup_arms",
+        "hitgroup_legs",
+        "knife_hitgroups",
+        "damage_floor",
+        "flick_radius",
+        "flick_dist",
+        "flick_y",
+        "track_distance",
+        "track_half_range",
+        "track_speed_u",
+        "track_flip_s",
+        "track_fire_window"
+      ],
+      "what": "the rows a score depends on: the best key carries a short hash of their values (|r<hash>), so changing a scoring rule (an unverified armour, heal or hitgroup value checked against CS2 later) starts fresh bests instead of comparing new scores with old rules",
+      "verified": "2026-10-10 design value (lobby Gauntlet round 2): scored headless (--lobbytest); not yet playtested on the PC"
     },
     {
       "id": "killfeed_n",
@@ -204,6 +242,15 @@
       "value": 0.6,
       "what": "strength of the grime streaks running down the wall faces from the top edge (0 = clean)",
       "verified": "2026-10-09 design value (Gauntlet round 2): rendered in lobby_r2 renders; not taken from aim_botz or CS2 files"
+    },
+    {
+      "id": "wall_bays",
+      "value": [
+        0.13,
+        0.05
+      ],
+      "what": "tonal variation between wall bays (between the side walls' pilasters, every pilaster_step) so no two pours read as the same texture: brightness spread +-, warm/cool tint spread +-, per bay from a fixed hash",
+      "verified": "2026-10-10 design value (lobby Gauntlet round 2, lobby_r2 renders): round 1 critics read the walls as one repeated texture; set by eye, not taken from aim_botz files"
     },
     {
       "id": "wall_lift_m",
@@ -1121,33 +1168,27 @@
       "verified": "2026-10-09 design value (Gauntlet round 3): small enough that a head-level crosshair stays on the head; not taken from CS2 bot behaviour"
     },
     {
-      "id": "hitgroup_head",
-      "value": 4.0,
-      "what": "CS2 head multiplier; Weapons.gd already applies the weapon's own 'headshot multiplier', so the lobby does not apply it again",
-      "verified": "unverified: commonly documented CS:GO hitgroup value, not read from CS2 game files here; also design value for the lobby"
-    },
-    {
       "id": "hitgroup_chest",
       "value": 1.0,
-      "what": "chest and neck damage multiplier",
+      "what": "chest and neck damage multiplier; the head has no hitgroup row: the weapon's own 'headshot multiplier' (items_game, applied in Weapons.gd) is CS2's head scale",
       "verified": "unverified: commonly documented CS:GO hitgroup value, not read from CS2 game files here; also design value for the lobby"
     },
     {
       "id": "hitgroup_stomach",
       "value": 1.25,
-      "what": "stomach and pelvis damage multiplier",
+      "what": "stomach and pelvis damage multiplier; the head has no hitgroup row: the weapon's own 'headshot multiplier' (items_game, applied in Weapons.gd) is CS2's head scale",
       "verified": "unverified: commonly documented CS:GO hitgroup value, not read from CS2 game files here; also design value for the lobby"
     },
     {
       "id": "hitgroup_arms",
       "value": 1.0,
-      "what": "arm and hand damage multiplier",
+      "what": "arm and hand damage multiplier; the head has no hitgroup row: the weapon's own 'headshot multiplier' (items_game, applied in Weapons.gd) is CS2's head scale",
       "verified": "unverified: commonly documented CS:GO hitgroup value, not read from CS2 game files here; also design value for the lobby"
     },
     {
       "id": "hitgroup_legs",
       "value": 0.75,
-      "what": "leg and foot damage multiplier",
+      "what": "leg and foot damage multiplier; the head has no hitgroup row: the weapon's own 'headshot multiplier' (items_game, applied in Weapons.gd) is CS2's head scale",
       "verified": "unverified: commonly documented CS:GO hitgroup value, not read from CS2 game files here; also design value for the lobby"
     },
     {
@@ -1185,6 +1226,12 @@
       ],
       "what": "flick orb height range above the floor",
       "verified": "2026-10-09 design value: rendered and scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "flick_tries",
+      "value": 24,
+      "what": "flick: random spots drawn for each new orb until one is in plain sight from the spawn eye; when every draw is blocked the orb goes straight down the spawn's lane at flick_dist's near end and eye height (clamped to flick_y), so an orb is never hidden while its clock and the miss cost run",
+      "verified": "2026-10-10 design value (lobby Gauntlet round 2): scored headless (--lobbytest); not yet playtested on the PC (the all-blocked fallback is checked by the 'flick fallback in plain sight' case)"
     },
     {
       "id": "track_distance",

@@ -1,0 +1,5 @@
+{
+ "_doc": "Gameplay-critical rows of the critical sheets whose verification cell says unverified, each acknowledged by a hash of the whole row. tools/package.py refuses a release while preflight.critical_unacked lists one (a row that is new, or changed after it was acknowledged): a number that may differ from CS2 then ships as a decision someone made, not as a count. Review the rows python3 tools/preflight.py --critical lists, then python3 tools/preflight.py --ack records them.",
+ "critical": ["weapon_defaults", "weapons", "aim_lobby", "hud"],
+ "rows": {}
+}

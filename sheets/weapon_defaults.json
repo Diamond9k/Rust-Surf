@@ -525,6 +525,13 @@
    "verified": "unverified for CS2 (CS:GO SDK from memory)"
   },
   {
+   "id": "scope_wait_each_step",
+   "value": 1,
+   "used_in": "1: every zoom-in (the 1 -> 2 step and a bolt rezoom too) waits out its zoom time before the scoped cone applies; 0: only a scope from unzoomed waits",
+   "source": "CS:S / CS:GO SDK sniper SecondaryAttack sets m_zoomFullyActiveTime on every zoom press (recalled from memory; round 1 code critic found the 1 -> 2 step skipped the wait)",
+   "verified": "unverified for CS2 (CS:GO SDK from memory)"
+  },
+  {
    "id": "scope_lens",
    "value": 0.97,
    "used_in": "scope lens diameter as a share of window height",
@@ -537,6 +544,27 @@
    "used_in": "scope crosshair line width at 1080p",
    "source": "mashup estimate of the CS2 overlay",
    "verified": "unverified: eyeballed"
+  },
+  {
+   "id": "scope_blur_scale",
+   "value": 1.0,
+   "used_in": "sniper scope cross: the lines spread into a soft band this share of the on-screen radius by which the held gun cone (spread + inaccuracy) is wider than its settled cone (spread + stand or crouch base) at the live fov, so moving, jumping or firing blurs them and a settled rifle is crisp",
+   "source": "CS:GO / CS2 play knowledge: the AWP scope lines thicken and blur while moving or right after a shot (round 1 code critic); the scale is a mashup choice",
+   "verified": "unverified: behaviour from memory of CS2, scale not measured against CS2 captures"
+  },
+  {
+   "id": "scope_blur_max_px",
+   "value": 60.0,
+   "used_in": "sniper scope cross: widest blur band, pixels at 1080p",
+   "source": "mashup tuning",
+   "verified": "unverified: mashup tuning, not a CS2 value"
+  },
+  {
+   "id": "scope_blur_layers",
+   "value": 6,
+   "used_in": "sniper scope cross: translucent line layers that draw the blur band",
+   "source": "mashup tuning (drawing detail)",
+   "verified": "mashup choice, not a CS2 value"
   },
   {
    "id": "scope_edge",
@@ -866,9 +894,9 @@
   },
   {
    "id": "vm_sway_scale",
-   "value": 0.35,
-   "used_in": "Viewmodel.gd: degrees the rig trails behind per degree the view turned this frame",
-   "source": "mashup stand-in for CS's viewmodel lag (cl_wpn_sway_scale)",
+   "value": 0.0058,
+   "used_in": "Viewmodel.gd: degrees the rig trails behind per degree/second the view turns (the turn rate, so a turn trails the rig as far at 60 fps as at 300); 0.0058 keeps round 1 look at 60 fps (0.35 per frame-degree)",
+   "source": "mashup stand-in for CS viewmodel lag (cl_wpn_sway_scale); rate form after the round 1 critic found the per-frame form frame-rate dependent",
    "verified": "unverified: mashup tuning, not a CS2 value"
   },
   {

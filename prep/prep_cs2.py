@@ -354,7 +354,8 @@ def write_stats(outdir, ws, here=HERE):
     and kept under the gun's "_conflicts" (tools/package.py refuses a release on one until that row is verified).
     A weapon without every stats_required attribute as a number is never silent: a player-visible warning naming
     the weapon and keys, or a problem when stats_required_blocks is yes (stats_light_slots guns need only
-    stats_required_light). No readable stats file, or no entry for a weapon, is always a problem.
+    stats_required_light). No readable items_game.txt (even when weapons.vdata gives every stat), or no entry for a
+    weapon, is always a problem.
     stats_expected gaps are warnings."""
     cfg = settings(here)
     vd = sheet("prep", here)["vdata_keys"]
@@ -397,6 +398,9 @@ def write_stats(outdir, ws, here=HERE):
         return ["CS2 weapon stats could not be read: scripts/items/items_game.txt did not export or is damaged (verify CS2's files in Steam)"], []
     write_json(os.path.join(outdir, "weapon_stats.json"), st)
     problems, warnings = [], []
+    if "items_game.txt" not in src:  # weapons.vdata alone is not enough: it is the gap filler, and its keys are unverified
+        problems.append("CS2's scripts/items/items_game.txt did not export whole or could not be read, so the weapon stats are incomplete "
+                        "(verify CS2's files in Steam); setup runs again on the next start")
     lost = [n for n in names if n not in st]
     if lost:
         problems.append("CS2 has no weapon entry for %s in items_game.txt%s: a CS2 update may have renamed them" % (short(lost), " or weapons.vdata" if vst else ""))

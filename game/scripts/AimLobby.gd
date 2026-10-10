@@ -361,6 +361,9 @@ uniform float leaks = 0.0;
 uniform vec2 leak_v = vec2(0.607, 0.925);
 uniform float leak_len = 4.0;
 uniform float leak_width = 5.0;
+uniform vec2 bays = vec2(0.0);
+uniform float bay_m = 6.0;
+uniform float bay_off = 0.0;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vn(vec2 p) {
 	vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
@@ -388,6 +391,9 @@ void fragment() {
 	vec2 uv = m / scale;
 	vec3 c = has_tex ? texture(tex, uv).rgb : base;
 	c *= mix(0.8, 1.08, fbm(m / 9.0 + vec2(4.0, 1.0)));
+	float bay = floor((m.x - bay_off) / bay_m);
+	c *= 1.0 + bays.x * (hash(vec2(bay, 3.1)) * 2.0 - 1.0);
+	c *= vec3(1.0) + bays.y * (hash(vec2(bay, 8.7)) * 2.0 - 1.0) * vec3(1.0, 0.2, -0.8);
 	float d = abs(fract(m.y / lift + 0.5) - 0.5) * lift;
 	c *= 1.0 - 0.22 * (1.0 - smoothstep(0.008, 0.03, d));
 	float top = UV2.x;
@@ -429,6 +435,10 @@ func _weathered(id: String) -> Material:
 	m.set_shader_parameter("scale", float(main.course.uv_scales.get(id, 5.0)))
 	m.set_shader_parameter("grime", _f("wall_grime"))
 	m.set_shader_parameter("lift", _f("wall_lift_m"))
+	var wb: Array = V["wall_bays"]
+	m.set_shader_parameter("bays", Vector2(float(wb[0]), float(wb[1])))
+	m.set_shader_parameter("bay_m", _f("pilaster_step"))
+	m.set_shader_parameter("bay_off", float((V["arena_size"] as Array)[1]) * 0.5)  # side-wall pilasters stand at -hz + k step
 	var g: Array = V["wall_grid"]
 	m.set_shader_parameter("grid_m", float(g[0]))
 	m.set_shader_parameter("grid_major", float(g[1]))
@@ -1056,15 +1066,22 @@ func _weapon_name(id: String) -> String:
 	var w: Node = main.weapons
 	return String(w.rows[id]["name"]) if w and w.rows.has(id) else id
 
-## Best scores are per mode and weapon; a round fired with more than one weapon is not ranked.
+## Best scores are per mode, weapon and scoring rules; a round fired with more than one weapon is not ranked.
 func _best_key() -> String:
 	if _used.size() > 1:
 		return ""
 	var w := String(_used.keys()[0]) if _used.size() == 1 else (String(main.weapons.held()) if main.weapons else "")
 	var thin: Variant = main.weapons.get("thin") if main.weapons else null
 	if thin is Dictionary and (thin as Dictionary).has(w):
-		return "%s|%s|avg" % [mode, w]  # a gun on class-average stats ranks apart: its score never stands for the real gun
-	return "%s|%s" % [mode, w]
+		return "%s|%s|avg|r%s" % [mode, w, rules_hash()]  # a gun on class-average stats ranks apart: its score never stands for the real gun
+	return "%s|%s|r%s" % [mode, w, rules_hash()]
+
+## A short hash of every best_rules row's value: a best set under other scoring rules never stands for this one.
+func rules_hash() -> String:
+	var vals := []
+	for id in V["best_rules"]:
+		vals.append([id, V[String(id)]])
+	return JSON.stringify(vals).md5_text().substr(0, 8)
 
 func _refresh_hud() -> void:
 	_top_kills.text = str(_kills if mode == "bots" else _hits)
@@ -1392,14 +1409,17 @@ func _firing() -> bool:
 		return false  # still drawing, or a silencer turn
 	return _t() - _last_shot_at <= maxf(cyc, _f("track_fire_window"))
 
-## The crosshair ray (screen centre, where the player looks) against the world: true when the first thing it
-## meets is a part of the track bot, so a wall or crate between them blocks it.
+## The aim ray against the world: from the eye along where the next round goes (Weapons' eye angles plus aim
+## punch x recoil_scale, not the screen centre, which shows only part of the punch), so a spray climbing over
+## the bot earns nothing. True when the first thing it meets is a part of the track bot (walls and crates block).
 func _crosshair_on(unit: Node3D) -> bool:
 	var p: SurfPlayer = main.player
 	if p == null or p.cam == null:
 		return false
-	var xf: Transform3D = p.cam.global_transform
-	var q := PhysicsRayQueryParameters3D.create(xf.origin, xf.origin - xf.basis.z * _f("track_ray_m"))
+	var o: Vector3 = p.cam.global_position
+	var w: Node = main.weapons
+	var dir: Vector3 = -(w._eye_basis() as Basis).z if w and w.has_method("_eye_basis") else -p.cam.global_basis.z
+	var q := PhysicsRayQueryParameters3D.create(o, o + dir.normalized() * _f("track_ray_m"))
 	q.exclude = [p.get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	return not hit.is_empty() and hit["collider"] is AimTarget and (hit["collider"] as AimTarget).unit == unit
@@ -1539,19 +1559,25 @@ func _spawn_flick() -> void:
 	var yr: Array = V["flick_y"]
 	var hx := _f("lane_count") * _f("lane_width") * 0.5 - 1.0
 	var r := _f("flick_radius")
-	# the orb is always in plain sight from the spawn: a spot inside or behind a stage, crate or catwalk is drawn again
-	var eye := spawn_pos() + Vector3.UP * float(M["eye_height"])
-	var at := Vector3.ZERO
-	for i in 24:
-		var z := _f("firing_line_z") - _rng.randf_range(float(dr[0]), float(dr[1]))
-		at = center + Vector3(_rng.randf_range(-hx, hx), _rng.randf_range(float(yr[0]), float(yr[1])), z)
-		if _clear_view(eye, to_global(at), r):
-			break
+	var at := _flick_spot(int(_f("flick_tries")), hx, dr, yr, r)
 	var shape := SphereShape3D.new()
 	shape.radius = r
 	var t := _target(null, shape, _sphere(r), _flat(_col("color_flick"), 1.0), Transform3D(Basis(), at), false, "head", self)
 	_targets.append(t)
 	_spawned_at = _t()
+
+## Where the next orb goes (lobby frame): always in plain sight from the spawn eye. A spot inside or behind a
+## stage, crate or catwalk is drawn again; after 'tries' blocked draws the orb goes straight down the spawn's
+## lane at the nearest flick distance and eye height, over the firing rail with nothing in between.
+func _flick_spot(tries: int, hx: float, dr: Array, yr: Array, r: float) -> Vector3:
+	var eye := spawn_pos() + Vector3.UP * float(M["eye_height"])
+	for i in tries:
+		var z := _f("firing_line_z") - _rng.randf_range(float(dr[0]), float(dr[1]))
+		var at := center + Vector3(_rng.randf_range(-hx, hx), _rng.randf_range(float(yr[0]), float(yr[1])), z)
+		if _clear_view(eye, to_global(at), r):
+			return at
+	var e := to_local(eye)
+	return center + Vector3(e.x - center.x, clampf(e.y - center.y, float(yr[0]), float(yr[1])), _f("firing_line_z") - float(dr[0]))
 
 ## The next flick orb, after the frame that hit the last one (only for the round that hit it).
 func _respawn_flick(gen: int) -> void:
@@ -1946,6 +1972,14 @@ func _physics_process(dt: float) -> void:
 
 # --- --lobbytest: the scoring rules, checked headless ---
 
+## Turns the test player (yaw) and its camera (pitch) so the eye looks at a global point.
+func _view_at(p: SurfPlayer, at: Vector3) -> void:
+	var d := at - p.cam.global_position
+	p.yaw = rad_to_deg(atan2(-d.x, -d.z))
+	p.rotation_degrees.y = p.yaw
+	p.pitch = rad_to_deg(asin(clampf(d.normalized().y, -1.0, 1.0)))
+	p.cam.rotation_degrees.x = p.pitch
+
 func _check(what: String, ok: bool, got: Variant) -> bool:
 	print("LTEST %s %s (%s)" % ["PASS" if ok else "FAIL", what, str(got)])
 	return ok
@@ -2050,12 +2084,29 @@ func _selftest() -> void:
 	var tick := 1.0 / Engine.physics_ticks_per_second
 	var cam: Camera3D = p.cam
 	var keep_cam := cam.transform
+	var keep_view := Vector2(p.yaw, p.pitch)
+	var wt: Node = main.weapons
+	var keep_aim: Vector2 = wt._aim if wt else Vector2.ZERO
+	if wt:
+		wt._aim = Vector2.ZERO
 	await get_tree().physics_frame
-	cam.look_at(_part(tb, "chest").global_position)
+	_view_at(p, _part(tb, "chest").global_position)
 	var seen := _crosshair_on(tb)
-	cam.look_at(_part(tb, "chest").global_position + global_transform.basis.x * 8.0)
-	ok = _check("track: the crosshair ray finds the bot, and misses beside it", seen and not _crosshair_on(tb), seen) and ok
+	var punched := true
+	if wt:
+		# the view stays on the chest while a spray's aim punch sends the rounds over the bot: no time on target
+		wt._aim = Vector2(_f("track_test_punch"), 0.0)
+		punched = _crosshair_on(tb)
+		wt._aim = Vector2.ZERO
+	_view_at(p, _part(tb, "chest").global_position + global_transform.basis.x * 8.0)
+	ok = _check("track: the aim ray finds the bot, and misses beside it", seen and not _crosshair_on(tb), seen) and ok
+	ok = _check("track: view on the bot but aim punch over it earns nothing", not punched, punched) and ok
+	p.yaw = keep_view.x
+	p.rotation_degrees.y = keep_view.x
+	p.pitch = keep_view.y
 	cam.transform = keep_cam
+	if wt:
+		wt._aim = keep_aim
 	var base := _on_target  # the real trigger is never held headless, so _physics_process adds nothing
 	_track_tick(tick, false, true, true)
 	_track_tick(tick, true, false, true)
@@ -2173,6 +2224,10 @@ func _selftest() -> void:
 	var same_frame := _targets.size() == 1 and _targets[0] == orb
 	await get_tree().process_frame
 	ok = _check("flick: pellets and a same-frame round on a hit orb count once, next orb after the frame", same_frame and _hits == 1 and _flick_n == 1 and _shots == 2 and _targets.size() == 1 and _targets[0] != orb, _stats_line()) and ok
+	# every random spot blocked (no tries left): the fallback orb is still in plain sight from the spawn eye
+	var fb := _flick_spot(0, 0.0, V["flick_dist"], V["flick_y"], _f("flick_radius"))
+	var fb_seen := _clear_view(spawn_pos() + Vector3.UP * float(M["eye_height"]), to_global(fb), _f("flick_radius"))
+	ok = _check("flick fallback in plain sight", fb_seen and _inside_arena(to_global(fb)), fb) and ok
 	# a hit that arrives a frame after its shot is not counted (Weapons must deliver hits in the shot's frame)
 	_fire()
 	await get_tree().process_frame
@@ -2273,6 +2328,13 @@ func _selftest() -> void:
 	if real == 0:
 		print("LTEST SKIP shots to kill from the loaded stats (no CS2 weapon stats in this data folder; the PC run checks them)")
 	ok = _check("sheet: bots wear kevlar and helmet", ba.helmet == bool(V["bot_helmet"]) and (_targets[5] as Bot).kevlar == _f("bot_armor"), _f("bot_armor")) and ok
+	# a best is keyed by the scoring rules: changing one (bot armour, say) starts fresh bests
+	var h0 := rules_hash()
+	var keep_armor: Variant = V["bot_armor"]
+	V["bot_armor"] = 0.0 if _f("bot_armor") > 0.0 else 100.0
+	var h1 := rules_hash()
+	V["bot_armor"] = keep_armor
+	ok = _check("best key changes with the scoring rules", h0 != h1 and rules_hash() == h0 and _best_key().ends_with("|r" + h0), [h0, h1, _best_key()]) and ok
 	# best file: whole-file save through a temp file; an unparsable file is set aside, not silently lost
 	var keep := String(V["best_file"])
 	var keep_best := _best
@@ -2319,6 +2381,6 @@ func _selftest() -> void:
 		var avg_key := _best_key()
 		main.weapons.thin = keep_thin
 		_used = keep_used
-		ok = _check("best on class-average stats ranks apart from the real gun", real_key != avg_key and avg_key.ends_with("|avg"), [real_key, avg_key]) and ok
+		ok = _check("best on class-average stats ranks apart from the real gun", real_key != avg_key and avg_key.contains("|avg|"), [real_key, avg_key]) and ok
 	print("LTEST ", "ALL PASS" if ok else "FAILED")
 	get_tree().quit(0 if ok else 1)

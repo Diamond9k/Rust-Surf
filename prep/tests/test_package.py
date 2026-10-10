@@ -285,6 +285,19 @@ class Build(unittest.TestCase):
         out, errs = self.build()
         self.assertTrue(any(e.startswith("README.md does not mention") for e in errs))
 
+    def test_readme_version_must_be_in_the_first_heading(self):
+        p = os.path.join(self.r, "README.md")
+        v = self.ver
+        major, minor, patch = v.split(".")
+        for body, ok in (("# Rust Surf %s\n\ntext\n" % v, True), ("intro line\n# Rust Surf %s (beta)\n" % v, True),
+                         ("# Rust Surf\n\n## Changes\n- %s: everything\n" % v, False),        # only in a changelog line
+                         ("# Rust Surf %s.%s.%s1\n" % (major, minor, patch), False),        # a longer version holding it
+                         ("# Rust Surf 1%s\n" % v, False), ("# Rust Surf %s.1\n" % v, False),
+                         ("# Rust Surf 0.0.1\n\nNow %s\n" % v, False)):
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(body)
+            self.assertEqual(package.check_readme(self.r, v) == [], ok, body)
+
     def test_recipe_with_two_versions(self):
         p = os.path.join(self.r, "melty.recipe.json")
         with open(p, encoding="utf-8") as f:

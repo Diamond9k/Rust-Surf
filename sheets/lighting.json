@@ -106,33 +106,33 @@
     },
     {
       "id": "sun_angular",
-      "value": 0.5,
+      "value": 0.25,
       "note": "DirectionalLight3D angular diameter in degrees: softens shadow edges with distance (the real sun is about 0.53)",
-      "tuned": "2026-10-09 world_r1 renders, by eye"
+      "tuned": "2026-10-10 world_r2b renders (gauntlet round 2), by eye: 0.5 -> 0.25 (r1 critics: the towers cast a soft blob with no lattice; the penumbra over 40 m of tower was wider than the lattice members), crisper lattice shadows seen in world_r2b_7 site_overview; 2026-10-09 world_r1 renders, by eye"
     },
     {
       "id": "sun_disc_deg",
-      "value": 1.1,
+      "value": 1.0,
       "note": "visible sun disc radius in the sky, degrees (a game-sized disc, larger than the real 0.27)",
-      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: small sun disc (was 0.9)"
+      "tuned": "2026-10-10 world_r2b renders (gauntlet round 2), by eye: 1.1 -> 1.0 (a defined disc inside a wider bloom; r1 critics: soft disc, faint halo); 2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: small sun disc (was 0.9)"
     },
     {
       "id": "sun_halo_deg",
       "value": 6,
       "note": "radius of the bright glow around the disc, degrees",
-      "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye: 9 -> 6, a tighter glare round a defined disc (PC r4 judge: blown sun; critics: a soft blob); 2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: small sun with weak bloom (was 6)"
+      "tuned": "2026-10-10 world_r2b renders (gauntlet round 2), by eye: kept 6 after trying 10 (world_r2b_2: the disc lost its edge); 2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye: 9 -> 6, a tighter glare round a defined disc (PC r4 judge: blown sun; critics: a soft blob); 2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: small sun with weak bloom (was 6)"
     },
     {
       "id": "sun_halo",
-      "value": 0.28,
+      "value": 0.2,
       "note": "glow strength around the disc, times the sun light",
-      "tuned": "2026-10-09 world_r1x renders (gauntlet round 1, batch 3): 0.4 -> 0.28 with the disc brighter (gauntlet 3 critics: the sun reads as a soft blob), by eye; 2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: small sun with weak bloom (was 0.22)"
+      "tuned": "2026-10-10 world_r2b renders (gauntlet round 2), by eye: 0.28 -> 0.2 (the near halo merged the disc into a blob once the glow was widened); 2026-10-09 world_r1x renders (gauntlet round 1, batch 3): 0.4 -> 0.28 with the disc brighter (gauntlet 3 critics: the sun reads as a soft blob), by eye; 2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: small sun with weak bloom (was 0.22)"
     },
     {
       "id": "sun_disc_energy",
-      "value": 6,
+      "value": 9,
       "note": "disc brightness, times the sun light (blooms with glow on)",
-      "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye: 14 -> 6 (world_r1b_2 sun render: the 12x disc bloomed into a ~70 px soft blob; at 6x the disc stays well past the glow threshold but keeps a defined edge); 2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): 9 -> 14 (critics: the sun reads as a soft blob), by eye; 2026-10-09 world_r1 renders, by eye"
+      "tuned": "2026-10-10 world_r2b renders (gauntlet round 2), by eye: 6 -> 9 with the halo lower (r1 critics: no bloom), the disc keeps its edge in world_r2b_9; 2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye: 14 -> 6 (world_r1b_2 sun render: the 12x disc bloomed into a ~70 px soft blob; at 6x the disc stays well past the glow threshold but keeps a defined edge); 2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): 9 -> 14 (critics: the sun reads as a soft blob), by eye; 2026-10-09 world_r1 renders, by eye"
     },
     {
       "id": "sun_warm",
@@ -280,9 +280,9 @@
     },
     {
       "id": "fog_aerial",
-      "value": 0.6,
+      "value": 0.35,
       "note": "how much the haze takes the sky colour behind it (1 = distant hills fade into the sky with no grey band)",
-      "tuned": "2026-10-09 world_r3_1x renders (gauntlet 3), by eye: 0.9 -> 0.6 (distant hills keep their own darker colour instead of taking the pale horizon sky); 2026-10-09 world_r2 (gauntlet 2) renders, by eye: distant hills take the blue sky colour instead of a grey band (was 0.75)"
+      "tuned": "2026-10-10 world_r2b renders (gauntlet round 2), by eye: 0.6 -> 0.35 (the haze took the bright sky round the sun and paled the hills under it); 2026-10-09 world_r3_1x renders (gauntlet 3), by eye: 0.9 -> 0.6 (distant hills keep their own darker colour instead of taking the pale horizon sky); 2026-10-09 world_r2 (gauntlet 2) renders, by eye: distant hills take the blue sky colour instead of a grey band (was 0.75)"
     },
     {
       "id": "fog_sky_affect",
@@ -322,9 +322,9 @@
     },
     {
       "id": "glow_intensity",
-      "value": 0.8,
+      "value": 0.85,
       "note": "bloom strength (was a constant in Main.gd)",
-      "tuned": "2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: weak bloom round the sun (was 0.6)"
+      "tuned": "2026-10-10 world_r2b renders (gauntlet round 2), by eye: 0.8 -> 0.85 with the wider levels (0.9 greyed the whole sky in world_r2b_9); 2026-10-09 world_r2 (gauntlet 2) renders, by eye: r1 critics: weak bloom round the sun (was 0.6)"
     },
     {
       "id": "glow_threshold",
@@ -344,13 +344,13 @@
         0,
         0,
         1,
-        0.8,
-        0.8,
-        0.5,
-        0.3
+        0.9,
+        0.9,
+        0.7,
+        0.5
       ],
       "note": "bloom weight per blur level 1..7 (Godot glow levels); the wide levels 5-7 spread a broad glow round the sun disc as Rust's sun has (a look, unverified against Rust's post stack)",
-      "tuned": "2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye: the widest levels 1, 0.8, 0.6 -> 0.8, 0.5, 0.3 (PC r4 judge: blown sun, the bloom whitened a wide patch of sky); 2026-10-09 world_r1 (gauntlet 2) sun render, by eye"
+      "tuned": "2026-10-10 world_r2b renders (gauntlet round 2), by eye: [0,0,1,0.8,0.8,0.5,0.3] -> [0,0,1,0.9,0.9,0.7,0.5]: a wider bloom round the sun (r1 critics: no bloom); additive at threshold 1.6 tried and dropped (world_r2_1: the disc blurred into a blob); 2026-10-09 world_r1b renders (gauntlet round 1, batch 4), by eye: the widest levels 1, 0.8, 0.6 -> 0.8, 0.5, 0.3 (PC r4 judge: blown sun, the bloom whitened a wide patch of sky); 2026-10-09 world_r1 (gauntlet 2) sun render, by eye"
     },
     {
       "id": "shaft_density",
@@ -418,9 +418,21 @@
     },
     {
       "id": "shaft_sky",
-      "value": 0.25,
+      "value": 0.45,
       "note": "share of the shaft light added over open sky itself (the sky shader already draws the halo)",
-      "tuned": "2026-10-09 world_r2_3x renders (gauntlet round 2), by eye; our look (screen-space god rays), unverified against Rust"
+      "tuned": "2026-10-10 world_r2b renders (gauntlet round 2), by eye: 0.25 -> 0.45 now the shafts no longer light the land (shaft_ground), so the rays read against the sky behind the towers; 2026-10-09 world_r2_3x renders (gauntlet round 2), by eye; our look (screen-space god rays), unverified against Rust"
+    },
+    {
+      "id": "shaft_ground",
+      "value": 0.3,
+      "note": "share of the shaft light added over land (the rest only over open sky): the far hills under the sun keep their colour instead of washing to a white veil",
+      "tuned": "2026-10-10 world_r2b renders (gauntlet round 2), by eye: 0.3 (r1 critics: washed-out, speckled far hills under the sun; the shafts no longer jitter over land either); our look (screen-space god rays), unverified against Rust"
+    },
+    {
+      "id": "bounce_land",
+      "value": false,
+      "note": "whether the bounce light also lights the ground and what grows on it (Backdrop.LAND_LAYER); off, the hills and trees facing away from the sun fall into shade instead of washing flat and pale",
+      "tuned": "2026-10-10 world_r2b renders (gauntlet round 2), by eye: false (hills and trees facing away from the sun were lit flat and pale by the bounce fill); a look, unverified against Rust"
     }
   ]
 }

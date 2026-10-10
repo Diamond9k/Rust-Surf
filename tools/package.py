@@ -14,7 +14,9 @@ usage: package.py [<version>] --godot <Godot binary> --data <prep output folder>
 First any dist/RustSurf-<version>.zip and .entries.json of the same version are deleted, so a refused build
 never leaves an older zip that looks released. The sheets are copied over game/data/ and prep/ (game/data/ is
 not in git, so a fresh clone holds none or stale ones; --no-sync only checks). Then the gates, each must pass:
-- tools/preflight.py: every sheet cell filled and verified or honestly labelled unverified
+- tools/preflight.py: every sheet cell filled and verified or honestly labelled unverified, and every
+  gameplay-critical unverified row (weapon, scoring and crosshair sheets) acknowledged unchanged in
+  tools/unverified_ack.json, so a number that may differ from CS2 ships as a decision, not a count
 - python -m unittest discover prep/tests (prep, export checks, items_game/vdata readers, this file), with RS_GODOT
   set to --godot so the game-vs-prep reader test runs (under CI it fails rather than skips without one)
 - release data: --data is this version's prep run on a real Rust + CS2 install (the release candidate run on the
@@ -72,9 +74,13 @@ def recipe_version(root):
 
 
 def check_readme(root, ver):
+    """README.md's first heading names ver as a whole version (0.2.0 is not 0.2.01 nor 10.2.0), so a README left
+    on an older version, or naming the new one only in a changelog line, refuses the build."""
     with open(os.path.join(root, "README.md"), encoding="utf-8") as f:
-        text = f.read()
-    return [] if ver in text else ["README.md does not mention version %s (it ships in the zip as the only doc)" % ver]
+        head = next((l for l in f if l.startswith("# ")), "")
+    if re.search(r"(?<![\d.])%s(?!\d|\.\d)" % re.escape(ver), head):
+        return []
+    return ["README.md does not mention version %s in its first heading (%r; it ships in the zip as the only doc)" % (ver, head.strip())]
 
 
 def prep_sources(root):
@@ -595,6 +601,8 @@ def ci(root, godot, timeout=600, log=print):
     problems, unsure = preflight.check(root)
     errs += ["preflight: " + p for p in problems]
     log("gate: preflight %s, %d cell(s) labelled unverified" % ("clean" if not problems else "%d problem(s)" % len(problems), len(unsure)))
+    # only a release refuses unacknowledged gameplay-critical rows (gates()); a push just says how many wait on review
+    log("gate: %d gameplay-critical unverified row(s) not yet acknowledged for release" % len(preflight.critical_unacked(root)))
     godot = os.path.abspath(godot) if godot and os.path.isfile(godot) else ""
     errs += unit_tests(root, godot, log)
     if not godot:
@@ -623,6 +631,10 @@ def gates(root, godot, data, ver, log=print):
     problems, unsure = preflight.check(root)
     errs = ["preflight: " + p for p in problems]
     log("gate: preflight %s, %d cell(s) labelled unverified" % ("clean" if not problems else "%d problem(s)" % len(problems), len(unsure)))
+    crit = preflight.critical_unacked(root)
+    if crit:  # a gameplay number that may differ from CS2 ships only as a recorded decision (tools/unverified_ack.json)
+        errs.append("preflight: %d gameplay-critical unverified row(s) not acknowledged for this release: %s (review them, then "
+                    "python3 tools/preflight.py --ack)" % (len(crit), ", ".join(crit[:8]) + (" and %d more" % (len(crit) - 8) if len(crit) > 8 else "")))
     errs += unit_tests(root, godot if godot and os.path.isfile(godot) else "", log)
     rd_errs, report = check_release_data(root, os.path.abspath(data) if data else "", ver)
     errs += ["release data: " + e for e in rd_errs]
