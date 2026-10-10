@@ -439,6 +439,7 @@ func _process(delta: float) -> void:
 			fire = float(w.get("_inaccuracy")) * to_rad
 			if on(convars, "cl_crosshairgap_useweaponvalue", "false") and w.has_method("_has") and w._has(id, "crosshair min distance"):
 				_wgap = float(w.stat(id, "crosshair min distance"))
+	_live_vitals()
 	var h := get_viewport().get_visible_rect().size.y
 	var k := 1.0 - exp(-delta * float(H["dynamic_rate"]))  # time-based ease: the same motion at 30 fps or 300
 	_dyn = lerpf(_dyn, spread_to_px(spread, h), k)
@@ -461,8 +462,18 @@ func message(s: String, seconds: float = 2.5) -> void:
 			if _msg_gen == gen:
 				msg_label.text = "")
 
-## Health and armor, bottom-left (numbers and the bars under them). Nothing in the mashup deals damage to the
-## player yet, so Hud starts them at hud.json health/armor; a damage model calls this.
+## The player's own health/armor when it has them (a damage model adds 'health' and 'armor' to the player);
+## until then the hud.json values stand: surf and the aim lobby deal the player no damage.
+func _live_vitals() -> void:
+	var pl: Variant = get_parent().get("player") if get_parent() else null
+	if not (pl is Object):
+		return
+	var hp: Variant = (pl as Object).get("health")
+	var ar: Variant = (pl as Object).get("armor")
+	if (hp is float or hp is int) and (float(hp) != _hp or ((ar is float or ar is int) and float(ar) != _armor)):
+		vitals(float(hp), float(ar) if (ar is float or ar is int) else _armor)
+
+## Health and armor, bottom-left (numbers and the bars beside them).
 func vitals(hp: float, armor: float) -> void:
 	_hp = hp
 	_armor = armor

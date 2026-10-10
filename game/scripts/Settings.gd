@@ -253,10 +253,15 @@ func _save() -> void:
 	if f == null:
 		main.hud.message("could not save settings: %s" % error_string(FileAccess.get_open_error()), 3.0)
 		return
-	var wrote := f.store_string(JSON.stringify({"values": out, "keys": keys}, "\t"))
+	var text := JSON.stringify({"values": out, "keys": keys}, "\t")
+	var wrote := f.store_string(text)
+	f.flush()
 	var ferr := f.get_error()
 	f.close()
-	if not wrote or ferr != OK:  # a short write (full disk) never goes over the good file
+	# read the temp back: a short write that only shows at flush or close (full disk) never goes over the good file
+	if wrote and ferr == OK and FileAccess.get_file_as_string(tmp) != text:
+		ferr = ERR_FILE_CORRUPT
+	if not wrote or ferr != OK:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))
 		main.hud.message("could not save settings: %s" % error_string(ferr if ferr != OK else ERR_FILE_CANT_WRITE), 3.0)
 		return
@@ -1263,6 +1268,17 @@ func _uitest() -> void:
 	_changed.clear()
 	_load()
 	ok.call(is_equal_approx(float(vals["sensitivity"]), 4.5), "a whole .tmp (rename failed) wins over the older settings.json")
+	# a torn .tmp (a save cut off mid-write) beside a good settings.json: the good values survive and the file stays
+	DirAccess.remove_absolute(gp.call(FILE + ".bad"))  # left by the unreadable-file case above
+	bf = FileAccess.open(FILE + ".tmp", FileAccess.WRITE)
+	bf.store_string("{ \"values\": { \"sensitivity\": 9")
+	bf.close()
+	_changed.clear()
+	_load()
+	ok.call(is_equal_approx(float(vals["sensitivity"]), 1.5) and FileAccess.file_exists(FILE) and not FileAccess.file_exists(FILE + ".bad"), "a torn .tmp beside a good settings.json keeps the good values (%s)" % vals["sensitivity"])
+	_change("volume", 0.4)
+	var back: Variant = _read(FILE)
+	ok.call(back is Dictionary and not FileAccess.file_exists(FILE + ".tmp") and is_equal_approx(float(back["values"].get("sensitivity", 0.0)), 1.5), "the next save replaces the torn .tmp and keeps the good values")
 	for p in [FILE, FILE + ".tmp", FILE + ".bad"]:
 		DirAccess.remove_absolute(gp.call(p))
 	# a CS2 value past the slider range stays the player's: 0.05 sensitivity is neither clamped on load nor on a nudge

@@ -274,9 +274,9 @@
     },
     {
       "id": "fog_sun_scatter",
-      "value": 0.06,
+      "value": 0.025,
       "note": "how much the haze glows toward the sun",
-      "tuned": "2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): 0.12 -> 0.06 (critics: the land washed out near the horizon under the sun), by eye; 2026-10-09 world_r3_16 sun render (gauntlet 3), by eye: 0.2 -> 0.12 (0.2 washed the hills under the sun white); 2026-10-09 world_r3_1x renders (gauntlet 3), by eye: 0.05 -> 0.2 (haze glows toward the sun: sun-aligned in-scattering the critics asked for); 2026-10-09 world_r3: 0.1 still whitened the hills under the sun; world_r1: 0.25 washed the sky round the sun white"
+      "tuned": "2026-10-09 world_r1_g renders (gauntlet round 1, b4): 0.06 -> 0.025 (the haze toward the sun washed the far hills to a flat grey, (186,189,192) read from sun.png; PC judges: grey horizon band), by eye; 2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): 0.12 -> 0.06 (critics: the land washed out near the horizon under the sun), by eye; 2026-10-09 world_r3_16 sun render (gauntlet 3), by eye: 0.2 -> 0.12 (0.2 washed the hills under the sun white); 2026-10-09 world_r3_1x renders (gauntlet 3), by eye: 0.05 -> 0.2 (haze glows toward the sun: sun-aligned in-scattering the critics asked for); 2026-10-09 world_r3: 0.1 still whitened the hills under the sun; world_r1: 0.25 washed the sky round the sun white"
     },
     {
       "id": "fog_aerial",
@@ -369,6 +369,58 @@
       "value": 160,
       "note": "metres of volumetric haze in front of the camera",
       "tuned": "2026-10-09 world_r2 renders, by eye"
+    },
+    {
+      "id": "shaft_strength",
+      "value": 0.3,
+      "note": "strength of the screen-space sun shafts (Backdrop.sun_shafts) added round the sun; 0 turns the pass off",
+      "tuned": "2026-10-09 world_r1_g renders (gauntlet round 1, b4): strength 0.55 -> 0.3, air 90 -> 350 m (the march lit the whole plain below the sun into a white veil; PC judges: blown sun), by eye; 2026-10-09 world_r2_3x renders (gauntlet round 2), by eye; our look (screen-space god rays), unverified against Rust"
+    },
+    {
+      "id": "shaft_color",
+      "value": [
+        1.0,
+        0.86,
+        0.66
+      ],
+      "note": "colour of the shaft light (warm, as the sun_warm horizon glow)",
+      "tuned": "2026-10-09 world_r2_3x renders (gauntlet round 2), by eye; our look (screen-space god rays), unverified against Rust"
+    },
+    {
+      "id": "shaft_samples",
+      "value": 40,
+      "note": "steps each pixel marches toward the sun on screen",
+      "tuned": "2026-10-09 world_r2_3x renders (gauntlet round 2), by eye; our look (screen-space god rays), unverified against Rust"
+    },
+    {
+      "id": "shaft_reach",
+      "value": 0.75,
+      "note": "share of the way from a pixel to the sun the march covers (longer shafts as it rises)",
+      "tuned": "2026-10-09 world_r2_3x renders (gauntlet round 2), by eye; our look (screen-space god rays), unverified against Rust"
+    },
+    {
+      "id": "shaft_decay",
+      "value": 0.965,
+      "note": "weight kept per step: nearer steps count more, so an occluder darkens the streak right behind it",
+      "tuned": "2026-10-09 world_r2_3x renders (gauntlet round 2), by eye; our look (screen-space god rays), unverified against Rust"
+    },
+    {
+      "id": "shaft_spread_deg",
+      "value": 50,
+      "note": "angular radius round the sun, degrees, over which the shafts fade out",
+      "tuned": "2026-10-09 world_r2_3x renders (gauntlet round 2), by eye; our look (screen-space god rays), unverified against Rust"
+    },
+    {
+      "id": "shaft_air",
+      "value": 350,
+      "note": "metres of air in front of a surface for it to take about two thirds of the shaft light: near things (viewmodel, the ramp underfoot) take almost none",
+      "tuned": "2026-10-09 world_r1_g renders (gauntlet round 1, b4): strength 0.55 -> 0.3, air 90 -> 350 m (the march lit the whole plain below the sun into a white veil; PC judges: blown sun), by eye; 2026-10-09 world_r2_3x renders (gauntlet round 2), by eye; our look (screen-space god rays), unverified against Rust"
+    },
+    {
+      "id": "shaft_sky",
+      "value": 0.25,
+      "note": "share of the shaft light added over open sky itself (the sky shader already draws the halo)",
+      "tuned": "2026-10-09 world_r2_3x renders (gauntlet round 2), by eye; our look (screen-space god rays), unverified against Rust"
     }
   ]
 }

@@ -156,6 +156,9 @@ func _lighting() -> void:
 	e.volumetric_fog_sky_affect = 0.0
 	env.environment = e
 	add_child(env)
+	# screen-space god rays round the sun (the volumetric haze alone is too thin to show them)
+	if float(L["shaft_strength"]) > 0.0:
+		add_child(Backdrop.sun_shafts(L, sun.transform.basis.z))
 
 ## Gauntlet capture hook (Shots.gd): a shots.json row may name a weapon to hold for its picture.
 func shot_setup(r: Dictionary) -> void:
@@ -178,10 +181,35 @@ func _report() -> void:
 		if st is Dictionary:
 			for l: Variant in st.get("player", []):
 				lines.append(str(l))
+			var upd := _cs2_updated(st)
+			if upd != "":
+				lines.append(upd)
+	elif content.missing.size() > 0:
+		lines.append("Prep: setup never finished a run here (no data/prep_status.json): Melty runs it before the first start; if it cannot start, reinstall Rust Surf")
 	_err_lines = lines
 	hud.errors(lines)
 	print("Binds: %s | sens %.2f" % [sinput.source, sinput.sensitivity])  # console only: CS2 shows no such line over the view
 	print("READY course loaded; missing content %d; viewmodel %s; weapons ready %d/%d" % [content.missing.size(), "ok" if viewmodel.ok else "off", weapons.ready_ids.size(), weapons.rows.size()])
+
+## prep.cs2_update_files: the CS2 files' size and time prep recorded against the live ones; after a CS2 update the
+## done file goes, so Melty sets up again on the next start and the guns read this CS2 version's stats.
+func _cs2_updated(st: Dictionary) -> String:
+	var fp: Variant = st.get("cs2_fingerprint")
+	if not fp is Dictionary or paths.cs2_dir == "":
+		return ""
+	for f: Variant in fp.get("files", []):
+		if not f is Dictionary:
+			continue
+		var p := paths.cs2_dir.path_join(str(f.get("path", "")))
+		var fa := FileAccess.open(p, FileAccess.READ)
+		if fa == null:
+			return ""  # no CS2 here (headless tests, a moved install): nothing to compare
+		var size := fa.get_length()
+		fa.close()
+		if size != int(f.get("size", -1)) or absf(float(FileAccess.get_modified_time(p)) - float(f.get("mtime", 0))) > float(fp.get("tolerance_s", 0.0)):
+			DirAccess.remove_absolute(content.dir.path_join("done-%s.txt" % str(st.get("version", ""))))
+			return "Prep: CS2 has updated since setup (%s changed), so gun stats may be out of date: setup runs again on the next start" % str(f.get("path", ""))
+	return ""
 
 func _exit_tree() -> void:
 	if content:

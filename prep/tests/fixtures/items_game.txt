@@ -1,6 +1,6 @@
 // Synthetic items_game.txt for prep/tests. Written by hand, not copied from CS2.
 // Its structure follows CS:GO's items_game.txt (prefabs with nested "attributes", items that name a
-// prefab, prefab chains, [$WIN32]-style conditionals, escaped quotes); the numbers are test values
+// prefab, prefab chains, [$WIN32]-style conditionals, escaped quotes, comments after values, an unquoted value); the numbers are test values
 // chosen so a wrong merge shows up, not CS2 facts.
 #base "items_game_cdn.txt"
 "items_game"
@@ -99,15 +99,15 @@
 				"damage"		"36"
 				"cycletime"		"0.100000"
 				"cycletime"		"0.200000"		[$X360]
-				"armor ratio"		"1.550000"
+				"armor ratio"		"1.550000"	// a comment after a value
 				"range modifier"		"0.980000"
 				"spread"		"0.600000"
 				"inaccuracy fire"		"7.800000"
 				"inaccuracy stand"		"4.900000"
 				"inaccuracy move"		"140.000000"
-				"inaccuracy move"		"999"		[$X360]
+				"inaccuracy move"		"999"		[$X360]	// console value
 				"recovery time stand"		"0.368000"
-				"recoil angle"		"0"
+				"recoil angle"		0
 				"recoil angle variance"		"70"
 				"recoil magnitude"		"30"
 				"recoil magnitude variance"		"0"

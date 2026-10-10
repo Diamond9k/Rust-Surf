@@ -132,14 +132,14 @@
       "id": "health",
       "value": 100,
       "unit": "hp",
-      "note": "shown health: surf and the aim lobby have no damage to the player",
+      "note": "shown health while the player has no 'health' value of its own (Hud._live_vitals reads it once a damage model adds one): surf and the aim lobby deal the player no damage",
       "verified": "fixed by design (no player damage in the mashup)"
     },
     {
       "id": "armor",
       "value": 100,
       "unit": "ap",
-      "note": "shown armor (Kevlar), fixed",
+      "note": "shown armor (Kevlar) while the player has no 'armor' value of its own (see health)",
       "verified": "fixed by design (no player damage in the mashup)"
     },
     {
@@ -280,7 +280,7 @@
       "value": "hitmarker",
       "unit": "sounds.json id",
       "note": "played with the hit marker (only when the player turned it on) if sounds.json has this row; there is none (no CS2 hit sound in content.json), so hits are silent",
-      "verified": "checked: sounds.json has no 'hitmarker' row on 2026-10-09"
+      "verified": "checked: sounds.json has no 'hitmarker' row and rsdata/cs2 holds no hit sound (2026-10-10)"
     },
     {
       "id": "menu_ref_height",
@@ -361,10 +361,10 @@
     },
     {
       "id": "menu_panel_alpha",
-      "value": 0.82,
+      "value": 0.74,
       "unit": "0-1",
       "note": "opacity of the dark panel behind the settings column (over the blurred game)",
-      "verified": "design value after Gauntlet round 2 reviewers asked for a darker, more opaque panel; unverified against the CS2 client"
+      "verified": "design value: 0.82 after Gauntlet round 2 reviewers asked for a more opaque panel, 0.74 after Gauntlet 4 round 1 reviewers asked to see the blurred game behind the menu; unverified against the CS2 client"
     },
     {
       "id": "menu_save_delay",
@@ -375,17 +375,17 @@
     },
     {
       "id": "menu_vignette",
-      "value": 0.6,
+      "value": 0.5,
       "unit": "0-1",
       "note": "how much the blurred game behind the Esc menu darkens toward the corners",
-      "verified": "design value after Gauntlet round 3 visual reviewers (both) said CS2's menu backdrop is darker than this blur; unverified: not checked against the CS2 client"
+      "verified": "design value: 0.6 after Gauntlet round 3 reviewers asked for a darker backdrop, 0.5 after Gauntlet 4 round 1 reviewers asked to see the blurred game; unverified: not checked against the CS2 client"
     },
     {
       "id": "menu_dim",
-      "value": 0.7,
+      "value": 0.5,
       "unit": "0-1",
       "note": "how far the blurred game behind the Esc menu is mixed toward near-black (Settings.gd BLUR shader)",
-      "verified": "design value after Gauntlet round 3 visual reviewers (both) said CS2's menu backdrop is darker than this blur (was 0.6 in code); unverified: not checked against the CS2 client"
+      "verified": "design value after Gauntlet 4 round 1 visual reviewers could not see the game behind the menu at 0.7 and asked for a blurred live frame (round 3 had raised it from 0.6 for a darker backdrop); unverified: not checked against the CS2 client"
     }
   ]
 }

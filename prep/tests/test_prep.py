@@ -354,6 +354,58 @@ class Prep(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertTrue(self.done() and self.status()["ok"])
 
+    def test_cs2_update_exports_everything_fresh(self):
+        """prep_status.json keeps pak01_dir.vpk's size and time; a rerun after CS2 changed it re-exports every CS2
+        file (an old model or sound is not trusted), a rerun on the same CS2 skips what is whole."""
+        vpk = os.path.join(self.cs2, "game", "csgo", "pak01_dir.vpk")
+        code, out = self.main(FakeVRF(items_game_for(WEAPONS)))
+        self.assertEqual(code, 0, out)
+        fp = self.status()["cs2_fingerprint"]
+        self.assertEqual([f["path"] for f in fp["files"]], ["game/csgo/pak01_dir.vpk"])  # steam.inf absent: skipped
+        self.assertEqual(fp["files"][0]["size"], 0)
+        v = FakeVRF(items_game_for(WEAPONS))
+        code, out = self.main(v)
+        self.assertEqual(code, 0, out)
+        same = sum(len(c[0]) for c in v.calls)
+        self.assertNotIn("CS2 has updated", out)
+        with open(vpk, "wb") as f:
+            f.write(b"patched")
+        v = FakeVRF(items_game_for(WEAPONS))
+        code, out = self.main(v)
+        self.assertEqual(code, 0, out)
+        self.assertIn("CS2 has updated since the last setup", out)
+        model = WEAPONS[0]["model"]
+        self.assertIn(model, [f for c in v.calls for f in c[0]])
+        self.assertGreater(sum(len(c[0]) for c in v.calls), same)
+        self.assertEqual(self.status()["cs2_fingerprint"]["files"][0]["size"], 7)
+
+    def test_failed_cs2_update_run_keeps_the_old_fingerprint(self):
+        """A run killed after CS2 updated leaves the last finished export's fingerprint, so the next run still
+        re-exports everything rather than trusting files from the old CS2 version."""
+        code, out = self.main(FakeVRF(items_game_for(WEAPONS)))
+        self.assertEqual(code, 0, out)
+        old = self.status()["cs2_fingerprint"]
+        with open(os.path.join(self.cs2, "game", "csgo", "pak01_dir.vpk"), "wb") as f:
+            f.write(b"patched")
+        def killed(a):
+            raise KeyboardInterrupt
+        with self.assertRaises(KeyboardInterrupt):
+            self.main(FakeVRF(items_game_for(WEAPONS)), steps=(killed,))
+        self.assertEqual(self.status()["cs2_fingerprint"], old)
+        code, out = self.main(FakeVRF(items_game_for(WEAPONS)))
+        self.assertEqual(code, 0, out)
+        self.assertIn("CS2 has updated since the last setup", out)
+
+    def test_fingerprint_changed(self):
+        new = {"files": [{"path": "a", "size": 5, "mtime": 100}], "tolerance_s": 2.0}
+        for old, want in ((None, False), ({}, False), ({"files": []}, False), ("garbage", False),
+                          ({"files": [{"path": "a", "size": 5, "mtime": 101}], "tolerance_s": 2}, False),
+                          ({"files": [{"path": "a", "size": 5, "mtime": 103}], "tolerance_s": 2}, True),
+                          ({"files": [{"path": "a", "size": 6, "mtime": 100}], "tolerance_s": 2}, True),
+                          ({"files": [{"path": "b", "size": 5, "mtime": 100}], "tolerance_s": 2}, True),
+                          ({"files": [{"path": "a", "size": "x", "mtime": 100}], "tolerance_s": 2}, True)):
+            self.assertEqual(prep_cs2.fingerprint_changed(old, new), want, old)
+
     def test_local_data_folder_passes_content_check(self):
         """The real local prep output, when this machine has one (never in the repo)."""
         data = os.environ.get("RS_DATA", "")
@@ -375,9 +427,11 @@ class Sheets(unittest.TestCase):
 
     def test_prep_settings(self):
         cfg = prep_cs2.settings()
-        for k in ("vrf_batch_files", "vrf_batch_chars", "vrf_retries", "vrf_timeout_s"):
+        for k in ("vrf_batch_files", "vrf_batch_chars", "vrf_retries", "vrf_timeout_s", "vrf_file_timeout_s", "vrf_hang_limit", "cs2_update_mtime_tolerance_s"):
             self.assertGreater(int(cfg[k]), 0, k)
         self.assertLess(int(cfg["vrf_batch_chars"]), 32767 - 1024)
+        self.assertLessEqual(int(cfg["vrf_file_timeout_s"]), int(cfg["vrf_timeout_s"]))
+        self.assertIn("game/csgo/pak01_dir.vpk", prep_cs2.keys(cfg["cs2_update_files"]))  # what prep exports from
 
 
 if __name__ == "__main__":

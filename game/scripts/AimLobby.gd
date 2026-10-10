@@ -101,6 +101,7 @@ class Bot extends Node3D:
 	var phase := 0.0       # idle sway offset, so the range never moves in step
 	var fall_side := 1.0   # which way a downed bot twists as it falls
 	var tag := ""
+	var crouched := false
 	var pose: Node3D
 	var head: Node3D        # the head body: it looks around on its own while the bot idles
 	var bodies: Array = []
@@ -1060,6 +1061,9 @@ func _best_key() -> String:
 	if _used.size() > 1:
 		return ""
 	var w := String(_used.keys()[0]) if _used.size() == 1 else (String(main.weapons.held()) if main.weapons else "")
+	var thin: Variant = main.weapons.get("thin") if main.weapons else null
+	if thin is Dictionary and (thin as Dictionary).has(w):
+		return "%s|%s|avg" % [mode, w]  # a gun on class-average stats ranks apart: its score never stands for the real gun
 	return "%s|%s" % [mode, w]
 
 func _refresh_hud() -> void:
@@ -1255,14 +1259,17 @@ func _shot_time() -> float:
 		return float(w._last_shot)
 	return _t()
 
-## Weapons calls this once per trigger pull, hit or miss, before that pull's hits.
+## Weapons calls this once per trigger pull, hit or miss, before that pull's hits. A pull from past the firing
+## line never counts either way: not a shot (no miss cost, no accuracy), and its hits are dropped.
 func on_shot_fired() -> void:
 	if not (active and _state == "round"):
 		return
-	_shots += 1
-	_last_shot_at = _shot_time()
 	_shot_frame = Engine.get_process_frames()
 	_shot_ok = _behind_line()
+	if not _shot_ok:
+		return
+	_shots += 1
+	_last_shot_at = _shot_time()
 	_shot_weapon = String(main.weapons.held()) if main.weapons else ""
 	_used[_shot_weapon] = true
 
@@ -1577,7 +1584,8 @@ func _spawn_bots() -> void:
 		var a: Array = s
 		i += 1
 		var at := Vector3(_lane_x(float(a[0])) + float(a[2]), float(a[4]), _f("firing_line_z") - float(a[1]))
-		_targets.append(_bot(at, _rng.randf_range(-1.0, 1.0) * _f("bot_yaw_jitter"), int(a[3]), "BOT %02d" % i))
+		var crouch := a.size() > 6 and int(a[6]) == 1
+		_targets.append(_bot(at, _rng.randf_range(-1.0, 1.0) * _f("bot_yaw_jitter"), int(a[3]), "BOT %02d" % i, crouch))
 
 # --- humanoid bots ---
 
@@ -1632,8 +1640,83 @@ func _shape_of(r: Dictionary) -> Array:
 		var box := BoxShape3D.new()
 		box.size = Vector3(float(hb[3]), float(hb[4]), float(hb[5])) * H
 		out[2] = box
-		out[4] = (out[0] as Transform3D).affine_inverse() * Transform3D(Basis(), Vector3(float(hb[0]), float(hb[1]), float(hb[2])) * H)
+		var hb_basis: Basis = r.get("_turn", Basis())  # a crouched torso's lean turns its hit box with it
+		out[4] = (out[0] as Transform3D).affine_inverse() * Transform3D(hb_basis, Vector3(float(hb[0]), float(hb[1]), float(hb[2])) * H)
 	return out
+
+## The squat a crouched bot (bot_spots column 7) holds, in the bot frame (fractions of H): the body above the
+## hips drops by the duck hull (movement.json hull_height - duck_hull_height, as CS2's crouch shortens the hull)
+## and leans forward about the hips (bot_crouch lean); each leg is solved again from its planted foot up to its
+## lowered hip with the knee forward, and the thigh and shin turn rigidly onto their new bones.
+var _rig := {}
+
+func _crouch_rig() -> Dictionary:
+	if not _rig.is_empty():
+		return _rig
+	var c: Dictionary = V["bot_crouch"]
+	var pts := {}
+	for r in S["parts"]:
+		pts[String(r["id"])] = [_a3(r["a"]), _a3(r["b"])]
+	var drop := 1.0 - float(M["duck_hull_height"]) / float(M["hull_height"])
+	var lean := Basis(Vector3.RIGHT, deg_to_rad(float(c["lean_deg"])))
+	var legs: Array = []
+	var hip_y := 0.0
+	var hip_z := 0.0
+	for l in c["legs"]:
+		hip_y += (pts[String(l[0])][0] as Vector3).y / c["legs"].size()
+		hip_z += (pts[String(l[0])][0] as Vector3).z / c["legs"].size()
+	var hc := Vector3(0.0, hip_y, hip_z)
+	for l in c["legs"]:
+		var hp: Vector3 = pts[String(l[0])][0]
+		var k: Vector3 = pts[String(l[0])][1]
+		var an: Vector3 = pts[String(l[1])][1]
+		var l1 := hp.distance_to(k)
+		var l2 := k.distance_to(an)
+		var h2 := hc + lean * (hp - hc) + Vector3.DOWN * drop
+		var d := clampf(an.distance_to(h2), 0.01, (l1 + l2) * 0.999)
+		var u := (h2 - an).normalized()
+		h2 = an + u * d
+		var n := (Vector3.BACK - u * u.dot(Vector3.BACK)).normalized()  # the knee bends toward the player
+		var along := (l2 * l2 - l1 * l1 + d * d) / (2.0 * d)
+		var k2 := an + u * along + n * sqrt(maxf(l2 * l2 - along * along, 0.0))
+		legs.append({"hip": hp, "knee": k, "ankle": an, "hip2": h2, "knee2": k2,
+			"thigh": Basis(Quaternion((k - hp).normalized(), (k2 - h2).normalized())),
+			"shin": Basis(Quaternion((k - an).normalized(), (k2 - an).normalized()))})
+	_rig = {"hc": hc, "drop": drop, "lean": lean, "legs": legs, "mid": float(c["mid_x"])}
+	return _rig
+
+## Which bone carries a standing-pose point: [point in the squat, turn of that bone].
+func _crouch_pt(rig: Dictionary, p: Vector3) -> Array:
+	var leg: Dictionary = {}
+	for l in rig["legs"]:
+		if signf((l["hip"] as Vector3).x) == signf(p.x):
+			leg = l
+	if leg.is_empty() or absf(p.x) < float(rig["mid"]) or p.y >= (leg["hip"] as Vector3).y:
+		var hc: Vector3 = rig["hc"]
+		return [hc + (rig["lean"] as Basis) * (p - hc) + Vector3.DOWN * float(rig["drop"]), rig["lean"]]
+	if p.y >= (leg["knee"] as Vector3).y:
+		return [(leg["hip2"] as Vector3) + (leg["thigh"] as Basis) * (p - (leg["hip"] as Vector3)), leg["thigh"]]
+	if p.y >= (leg["ankle"] as Vector3).y:
+		return [(leg["ankle"] as Vector3) + (leg["shin"] as Basis) * (p - (leg["ankle"] as Vector3)), leg["shin"]]
+	return [p, Basis()]  # the feet stay planted
+
+## A part or prop row moved into the crouch rig's squat (unchanged when rig is empty): its points, and its hit
+## box centre and turn.
+func _posed(r: Dictionary, rig: Dictionary) -> Dictionary:
+	if rig.is_empty():
+		return r
+	var o := r.duplicate()
+	var a: Array = _crouch_pt(rig, _a3(r["a"]))
+	o["a"] = [a[0].x, a[0].y, a[0].z]
+	if String(r["shape"]) in ["capsule", "taper", "beam"]:
+		var b: Array = _crouch_pt(rig, _a3(r["b"]))
+		o["b"] = [b[0].x, b[0].y, b[0].z]
+	var hb: Variant = r.get("hit", "auto")
+	if hb is Array:
+		var c: Array = _crouch_pt(rig, Vector3(float(hb[0]), float(hb[1]), float(hb[2])))
+		o["hit"] = [c[0].x, c[0].y, c[0].z, hb[3], hb[4], hb[5]]
+		o["_turn"] = c[1]
+	return o
 
 var _meshes := {}
 
@@ -1798,7 +1881,7 @@ func _slot_mat(outfit: int, slot: String) -> Material:
 
 ## A standing humanoid facing the firing line: every sheet part is its own hittable body in its hitgroup
 ## (the head with is_head=true), all sharing the bot as unit; props ride on parts so they fall with them.
-func _bot(at: Vector3, yaw_deg: float, outfit: int, tag: String) -> Bot:
+func _bot(at: Vector3, yaw_deg: float, outfit: int, tag: String, crouch := false) -> Bot:
 	outfit = clampi(outfit, 0, S["outfits"].size() - 1)
 	var o: Dictionary = S["outfits"][outfit]
 	var b := Bot.new()
@@ -1814,8 +1897,10 @@ func _bot(at: Vector3, yaw_deg: float, outfit: int, tag: String) -> Bot:
 	b.add_child(b.pose)
 	add_child(b)
 	var by_id := {}
+	var rig := _crouch_rig() if crouch else {}
+	b.crouched = crouch
 	for r in S["parts"]:
-		var s := _shape_of(r)
+		var s := _shape_of(_posed(r, rig))
 		var tb := _target(b, s[2], s[1], _slot_mat(outfit, String(r["slot"])), s[0], String(r["group"]) == "head", String(r["group"]), b.pose, s[4])
 		(tb.get_child(0) as MeshInstance3D).scale = s[3]
 		(tb.get_child(0) as MeshInstance3D).set_instance_shader_parameter("base_y", b.global_position.y)
@@ -1831,7 +1916,7 @@ func _bot(at: Vector3, yaw_deg: float, outfit: int, tag: String) -> Bot:
 		var on: Node3D = by_id.get(String(r["on"]))
 		if on == null:
 			continue
-		var s := _shape_of(r)
+		var s := _shape_of(_posed(r, rig))
 		var mi := MeshInstance3D.new()
 		mi.mesh = s[1]
 		mi.material_override = _slot_mat(outfit, String(r["slot"]))
@@ -1893,6 +1978,20 @@ func _selftest() -> void:
 	var b0 := _targets[0] as Bot
 	var b1 := _targets[1] as Bot
 	var b2 := _targets[2] as Bot
+	# a crouched bot: the head drops by the duck hull, the feet stay planted, every limb keeps its length
+	var cb: Bot = null
+	for t in _targets:
+		if (t as Bot).crouched and cb == null:
+			cb = t
+	var drop_m := (1.0 - float(M["duck_hull_height"]) / float(M["hull_height"])) * H
+	var dh := b0.head.position.y - cb.head.position.y if cb else 0.0
+	var same_len := cb != null
+	if cb:
+		for id in ["thigh_r", "shin_r", "thigh_l", "shin_l"]:
+			var hs := (_part(b0, id).get_child(1) as CollisionShape3D).shape as CapsuleShape3D
+			var hc := (_part(cb, id).get_child(1) as CollisionShape3D).shape as CapsuleShape3D
+			same_len = same_len and is_equal_approx(snappedf(hs.height, 0.0001), snappedf(hc.height, 0.0001))
+	ok = _check("crouched bot: head lower by the duck drop, feet planted, limbs keep their length", cb != null and dh > drop_m * 0.95 and dh < drop_m * 1.2 and _part(cb, "foot_r").position.is_equal_approx(_part(b0, "foot_r").position) and same_len and _part(cb, "shin_r").position.z > _part(b0, "shin_r").position.z, "head %.3f m lower (drop %.3f m)" % [dh, drop_m]) and ok
 	_part(b0, "head").hit(400.0, true, Vector3.ZERO)
 	ok = _check("hit with no shot ignored", _hits == 0 and b0.hp == 100.0, _stats_line()) and ok
 	_fire()
@@ -1918,18 +2017,19 @@ func _selftest() -> void:
 	p.global_position = to_global(Vector3(0, 0.05, _f("firing_line_z") - 2.0))
 	_fire()
 	_part(b2, "head").hit(400.0, true, Vector3.ZERO)
-	ok = _check("shot from past the line ignored", _kills == 2 and b2.alive, _stats_line()) and ok
+	ok = _check("shot from past the line ignored, and not charged as a miss", _kills == 2 and b2.alive and _shots == 6, _stats_line()) and ok
 	p.global_position = spawn_pos()
 	var t0 := Time.get_ticks_msec()
 	while not b0.alive and Time.get_ticks_msec() - t0 < 6000:
 		await get_tree().process_frame
 	ok = _check("bot stands back up", b0.alive and b0.hp == b0.hp_max and (b0.bodies[0] as CollisionObject3D).collision_layer == 1, b0.alive) and ok
 	_left = 0.01
-	await get_tree().process_frame
-	await get_tree().process_frame
+	t0 = Time.get_ticks_msec()
+	while _state == "round" and Time.get_ticks_msec() - t0 < 2000:  # a slow frame's step can be held back by the Weapons clock
+		await get_tree().process_frame
 	ok = _check("summary", _state == "summary" and _summary.visible and _targets.is_empty(), _sum_body.text.replace("\n", " | ")) and ok
 	_fire()
-	ok = _check("no shots after the round", _shots == 7, _shots) and ok
+	ok = _check("no shots after the round", _shots == 6, _shots) and ok
 	_quick = false
 	_start_round()
 	_fire()
@@ -2208,5 +2308,17 @@ func _selftest() -> void:
 			DirAccess.remove_absolute(String(V["best_file"]) + f)
 	V["best_file"] = keep
 	_best = keep_best
+	# a gun on class-average stats ranks apart from the same gun on its real stats
+	if main.weapons:
+		var keep_used := _used
+		var keep_thin: Dictionary = main.weapons.thin
+		_used = {"cs2_ak47": true}
+		main.weapons.thin = {}
+		var real_key := _best_key()
+		main.weapons.thin = {"cs2_ak47": PackedStringArray(["damage"])}
+		var avg_key := _best_key()
+		main.weapons.thin = keep_thin
+		_used = keep_used
+		ok = _check("best on class-average stats ranks apart from the real gun", real_key != avg_key and avg_key.ends_with("|avg"), [real_key, avg_key]) and ok
 	print("LTEST ", "ALL PASS" if ok else "FAILED")
 	get_tree().quit(0 if ok else 1)

@@ -265,13 +265,23 @@ def export(run, outdir, files, extra, cfg, fresh=False, retries=None):
     return lost
 
 
-def vrf_runner(vrf, vpk, outdir, timeout):
+def vrf_runner(vrf, vpk, outdir, timeout, file_timeout=None, hang_limit=0):
+    """run(files, extra) -> True on exit 0. A call of one file (every retry) gets file_timeout instead of timeout,
+    and after hang_limit calls have timed out in one run a PrepError stops setup with the reason, rather than a
+    VRF that hangs on every file holding the player at a frozen setup window for hours (0: no limit)."""
+    hung = []
+
     def run(files, extra):
         cmd = [vrf, "-i", vpk, "-o", outdir, "-d", "-f", ",".join(files)] + extra
+        t = file_timeout if file_timeout and len(files) == 1 else timeout
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=t)
         except subprocess.TimeoutExpired:
-            LOG("  VRF timed out after %ds on %d file(s)" % (timeout, len(files)))
+            LOG("  VRF timed out after %ds on %d file(s)" % (t, len(files)))
+            hung.append(files[0])
+            if hang_limit and len(hung) >= hang_limit:
+                raise PrepError("Source2Viewer-CLI stopped responding on %d exports (%s), so setup stopped instead of waiting on every file: "
+                                "verify CS2's files in Steam and let your antivirus allow Rust Surf's prep folder, then start again" % (len(hung), short(hung, 3)))
             return False
         except OSError as e:
             raise PrepError("Source2Viewer-CLI could not start (%s): reinstall Rust Surf so prep/vrf is complete" % e)
@@ -451,6 +461,37 @@ def number(v):
         return False
 
 
+def cs2_fingerprint(cs2, cfg):
+    """{"files": [{"path", "size", "mtime"}], "tolerance_s"}: size and modified time (whole seconds) of the
+    cs2_update_files that exist in the CS2 folder. prep_status.json keeps it; the game compares it with the live
+    files at start (Main._cs2_updated) and removes the done file when CS2 has updated, so setup reads the new
+    stats on the next start; prep exports every CS2 file fresh when it differs from the last run's."""
+    out = []
+    for rel in keys(cfg["cs2_update_files"]):
+        try:
+            st = os.stat(os.path.join(cs2, *rel.split("/")))
+        except OSError:
+            continue
+        out.append({"path": rel, "size": st.st_size, "mtime": int(st.st_mtime)})
+    return {"files": out, "tolerance_s": float(cfg["cs2_update_mtime_tolerance_s"])}
+
+
+def fingerprint_changed(old, new):
+    """True when an earlier run's fingerprint names a file set, size or modified time (beyond its tolerance)
+    that the current CS2 files no longer match. No earlier fingerprint is no change: nothing to compare."""
+    if not isinstance(old, dict) or not old.get("files"):
+        return False
+    tol = float(old.get("tolerance_s", 0))
+    was = {f.get("path"): f for f in old["files"] if isinstance(f, dict)}
+    now = {f["path"]: f for f in new.get("files", [])}
+    if set(was) != set(now):
+        return True
+    try:
+        return any(int(was[p]["size"]) != now[p]["size"] or abs(float(was[p]["mtime"]) - now[p]["mtime"]) > tol for p in now)
+    except (KeyError, TypeError, ValueError):
+        return True  # a damaged record: export fresh rather than trust it
+
+
 def cs2_step(a, here=HERE):
     """Exports everything; returns (problems, warnings) as player-facing sentences."""
     vpk = os.path.join(a.cs2, "game", "csgo", "pak01_dir.vpk")
@@ -462,7 +503,11 @@ def cs2_step(a, here=HERE):
     cfg = settings(here)
     outdir = os.path.join(a.out, "cs2")
     os.makedirs(outdir, exist_ok=True)
-    run = a.runner(vpk, outdir, int(cfg["vrf_timeout_s"])) if getattr(a, "runner", None) else vrf_runner(a.vrf, vpk, outdir, int(cfg["vrf_timeout_s"]))
+    run = a.runner(vpk, outdir, int(cfg["vrf_timeout_s"])) if getattr(a, "runner", None) else \
+        vrf_runner(a.vrf, vpk, outdir, int(cfg["vrf_timeout_s"]), int(cfg["vrf_file_timeout_s"]), int(cfg["vrf_hang_limit"]))
+    fresh = bool(getattr(a, "cs2_changed", False))  # CS2 updated since the last setup: no earlier export is trusted
+    if fresh:
+        LOG("CS2 has updated since the last setup: every CS2 file is exported fresh")
     gl = GLTF + ["--game", gi]
     plain, gltf = content_sources(sheet("content", here)["rows"])
     ws = sheet("weapons", here)
@@ -472,9 +517,10 @@ def cs2_step(a, here=HERE):
     LOG("cs2 weapons.vdata (optional)")
     export(run, outdir, [cfg["weapons_vdata"]], [], cfg, fresh=True, retries=0)  # optional: only missing stats are a problem
     LOG("cs2 sounds: %d" % len(set(plain + wsounds)))
-    lost += export(run, outdir, plain + wsounds, [], cfg)
+    lost += export(run, outdir, plain + wsounds, [], cfg, fresh=fresh)
     LOG("cs2 models+clips: %d" % len(set(gltf + wmodels)))
-    lost += export(run, outdir, gltf + wmodels, gl, cfg)
+    lost += export(run, outdir, gltf + wmodels, gl, cfg, fresh=fresh)
+    a.cs2_exported = True  # every file was exported (or tried) against this CS2 version: prep.finish records it
     problems, warnings = write_stats(outdir, ws, here)
     base = [s for s in plain + gltf if not present(outdir, s)]
     if base:

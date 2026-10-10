@@ -62,7 +62,7 @@ class Build(unittest.TestCase):
         self.smoked = []
         def smoke(cmd, cwd, timeout, log):  # the bundle's python.exe is a stub here; a real one runs only on Windows
             self.smoked.append(cmd)
-            return 0, "BUNDLE OK 3.12.10\n"
+            return (0, "BUNDLE OK 3.12.10\n") if cmd[0].endswith("python.exe") else (1, "Usage: tool [options]\n")
         kw.setdefault("smoke", smoke)
         with contextlib.redirect_stdout(io.StringIO()):
             return package.build(self.r, **kw)
@@ -95,6 +95,26 @@ class Build(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.r, "dist", "RustSurf-%s.zip" % self.ver)))
         out, errs = self.build(smoke=lambda *a: (0, "no verdict"))
         self.assertIsNone(out)
+
+    def test_tools_must_start_from_the_bundle(self):
+        """vrf/ and vgm/ each start and print their usage from the bundle; a missing DLL (wine's err:module, or no usage
+        screen at all) refuses the build and names the tool."""
+        out, errs = self.build()
+        self.assertEqual(errs, [])
+        self.assertEqual([c[0] for c in self.smoked[1:]], [os.path.join(self.b, "vrf", "Source2Viewer-CLI.exe"), os.path.join(self.b, "vgm", "vgmstream-cli.exe")])
+        self.assertEqual(self.smoked[1][1:], ["--help"])
+        def missing_dll(cmd, cwd, timeout, log):
+            if cmd[0].endswith("python.exe"):
+                return 0, "BUNDLE OK 3.12.10\n"
+            if "vgm" in cmd[0]:
+                return 53, "0024:err:module:import_dll Library libvorbis.dll (needed by vgmstream-cli.exe) not found"
+            return 0, "Usage: Source2Viewer-CLI [options]"
+        out, errs = self.build(smoke=missing_dll)
+        self.assertIsNone(out)
+        self.assertEqual(len(errs), 1, errs)
+        self.assertIn("vgm/vgmstream-cli.exe did not start (exit 53)", errs[0])
+        out, errs = self.build(smoke=lambda cmd, *a: (0, "BUNDLE OK 3.12.10") if cmd[0].endswith("python.exe") else (-1, "timed out after 120s: "))
+        self.assertEqual(len(errs), 2, errs)
 
     def test_smoke_line_runs_here(self):
         """The import line itself, on this Python and the repo's prep (UnityPy stubbed when it is not installed)."""
@@ -334,6 +354,11 @@ if "--wtest" in a:
              "srcmiscount": ["reequip_idle idle clip on three equips: []"]}.get(mode, [])
     for f in fails:
         print("WTEST FAIL " + f)
+    if not src or mode == "srcskip":  # the exported pck has no prep/tests beside it, so the game skips these
+        print("WTEST PASS items_game_parity skipped: no prep/tests fixture beside this build")
+        print("WTEST PASS fixture_stats skipped: no prep/tests fixture beside this build")
+    if mode == "skipother":
+        print("WTEST PASS spray_fps_independent skipped: no reason")
     sheets = os.path.join(os.path.dirname(a[a.index("--path") + 1]), "sheets") if src else ""
     if os.path.isfile(os.path.join(sheets, "weapon_defaults.json")):  # what the game prints when it read the data folder's stats
         import json
@@ -460,6 +485,15 @@ class Gate(unittest.TestCase):
         errs = package.godot_gate(self.r, self.godot, self.data, timeout=2, log=lambda s: None)
         self.assertTrue(any(e.startswith("Godot --uitest on the exported pck: exit -1") for e in errs), errs)
 
+    def test_skips_are_named_and_only_covered_ones_pass(self):
+        """A check that PASSes as "skipped" tested nothing: on the exported pck only the two kv_parity covers may."""
+        errs, lines = self.gate("ok")
+        self.assertEqual(errs, [])
+        self.assertIn("gate: --wtest skipped items_game_parity, fixture_stats (covered elsewhere)", lines)
+        errs, _ = self.gate("skipother")
+        self.assertEqual(len(errs), 1, errs)
+        self.assertIn("spray_fps_independent passed only by skipping", errs[0])
+
     def test_missing_godot_or_data(self):
         self.assertTrue(package.godot_gate(self.r, "", self.data)[0].startswith("no Godot binary"))
         self.assertTrue(package.godot_gate(self.r, self.godot, os.path.join(self.r, "nope"))[0].startswith("no extracted data folder"))
@@ -498,6 +532,13 @@ class Ci(unittest.TestCase):
         errs, _ = self.ci("srcengerr")
         self.assertEqual(len(errs), 1, errs)
         self.assertIn("Failed loading resource", errs[0])
+
+    def test_no_skip_allowed_on_the_source_project(self):
+        """The source project has prep/tests beside it, so a skipped reader check there is a broken test."""
+        errs, _ = self.ci("srcskip")
+        self.assertEqual(len(errs), 1, errs)
+        self.assertIn("items_game_parity passed only by skipping", errs[0])
+        self.assertIn("fixture_stats passed only by skipping", errs[0])
 
     def test_excuse_needs_the_test_own_count_to_agree(self):
         errs, _ = self.ci("srcmiscount")

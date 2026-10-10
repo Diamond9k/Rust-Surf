@@ -167,5 +167,60 @@ class Stats(unittest.TestCase):
             shutil.rmtree(d)
 
 
+class Edges(unittest.TestCase):
+    """KeyValues details the fixture does not spell out, on small inline texts (test values, not CS2 facts)."""
+
+    def test_comment_after_a_value_and_after_a_conditional(self):
+        root = items_game.parse('"a" { "damage" "36" // per bullet\n "rate" "0.1" [$X360] // console only\n "rate" "0.2" [$WIN32]// pc\n }')
+        self.assertEqual(root["a"], {"damage": "36", "rate": "0.2"})
+
+    def test_value_ending_in_an_escaped_backslash(self):
+        root = items_game.parse('"a" { "path" "C:\\\\" "next" "x" }')
+        self.assertEqual(root["a"], {"path": "C:\\", "next": "x"})
+
+    def test_unquoted_tokens(self):
+        root = items_game.parse('items_game { prefabs { rifle { attributes { damage 36 "cycletime" 0.1 } } } }')
+        self.assertEqual(root["items_game"]["prefabs"]["rifle"]["attributes"], {"damage": "36", "cycletime": "0.1"})
+
+    def test_false_conditional_on_a_block_key_drops_the_whole_block(self):
+        root = items_game.parse('"a" { "attributes" [$X360] { "damage" "1" } "attributes" { "damage" "2" } }')
+        self.assertEqual(root["a"]["attributes"], {"damage": "2"})
+
+    def test_prefab_cycle_does_not_hang(self):
+        d = tempfile.mkdtemp()
+        try:
+            p = os.path.join(d, "items_game.txt")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write('"items_game" { "prefabs" { "x" { "prefab" "y" "attributes" { "damage" "5" } } "y" { "prefab" "x weapon_base" }'
+                        ' "weapon_base" { "attributes" { "range" "4096" } } }'
+                        ' "items" { "1" { "name" "weapon_x" "prefab" "x" } } }')
+            self.assertEqual(items_game.stats(p, ["weapon_x"])["weapon_x"], {"damage": "5", "range": "4096"})
+        finally:
+            shutil.rmtree(d)
+
+    def test_a_file_the_size_of_the_real_one(self):
+        """The fixture padded to about 6 MB with sticker kits, the bulk of a real items_game.txt (its size is from
+        memory, unverified): read whole, the AK's chain intact, well inside a setup's time; cut by a byte, refused."""
+        import time
+        text = fixture_text()
+        kit = '\t\t"%d"\n\t\t{\n\t\t\t"name"\t\t"kit_%d"\n\t\t\t"description_string"\t\t"#StickerKit_%d \\"q\\""\n\t\t\t"item_rarity"\t\t"rare"\n\t\t}\n'
+        big = text.replace('"sticker_kits"\n\t{\n', '"sticker_kits"\n\t{\n' + "".join(kit % (k, k, k) for k in range(2, 45000)), 1)
+        self.assertGreater(len(big), 5000000)
+        d = tempfile.mkdtemp()
+        try:
+            p = os.path.join(d, "items_game.txt")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(big)
+            t = time.time()
+            self.assertTrue(items_game.whole(p))
+            self.assertEqual(items_game.stats(p, ["weapon_ak47"])["weapon_ak47"]["damage"], "36")
+            self.assertLess(time.time() - t, 60)
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(big.rstrip()[:-1])
+            self.assertFalse(items_game.whole(p))
+        finally:
+            shutil.rmtree(d)
+
+
 if __name__ == "__main__":
     unittest.main()

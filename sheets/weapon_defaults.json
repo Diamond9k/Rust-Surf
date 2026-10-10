@@ -546,6 +546,38 @@
    "verified": "unverified: eyeballed"
   },
   {
+   "id": "scope_dot_classes",
+   "value": "rifle",
+   "used_in": "weapon classes (comma list) whose scope draws the rifle overlay (smaller lens, red dot, no cross lines) instead of the sniper one: the AUG and SG 553",
+   "source": "CS2 play knowledge: the AUG and SG 553 scopes show a red dot, not the AWP's cross (round 1 code critic)",
+   "verified": "unverified: from memory of CS2, overlay not captured"
+  },
+  {
+   "id": "scope_dot_lens",
+   "value": 0.82,
+   "used_in": "rifle scope lens diameter as a share of window height",
+   "source": "mashup estimate of the CS2 AUG / SG 553 overlay",
+   "verified": "unverified: eyeballed from memory"
+  },
+  {
+   "id": "scope_dot_px",
+   "value": 3.0,
+   "used_in": "rifle scope red dot radius in pixels at 1080p",
+   "source": "mashup estimate of the CS2 AUG / SG 553 overlay",
+   "verified": "unverified: eyeballed from memory"
+  },
+  {
+   "id": "scope_dot_color",
+   "value": [
+    1.0,
+    0.12,
+    0.08
+   ],
+   "used_in": "rifle scope dot colour, linear RGB 0..1",
+   "source": "mashup estimate of the CS2 AUG / SG 553 overlay",
+   "verified": "unverified: eyeballed from memory"
+  },
+  {
    "id": "pen_hits",
    "value": 4,
    "used_in": "surfaces one bullet may pass through",
@@ -576,7 +608,7 @@
   {
    "id": "pen_mod_world",
    "value": 0.5,
-   "used_in": "penetration modifier of world surfaces (concrete-like)",
+   "used_in": "penetration modifier of a world surface without a pen_mod meta (Weapons.pen_mod): concrete-like; a scene may set pen_mod on a collider (wood, metal) to override it",
    "source": "mashup estimate: CS surface modifiers not read",
    "verified": "unverified"
   },
@@ -618,9 +650,16 @@
   {
    "id": "knife_hull",
    "value": 16,
-   "used_in": "half size of the knife's fallback hull when the ray misses, units",
-   "source": "CS:GO knife hull trace",
-   "verified": "unverified for CS2"
+   "used_in": "half width (x and depth) of the box swept from the eye to the knife's reach when the ray misses, units",
+   "source": "CS:GO knife UTIL_TraceHull with head_hull_mins/maxs (-16,-16,-18)..(16,16,18), recalled from memory of the SDK",
+   "verified": "unverified for CS2 (CS:GO SDK from memory)"
+  },
+  {
+   "id": "knife_hull_z",
+   "value": 18,
+   "used_in": "half height of the swept knife box, units (Godot y, Source z)",
+   "source": "CS:GO knife UTIL_TraceHull head hull height (-18..18), recalled from memory of the SDK",
+   "verified": "unverified for CS2 (CS:GO SDK from memory)"
   },
   {
    "id": "knife_slash_first",
@@ -745,8 +784,8 @@
    "id": "land_velocity_scale",
    "value": 1.0,
    "used_in": "landing penalty = inaccuracy land x fall speed (units/s) x this, added to the fire inaccuracy",
-   "source": "mashup reading of CS:GO CWeaponCSBase::OnLand (penalty = inaccuracy land x fall velocity); whether CS scales the velocity first was not checked",
-   "verified": "unverified: the velocity scaling of CS's landing penalty was not checked"
+   "source": "CS:GO SDK recalled: CGameMovement::CheckFalling ends with OnLand(m_flFallVelocity) ('let any subclasses know that the player has landed and how hard'), and CWeaponCSBase::OnLand adds inaccuracy land x that velocity to the accuracy penalty; so a 302 u/s jump landing adds about 3/4 of a rifle's take-off cone, which then recovers over the recovery time",
+   "verified": "unverified: CS:GO SDK from memory, CS2 not checked (a normalised 0..1 volume would make the attribute invisible next to the stand cone, which argues for the raw velocity)"
   },
   {
    "id": "air_spread_scale",

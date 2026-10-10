@@ -106,16 +106,16 @@
     {
       "id": "lobby",
       "pos": [
-        0,
+        -1.0,
         300.05,
-        572.5
+        575.0
       ],
       "yaw": 180,
       "pitch": -3,
       "frames": 90,
-      "what": "aim lobby at the firing line: the numbered lanes, near bots in a rifle-ready stance, bots raised on crates, catwalks, the centre stage and the roofed back balcony, with the round HUD",
+      "what": "aim lobby from just behind the firing line: the numbered lanes, near bots in a rifle-ready stance, bots raised on crates, catwalks, the centre stage and the roofed back balcony, with the round HUD",
       "weapon": "(none)",
-      "verified": "2026-10-09 rendered in lobby_r1_g3 (lobby Gauntlet round 1, this round): same pose; the range now has a raised centre stage (1.1 m, 17-23 m) with two bots on it and crate stacks either side, and a roofed balcony along the back wall (2.8 m) with three bots, under raised lane plaques; the fullmetal kit's facemask and plates read as grey steel; the gun is shown in its idle hold (the lobby cuts any draw clip to idle every frame of a capture)",
+      "verified": "2026-10-09 rendered in lobby_r1_g3 (lobby Gauntlet round 1, this round): same pose; the range now has a raised centre stage (1.1 m, 17-23 m) with two bots on it and crate stacks either side, and a roofed balcony along the back wall (2.8 m) with three bots, under raised lane plaques; the fullmetal kit's facemask and plates read as grey steel; the gun is shown in its idle hold (the lobby cuts any draw clip to idle every frame of a capture); 2026-10-09 lobby Gauntlet round 1 (lobby_r1_2): camera moved up from 3.5 m to 1 m behind the firing line (still behind it, so no warning) and 1 m off the lane 3 centre, the spot a player shoots from, so the near row reads at the size a player sees it and the floor lane number sits off centre as paint",
       "lobby": true
     },
     {

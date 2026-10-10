@@ -29,7 +29,8 @@ not in git, so a fresh clone holds none or stale ones; --no-sync only checks). T
   (--export-release; needs the Godot 4.7.2 export templates), and --lobbytest ("LTEST ALL PASS"), --wtest
   ("WTEST weapons checks=N failed=0") and --uitest ("UITEST ok") run on that exported RustSurf.pck
   (--main-pack), each with exit 0, no FAIL / SCRIPT ERROR / Parse Error / engine ERROR: line and a wall-clock
-  limit (--ci excuses only "Error opening file" under its content-free data folder), on --data
+  limit (--ci excuses only "Error opening file" under its content-free data folder), and no check that PASSes
+  only by skipping unless another gate covers it (RELEASE_SKIPS), on --data
   (so the real CS2 stats reach the gun model) with empty Rust and CS2 folders so the packager's own CS2 config
   cannot change a result. The zip therefore holds exactly the tested export.
 Checks before zipping (each failure is listed, nothing is written):
@@ -42,8 +43,9 @@ Checks before zipping (each failure is listed, nothing is written):
   byte, and nothing else: an allowlist (embedded Python files, vrf/, vgm/, installed packages) refuses a dev
   run's data, a done file, prep_status.json, weapon_stats.json or a removed prep module
 - the bundle's own python.exe (wine off Windows) imports everything setup imports and decodes a DXT1 and a
-  BC7 block through UnityPy; where it cannot run the build is refused, unless --no-bundle-smoke, which the
-  entries file records
+  BC7 block through UnityPy, and vrf/Source2Viewer-CLI.exe and vgm/vgmstream-cli.exe each start from the bundle
+  and print their usage (a DLL left out of their folder fails); where this cannot run the build is refused,
+  unless --no-bundle-smoke, which the entries file records
 Then the zip is read back: it must open, pass its CRCs, hold every required entry (LICENSES/ included) and no
 prep output."""
 import os, re, sys, json, glob, shutil, fnmatch, hashlib, zipfile, filecmp, subprocess, tempfile
@@ -230,7 +232,24 @@ def bundle_smoke(bundle, run=None, log=print, allow_skip=False):
     if code != 0 or "BUNDLE OK" not in out:
         return ["prep bundle python.exe could not import setup's modules: exit %d: %s" % (code, _why(out))]
     log("gate: prep bundle " + out.strip().splitlines()[-1])
-    return []
+    errs = []
+    for tool, arg in TOOL_STARTS:  # each tool must start from the bundle: a DLL left out of vrf/ or vgm/ fails here
+        exe = os.path.join(bundle, *tool.split("/"))
+        code, out = run(cmd[:-4] + [exe] + arg, os.path.dirname(exe), 120, log)  # cmd[:-4]: wine, or nothing on Windows
+        if not USAGE.search(out) or TOOL_LOAD_ERR.search(out):
+            errs.append("prep bundle %s did not start (exit %d): %s; setup could not export with it (a DLL missing from its folder?)"
+                        % (tool, code, " | ".join(l.strip() for l in out.strip().splitlines()[-3:])[:400] or "no output"))
+        else:
+            log("gate: prep bundle %s starts" % tool)
+    return errs
+
+
+# The two tools with an argument that makes them print their usage and exit without touching a file. Both print a
+# "Usage" line there (VRF's --help; vgmstream-cli with no input), from their documentation, not yet run from a
+# Windows bundle here. Exit codes are not compared: a usage screen may exit 1.
+TOOL_STARTS = (("vrf/Source2Viewer-CLI.exe", ["--help"]), ("vgm/vgmstream-cli.exe", []))
+USAGE = re.compile(r"usage", re.I)
+TOOL_LOAD_ERR = re.compile(r"err:module|could not load file or assembly", re.I)  # wine's and .NET's missing-library reports
 
 
 def verify_zip(root, out):
@@ -340,7 +359,8 @@ def kv_parity(root, godot, files, timeout=300, log=print):
     errs = []
     for src in files:
         want = items_game.prefab_chains(src, names)
-        out = tempfile.mktemp(prefix="rs_kv_", suffix=".json")
+        tmp = tempfile.mkdtemp(prefix="rs_kv_")  # a private folder: no other process can take or pre-place the name
+        out = os.path.join(tmp, "chains.json")
         try:
             code, text = _run([godot, "--headless", "--path", game, "--script", tool, "--", os.path.abspath(src), out] + names, game, timeout, log)
             try:
@@ -349,8 +369,7 @@ def kv_parity(root, godot, files, timeout=300, log=print):
             except (OSError, ValueError):
                 got = None
         finally:
-            if os.path.exists(out):
-                os.remove(out)
+            shutil.rmtree(tmp, ignore_errors=True)
         if code != 0 or got is None or SCRIPT_ERR.search(text):
             errs.append("kv parity on %s: Godot exit %d: %s" % (src, code, _why(text)))
             continue
@@ -392,6 +411,11 @@ GAME_TESTS = (("--lobbytest", re.compile(r"^LTEST ALL PASS\s*$", re.M)),
               ("--wtest", re.compile(r"^WTEST weapons checks=[1-9]\d* failed=0\s*$", re.M)),
               ("--uitest", re.compile(r"^UITEST ok\s*$", re.M)))
 TEST_FAIL = re.compile(r"^(LTEST|WTEST|UITEST) FAIL", re.M)
+# A check that prints PASS with "skipped" tested nothing; each gate names the ones another gate covers.
+TEST_SKIP = re.compile(r"^(?:LTEST|WTEST|UITEST) PASS (\S+) skipped\b.*$", re.M)
+# The release gate runs on the exported pck, which has no prep/tests beside it: these two compare the game's
+# items_game reader with prep's on the fixture, which kv_parity has already done (on the fixture and the real file).
+RELEASE_SKIPS = ("items_game_parity", "fixture_stats")
 # Godot's own error lines (a resource or glb that does not load, a missing node, push_error): a test can still
 # print its pass line after one, so each fails the test too.
 ENGINE_ERR = re.compile(r"^(?:USER )?ERROR:")
@@ -448,13 +472,15 @@ def scripts_gate(root, godot, timeout=600, log=print):
     return errs
 
 
-def game_tests(godot, launch, data, where, timeout=TEST_TIMEOUT, log=print, allowed=(), expect=None):
+def game_tests(godot, launch, data, where, timeout=TEST_TIMEOUT, log=print, allowed=(), expect=None, skips=()):
     """--lobbytest, --wtest and --uitest with launch (["--main-pack", pck] or ["--path", game]) on data, with empty
     Rust and CS2 folders (the packager's own CS2 config cannot change a result), each under a wall-clock limit.
     A test passes on exit 0, its pass line and no FAIL / SCRIPT ERROR / engine ERROR: line. allowed: check names
     whose FAIL alone is accepted (--ci, which has no extracted content); the test's own failed=N must then count
     exactly those, and there "Error opening file" lines for files under the data folder are expected.
-    expect: {flag: [(regex, what it proves)]} lines a test must also print (--ci: every stats reference compared)."""
+    expect: {flag: [(regex, what it proves)]} lines a test must also print (--ci: every stats reference compared).
+    skips: check names that may PASS as "skipped" (covered by another gate); any other skipped check fails the test,
+    since its PASS would count a check that tested nothing."""
     errs = []
     empty = tempfile.mkdtemp(prefix="rs_gate_")
     for d in ("rust", "cs2", "cwd"):
@@ -468,6 +494,10 @@ def game_tests(godot, launch, data, where, timeout=TEST_TIMEOUT, log=print, allo
             excused = [l for l in fails if TEST_FAIL.match(l) and len(l.split()) > 2 and l.split()[2] in allowed]
             hard = [l for l in fails if l not in excused]
             hard += ["no line %s (%s)" % (rx.pattern, what) for rx, what in (expect or {}).get(flag, []) if not rx.search(out)]
+            skipped = TEST_SKIP.findall(out)
+            hard += ["%s passed only by skipping (it tested nothing here)" % n for n in skipped if n not in skips]
+            if skipped:
+                log("gate: %s skipped %s (covered elsewhere)" % (flag, ", ".join(n for n in skipped if n in skips) or "nothing allowed"))
             fails += [l for l in hard if l not in fails]
             counted = re.search(r"^\w+ \w+ checks=[1-9]\d* failed=(\d+)\s*$", out, re.M)
             if excused and not hard and counted and int(counted.group(1)) == len(excused) and code in (0, 1):
@@ -504,7 +534,7 @@ def godot_gate(root, godot, data, timeout=600, log=print):
     if errs:
         return errs
     pck = os.path.abspath(os.path.join(root, "dist", "RustSurf", "RustSurf.pck"))
-    return game_tests(godot, ["--main-pack", pck], data, "on the exported pck", min(timeout, TEST_TIMEOUT), log)
+    return game_tests(godot, ["--main-pack", pck], data, "on the exported pck", min(timeout, TEST_TIMEOUT), log, skips=RELEASE_SKIPS)
 
 
 # --wtest checks that need CS2's arms and knife from a prep run. A --ci machine holds none of the games' files

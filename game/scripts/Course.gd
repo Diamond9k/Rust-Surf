@@ -143,8 +143,13 @@ func _surface(m: Dictionary) -> Material:
 	for k in ["leak_v", "debris_v"]:
 		var a: Array = W[k]
 		sm.set_shader_parameter(k, Vector2(a[0], a[1]))
-	for k in ["leak_len", "leak_width", "debris_width", "groove", "groove_width", "edge_wear", "leak_vary", "leak_gap"]:
+	for k in ["leak_len", "leak_width", "debris_width", "groove", "groove_width", "edge_wear", "leak_vary", "leak_gap", "tie_hole", "rust_len", "rust_width", "rust_keep"]:
 		sm.set_shader_parameter(k, float(W[k]))
+	sm.set_shader_parameter("ties", float(m["ties"]))
+	var tpi: Array = W["tie_pitch"]
+	sm.set_shader_parameter("tie_pitch", Vector2(tpi[0], tpi[1]))
+	var rt: Array = W["rust_tint"]
+	sm.set_shader_parameter("rust_tint", Vector3(rt[0], rt[1], rt[2]))
 	return sm
 
 func _piece(r: Dictionary) -> Node3D:
@@ -404,6 +409,13 @@ uniform float leak_width = 5.0;
 uniform float debris_width = 2.0;
 uniform float leak_vary = 0.0;
 uniform float leak_gap = 0.0;
+uniform float ties = 0.0;
+uniform vec2 tie_pitch = vec2(1.0, 0.8);
+uniform float tie_hole = 0.03;
+uniform float rust_len = 2.5;
+uniform float rust_width = 0.12;
+uniform float rust_keep = 0.3;
+uniform vec3 rust_tint = vec3(0.8, 0.55, 0.38);
 varying vec3 wpos;
 varying vec3 wn;
 varying flat vec2 face_off;  // flat: interpolation jitter fed into hash() speckled the leak decals and slab joints per pixel
@@ -510,8 +522,17 @@ void fragment() {
 		float row = floor(m.y / panel);
 		vec2 ps = vec2(panel * mix(1.2, 2.4, hash(vec2(row, 5.0) + face_off)), panel);
 		vec2 pc = vec2(m.x / ps.x + hash(vec2(row, 9.0) + face_off), m.y / ps.y);
+		if (seam_lock > 0.0) {
+			// the texture's own cast seams run every strip metres along u: slabs one to three strips long,
+			// each row offset by whole strips, so every vertical joint lands on a baked seam
+			float strip = scale_a / seam_lock;
+			float ns = 1.0 + floor(hash(vec2(row, 5.0) + face_off) * 3.0);
+			ps.x = strip * ns;
+			pc.x = ((m.x + face_off.x) / strip + floor(hash(vec2(row, 9.0) + face_off) * ns)) / ns;
+		}
 		vec2 f = fract(pc);
 		c *= mix(0.9, 1.07, hash(floor(pc) + vec2(3.0, 7.0)));
+		rough *= mix(0.86, 1.08, hash(floor(pc) + vec2(19.0, 2.0)));  // each pour cured its own way: some slabs sheen more
 		vec2 e = min(f, 1.0 - f) * ps;
 		float d = min(e.x, e.y);
 		float w = max(0.03, fwidth(d) * 1.5);
@@ -526,6 +547,28 @@ void fragment() {
 		float under = (1.0 - smoothstep(0.0, 0.9, f.y * ps.y)) * (1.0 - smoothstep(60.0, 200.0, dist));
 		c *= 1.0 - 0.12 * under * grime;
 		rough = mix(rough, 1.0, joint * 0.5);
+	}
+	if (ties > 0.0 && face > 0.5) {
+		// form-tie holes in rows down the face, and below some of them a rust run bled from the rebar,
+		// widening and fading as it runs down the slope; faded to its average once under a pixel or two
+		vec2 tp = vec2(m.x + face_off.x, top) / tie_pitch;
+		vec2 tc = floor(tp);
+		vec2 tf = (fract(tp) - 0.5) * tie_pitch;
+		float hole = (1.0 - smoothstep(tie_hole * 0.6, tie_hole, length(tf))) * (1.0 - smoothstep(8.0, 20.0, dist));
+		c *= 1.0 - 0.55 * hole * ties;
+		float rs = 0.0;
+		for (int k = 0; k < 3; k++) {
+			vec2 cc = tc - vec2(0.0, float(k));
+			float dy = (tp.y - cc.y - 0.5) * tie_pitch.y;  // metres below that row's tie
+			float len = rust_len * mix(0.35, 1.0, hash(cc + vec2(7.0, 3.0)));
+			float t = clamp(dy / len, 0.0, 1.0);
+			float wid = rust_width * mix(0.35, 1.0, sqrt(t)) * mix(0.75, 1.25, vnoise(vec2(m.x * 6.0, top * 1.3)));
+			float run = (1.0 - smoothstep(wid * 0.5, wid, abs(tf.x))) * step(0.0, dy) * (1.0 - smoothstep(0.4, 1.0, t));
+			rs = max(rs, run * step(1.0 - rust_keep, hash(cc + vec2(31.0, 5.0))) * mix(0.45, 1.0, vnoise(vec2(m.x * 14.0, top * 3.0))));
+		}
+		rs = mix(rs, rust_keep * 0.12, smoothstep(0.5, 1.5, fwidth(m.x) / rust_width));
+		c = mix(c, c * rust_tint, clamp(rs * ties, 0.0, 1.0));
+		rough = mix(rough, 1.0, rs * ties * 0.5);
 	}
 	if (face > 0.5) {
 		float wb = max(0.05, fwidth(top) * 1.5);

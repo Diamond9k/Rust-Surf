@@ -230,6 +230,17 @@ class Runner(Tmp):
         run = prep_cs2.vrf_runner(self.exe("time.sleep(30)"), "pak.vpk", self.d, 1)
         self.assertFalse(run(["a.vmdl_c"], []))
 
+    def test_single_file_call_gets_the_file_timeout(self):
+        run = prep_cs2.vrf_runner(self.exe("time.sleep(3)"), "pak.vpk", self.d, 30, file_timeout=1)
+        self.assertFalse(run(["a.vmdl_c"], []))
+
+    def test_vrf_hanging_on_everything_stops_setup_with_the_reason(self):
+        run = prep_cs2.vrf_runner(self.exe("time.sleep(30)"), "pak.vpk", self.d, 1, file_timeout=1, hang_limit=2)
+        self.assertFalse(run(["a.vmdl_c"], []))
+        with self.assertRaises(prep_cs2.PrepError) as e:
+            run(["b.vmdl_c"], [])
+        self.assertIn("stopped responding on 2 exports (a.vmdl_c, b.vmdl_c)", str(e.exception))
+
     def test_missing_exe_is_a_prep_error(self):
         run = prep_cs2.vrf_runner(os.path.join(self.d, "nope.exe"), "pak.vpk", self.d, 5)
         with self.assertRaises(prep_cs2.PrepError):

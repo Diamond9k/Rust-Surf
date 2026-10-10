@@ -431,9 +431,13 @@ func _plant_mesh(shape: String, rng: RandomNumberGenerator) -> Mesh:
 					st.set_color(Color(v[1], v[1], v[1]))
 					st.set_normal(Vector3.UP)  # lit like the ground they grow from
 					st.add_vertex(v[0])
+		"rubble":  # a broken concrete lump: few facets, pushed hard out of round, lying flat
+			_blob(st, Vector3(0, 0.18, 0), Vector3(0.55, 0.3, 0.42), 0.5, rng, Color(1, 1, 1), 3, 5)
+		"drum":
+			_drum(st, rng)
 		_:
 			_blob(st, Vector3(0, 0.25, 0), Vector3(0.6, 0.4, 0.5), 0.35, rng, Color(1, 1, 1), 4, 7)
-	if shape == "rock":
+	if shape in ["rock", "rubble", "drum"]:
 		st.generate_tangents()
 	return st.commit()
 
@@ -448,6 +452,35 @@ func _cyl(st: SurfaceTool, y0: float, y1: float, r0: float, r1: float, c: Color)
 			st.set_normal(v[0])
 			st.set_uv(Vector2(v[0].x, v[2]))  # a broadleaf's crowns carry UVs, so every vertex must
 			st.add_vertex(v[0] * v[1] + Vector3(0, v[2], 0))
+
+## A steel drum about 1 m tall (0.88 m, 0.29 m radius): a smooth 16-sided shell bulged by two rolling
+## hoops and rimmed top and bottom, a lid a little below the rim, and a dent pushed into one side.
+func _drum(st: SurfaceTool, rng: RandomNumberGenerator) -> void:
+	var seg := 16
+	var prof := [[0.0, 0.285], [0.02, 0.29], [0.29, 0.29], [0.3, 0.3], [0.32, 0.29], [0.58, 0.29], [0.59, 0.3], [0.61, 0.29], [0.86, 0.29], [0.88, 0.295]]
+	var dent := rng.randf() * TAU
+	for j in prof.size() - 1:
+		for i in seg:
+			var q := []
+			for v in [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]]:
+				var a: float = TAU * v[0] / seg
+				var d := Vector3(cos(a), 0, sin(a))
+				var r: float = prof[v[1]][1] * (1.0 - 0.05 * maxf(cos(a - dent), 0.0) ** 4)
+				q.append([d * r + Vector3(0, prof[v[1]][0], 0), d, Vector2(float(v[0]) / seg * 1.8, prof[v[1]][0])])
+			for t in [[0, 1, 2], [0, 2, 3]]:  # clockwise seen from outside: Godot's front face
+				for k in t:
+					st.set_color(Color(1, 1, 1))
+					st.set_normal(q[k][1])
+					st.set_uv(q[k][2])
+					st.add_vertex(q[k][0])
+	for i in seg:
+		var a0 := TAU * i / seg
+		var a1 := TAU * (i + 1) / seg
+		for v in [Vector3(0, 0.865, 0), Vector3(cos(a0) * 0.28, 0.87, sin(a0) * 0.28), Vector3(cos(a1) * 0.28, 0.87, sin(a1) * 0.28)]:
+			st.set_color(Color(0.92, 0.92, 0.92))
+			st.set_normal(Vector3.UP)
+			st.set_uv(Vector2(v.x, v.z))
+			st.add_vertex(v)
 
 ## A cone with a ragged rim (each rim point at its own radius and droop); normals lean out from the
 ## tree's axis like a round crown, so the foliage shades softly instead of in flat facets.
@@ -961,6 +994,8 @@ uniform float dry_cover = 0.0;
 uniform float dry_period = 35.0;
 uniform float mottle = 0.0;
 uniform float mottle_cell = 1.6;
+uniform float relief = 0.0;
+uniform float relief_period = 30.0;
 varying vec3 wpos;
 varying vec3 wn;
 
@@ -1108,6 +1143,14 @@ void fragment() {
 		c = mix(c, le.rgb, clamp(me * le.a * k, 0.0, 1.0));
 	}
 	nm = mix(nm, texture(nrm_road, ruv).rgb, road);
+	// relief: gullies, humps and sheep tracks finer than the mesh, as a normal tilt from a noise height
+	// field and a little shade in its hollows, so the coarse far hills light as folded land, not facets
+	vec2 rp = p / relief_period;
+	float h0 = fbm(rp);
+	vec2 rg = vec2(fbm(rp + vec2(0.3, 0.0)) - h0, fbm(rp + vec2(0.0, 0.3)) - h0) / 0.3;
+	float rk = relief * (1.0 - road) * (1.0 - site) * mix(0.35, 1.0, hill);
+	nm.xy -= rg * rk;
+	c *= 1.0 - 0.25 * rk * (1.0 - smoothstep(0.3, 0.6, h0));
 	ALBEDO = c;
 	NORMAL_MAP = nm;
 	ROUGHNESS = mix(roughness_val, 0.75, road);
@@ -1128,6 +1171,84 @@ static func sky_material(L: Dictionary) -> ShaderMaterial:
 	for k in ["sun_disc_deg", "sun_halo_deg", "sun_halo", "sun_disc_energy", "cloud_cover", "cloud_scale", "cloud_height_fade", "sun_warm_width", "reflect_grey"]:
 		sm.set_shader_parameter(k, float(L[k]))
 	return sm
+
+## Sun shafts for Main._lighting (lighting.json shaft_*): a full-screen pass that marches from each pixel
+## toward the sun on screen and adds sun-coloured light by how much open sky it crosses, so towers,
+## ramps and hills throw dark streaks through the bright air round the sun. The light grows with the
+## metres of air in front of each surface, so near things (the viewmodel, the ramp under the player)
+## take almost none. Our look (screen-space god rays), unverified against Rust's own post stack.
+static func sun_shafts(L: Dictionary, toward_sun: Vector3) -> MeshInstance3D:
+	var q := QuadMesh.new()
+	q.size = Vector2(2, 2)
+	var mi := MeshInstance3D.new()
+	mi.name = "sun_shafts"
+	mi.mesh = q
+	mi.extra_cull_margin = 16384.0  # the vertex shader pins it to the screen: never frustum culled
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var sm := ShaderMaterial.new()
+	var sh := Shader.new()
+	sh.code = SHAFT_SHADER
+	sm.shader = sh
+	sm.set_shader_parameter("toward_sun", toward_sun.normalized())
+	var c: Array = L["shaft_color"]
+	sm.set_shader_parameter("shaft_color", Vector3(c[0], c[1], c[2]))
+	sm.set_shader_parameter("samples", int(L["shaft_samples"]))
+	for k in ["shaft_strength", "shaft_reach", "shaft_decay", "shaft_spread_deg", "shaft_air", "shaft_sky"]:
+		sm.set_shader_parameter(k, float(L[k]))
+	mi.material_override = sm
+	return mi
+
+const SHAFT_SHADER := "shader_type spatial;
+render_mode unshaded, blend_add, depth_test_disabled, depth_draw_never, cull_disabled, fog_disabled, shadows_disabled;
+uniform sampler2D depth_tex : hint_depth_texture, filter_nearest, repeat_disable;
+uniform vec3 toward_sun = vec3(0.0, 1.0, 0.0);
+uniform vec3 shaft_color = vec3(1.0, 0.9, 0.75);
+uniform int samples = 40;
+uniform float shaft_strength = 0.3;
+uniform float shaft_reach = 0.7;
+uniform float shaft_decay = 0.96;
+uniform float shaft_spread_deg = 45.0;
+uniform float shaft_air = 80.0;
+uniform float shaft_sky = 0.4;
+
+void vertex() {
+	POSITION = vec4(VERTEX.xy, 1.0, 1.0);
+}
+float open_sky(vec2 uv) {
+	return step(texture(depth_tex, clamp(uv, vec2(0.001), vec2(0.999))).r, 1.0e-6);  // reverse z: the sky is depth 0
+}
+void fragment() {
+	vec3 sv = (VIEW_MATRIX * vec4(toward_sun, 0.0)).xyz;
+	vec4 sp = PROJECTION_MATRIX * vec4(sv, 0.0);
+	float ahead = smoothstep(0.0, 0.25, -sv.z);  // the sun in front of the camera
+	vec2 suv = sp.xy / max(sp.w, 1.0e-4) * 0.5 + 0.5;
+	vec2 uv = SCREEN_UV;
+	float d = texture(depth_tex, uv).r;
+	vec4 vp = INV_PROJECTION_MATRIX * vec4(uv * 2.0 - 1.0, max(d, 1.0e-7), 1.0);
+	vec3 ray = normalize(vp.xyz / vp.w);
+	float ang = degrees(acos(clamp(dot(ray, sv), -1.0, 1.0)));
+	float fall = pow(clamp(1.0 - ang / shaft_spread_deg, 0.0, 1.0), 2.0) * ahead;
+	if (fall <= 0.0) {
+		discard;
+	}
+	float sky = step(d, 1.0e-6);
+	float air = sky > 0.5 ? shaft_sky : 1.0 - exp(-length(vp.xyz / vp.w) / shaft_air);
+	// jittered start per pixel: the march's steps would band into rings otherwise
+	float jit = fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715))));
+	vec2 stp = (suv - uv) * shaft_reach / float(samples);
+	vec2 p = uv + stp * jit;
+	float acc = 0.0;
+	float w = 1.0;
+	float wsum = 0.0;
+	for (int i = 0; i < samples; i++) {
+		acc += open_sky(p) * w;
+		wsum += w;
+		w *= shaft_decay;
+		p += stp;
+	}
+	ALBEDO = shaft_color * shaft_strength * (acc / max(wsum, 1.0e-4)) * fall * air;
+}
+"
 
 const SKY_SHADER := "shader_type sky;
 uniform vec3 sky_top : source_color;

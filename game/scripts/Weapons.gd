@@ -274,10 +274,11 @@ func give(id: String) -> void:
 	var prev: String = slots[s]
 	var was := current
 	slots[s] = id
+	var was_held := held()
 	if current == s:
 		current = ""  # same slot: force the redraw
 	_alt_on[id] = alt_kind(id) == "silencer"  # a bought gun comes in its CS2 stock mode: M4A1-S / USP-S silenced, burst off
-	if not switch_to(s):
+	if not switch_to(s, was_held):
 		slots[s] = prev
 		current = was
 		return
@@ -287,9 +288,10 @@ func give(id: String) -> void:
 		_next_fire = _now()
 	_hud()
 
-func switch_to(s: String) -> bool:
+func switch_to(s: String, from: String = "") -> bool:
 	if s == current or slots.get(s, "") == "":
 		return false
+	var was := from if from != "" else held()
 	var vm: Viewmodel = main.viewmodel
 	var id: String = slots[s]
 	var ok := false
@@ -307,6 +309,7 @@ func switch_to(s: String) -> bool:
 	_rezoom = 0
 	_burst_left = 0
 	_fan = false
+	_holster(was)
 	if current != "":
 		last = current
 	current = s
@@ -317,6 +320,15 @@ func switch_to(s: String) -> bool:
 	_hud()
 	return true
 
+## CS's Holster: a silencer turn still under way when the gun is put away is undone, so the gun comes back in
+## the mode it was in before the press (its can, its sound and its stats), and the half-way mesh swap is dropped.
+func _holster(id: String) -> void:
+	if id == "" or alt_kind(id) != "silencer" or _now() >= _toggle_until:
+		return
+	_alt_on[id] = not _alt_on.get(id, false)
+	_toggle_until = 0.0
+	_part_at = -1.0
+
 ## CS's Deploy: a drawn weapon starts with no fire inaccuracy, a fresh recoil index and no reload or toggle.
 func _deploy_reset() -> void:
 	_penalty = 0.0
@@ -325,6 +337,7 @@ func _deploy_reset() -> void:
 	_shell_next = 0.0
 	_toggle_until = 0.0
 	_cock = -1.0
+	_shoot_clip = 0
 
 ## The weapons clock, seconds: wall time (shots keep their exact cycletime between frames, like CS2's sub-tick
 ## input) that stands still while the trigger is blocked (Esc menu, buy menu, a frozen player), so a pause never
@@ -531,14 +544,16 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 	a[0] = int(a[0]) - 1
 	if int(a[0]) <= 0 and int(a[1]) <= 0 and rows.has(id) and rows[id]["slot"] == "gear":
 		_recharge[id] = t + float(X["taser_recharge"])
+	# a catch-up round recovers up to its own slot time first (the rest since the previous round included), so a long
+	# frame does not stack the penalty, then flies on the punch of its own slot time
+	_decay_to(id, t)
+	_punch_to(t)
 	_last_shot = t
 	_shoot_anim(main.viewmodel)
 	_sound(id)
 	if main.lobby and main.lobby.has_method("on_shot_fired"):
 		main.lobby.on_shot_fired()  # one trigger pull = one shot, pellets and penetration included
 	var cam: Camera3D = main.player.cam
-	_decay_to(id, t)  # a catch-up round recovers up to its own slot time too, so a long frame does not stack the penalty
-	_punch_to(t)  # a catch-up round of a long frame flies on the punch of its own slot time, the rounds before it included
 	var eye := _eye_basis()
 	if _shot_log is Array:
 		(_shot_log as Array).append(_aim * float(X["recoil_scale"]))
@@ -604,8 +619,8 @@ func _shoot_anim(vm: Viewmodel) -> void:
 	if have.is_empty():
 		vm.kick("shot")
 		return
+	vm.play(String(have[_shoot_clip % have.size()]))  # a draw starts the turn again at shoot1
 	_shoot_clip = (_shoot_clip + 1) % have.size()
-	vm.play(String(have[_shoot_clip]))
 
 ## How many times FX_FireBullets squares a ring's random radius share before taking 1 - share (pushing the round
 ## out towards the ring's edge): once for the R8's fan fire, and for the Negev's first shots one more time per
@@ -726,7 +741,7 @@ func _trace(id: String, from: Vector3, dir: Vector3, reach: float, dmg: float, h
 		if exit.is_empty():
 			return
 		var thick: float = pos.distance_to(exit["position"]) / u
-		var pm := 1.0 / float(X["pen_mod_body"] if body else X["pen_mod_world"])
+		var pm := 1.0 / maxf(pen_mod(col, body), 0.01)
 		dmg -= dmg * float(X["pen_chunk"]) + maxf(0.0, 3.0 / power * 1.25) * pm * 3.0 + pm * thick * thick / 24.0
 		if not body:
 			_decal(exit["position"], exit["normal"])
@@ -736,6 +751,14 @@ func _trace(id: String, from: Vector3, dir: Vector3, reach: float, dmg: float, h
 		if not cum:
 			dmg *= pow(rm, thick / 500.0)
 		left -= 1
+
+## A surface's CS penetration modifier (its surfaceproperties value; CS averages the entry and exit surfaces,
+## one object here): a "pen_mod" meta on the collider when a scene sets one (wood, metal, glass), else
+## pen_mod_body for a body and pen_mod_world for the rest of the world.
+func pen_mod(col: Object, body: bool) -> float:
+	if col != null and col.has_meta("pen_mod"):
+		return float(col.get_meta("pen_mod"))
+	return float(X["pen_mod_body"] if body else X["pen_mod_world"])
 
 ## One plain ray along the camera inside a cone of spread_mrad (tools aim with it; firing uses _trace).
 func _shoot_ray(cam: Camera3D, reach: float, spread_mrad: float) -> Dictionary:
@@ -1008,6 +1031,7 @@ func _on_land(fall_speed: float) -> void:
 	var id := held()
 	if id == "" or id == "knife":
 		return
+	_decay_to(id, _now())  # the penalty recovers up to the landing first, like a take-off
 	_penalty = maxf(_penalty, base_inacc(id)) + land_penalty(id, fall_speed / u)
 
 func land_penalty(id: String, fall_units: float) -> float:
@@ -1134,7 +1158,7 @@ func _seed(id: String) -> int:
 	return int(stat(id, "recoil seed")) if _has(id, "recoil seed") else (String(rows[id]["item"]).hash() & 0xffff if rows.has(id) else 0)
 
 ## CS2's knife: slash (attack) 40 first / 25 combo / 90 in the back, stab (attack2) 65 / 180 in the back.
-## A ray to the knife's reach, then a hull around its end like CS's knife trace; one swing = one shot.
+## A ray to the knife's reach, then a hull swept along it like CS's knife trace; one swing = one shot.
 func _knife(stab: bool) -> void:
 	var t := _now()
 	if t < _next_fire:
@@ -1177,15 +1201,22 @@ func knife_target(space: PhysicsDirectSpaceState3D, from: Vector3, dir: Vector3,
 	var r: Dictionary = space.intersect_ray(q)
 	return knife_hull(space, from, from + dir * reach, ex) if r.is_empty() else r
 
-## CS's knife hull: only when the ray reached nothing, the nearest hittable body within knife_hull of the end
-## of the reach that the eye can see (a wall between keeps it safe, like CS's hull trace from the eye).
+## CS's knife hull: only when the ray reached nothing, a box knife_hull units across (knife_hull_z tall) swept
+## from the eye to the end of the reach, like CS's UTIL_TraceHull with the head hull. What the box meets first
+## decides: a body the eye can see is struck (the one nearest the line of the swing), a wall stops the swing.
+## A sweep that meets nothing looks at what the box overlaps at the eye (a body pressed against the player).
 func knife_hull(space: PhysicsDirectSpaceState3D, from: Vector3, end: Vector3, ex: Array[RID]) -> Dictionary:
+	var box := BoxShape3D.new()
+	box.size = Vector3(float(X["knife_hull"]), float(X["knife_hull_z"]), float(X["knife_hull"])) * 2.0 * u
 	var hull := PhysicsShapeQueryParameters3D.new()
-	var sph := SphereShape3D.new()
-	sph.radius = float(X["knife_hull"]) * u
-	hull.shape = sph
-	hull.transform = Transform3D(Basis.IDENTITY, end)
+	hull.shape = box
+	hull.transform = Transform3D(Basis.IDENTITY, from)
+	hull.motion = end - from
 	hull.exclude = ex
+	var f := space.cast_motion(hull)  # Godot's sweep skips what the box already overlaps at the eye
+	hull.motion = Vector3.ZERO
+	if f.size() >= 2 and f[1] < 1.0:
+		hull.transform = Transform3D(Basis.IDENTITY, from + (end - from) * f[1])
 	var best := INF
 	var out := {}
 	for h in space.intersect_shape(hull, 16):
@@ -1198,9 +1229,10 @@ func knife_hull(space: PhysicsDirectSpaceState3D, from: Vector3, end: Vector3, e
 		var seen: Dictionary = space.intersect_ray(q)
 		if not seen.is_empty() and not (seen["collider"] as Object).has_method("hit"):
 			continue  # a wall between the eye and the body
-		if at.distance_to(from) < best:
-			best = at.distance_to(from)
-			out = {"collider": c, "position": at}
+		var d := Geometry3D.get_closest_point_to_segment(at, from, end).distance_to(at)
+		if d < best:
+			best = d
+			out = {"collider": c, "position": seen.get("position", at) if seen.get("collider") == c else at}
 	return out
 
 ## CS's backstab test: the flat line from the attacker to the target agrees with the target's facing.
@@ -1375,7 +1407,8 @@ func _build_buy() -> void:
 			v.add_child(b)
 		cols.add_child(v)
 
-## The scope overlay: black outside a round lens with a soft dark rim, thin black cross lines edge to edge.
+## The scope overlay: black outside a round lens with a soft dark rim. A sniper's lens has thin black cross
+## lines edge to edge; a rifle scope (AUG, SG 553: scope_dot_classes) has a smaller lens with a red dot.
 func _build_scope() -> void:
 	_scope_layer = CanvasLayer.new()
 	_scope_layer.layer = 1
@@ -1388,17 +1421,27 @@ func _build_scope() -> void:
 	_scope.draw.connect(_draw_scope)
 	_scope.resized.connect(_scope.queue_redraw)
 
+## The overlay style of a scoped weapon: "dot" for a rifle scope class, else "sniper".
+func scope_style(id: String) -> String:
+	return "dot" if id != "" and String(X["scope_dot_classes"]).split(",", false).has(_cls(id)) else "sniper"
+
 func _draw_scope() -> void:
 	var sz := _scope.size
 	var c := sz * 0.5
-	var r := sz.y * float(X["scope_lens"]) * 0.5
+	var dot := scope_style(held()) == "dot"
+	var r := sz.y * float(X["scope_dot_lens" if dot else "scope_lens"]) * 0.5
 	var w := sz.length()
 	_scope.draw_arc(c, r + w * 0.5, 0.0, TAU, 192, Color.BLACK, w, true)
 	var rim := sz.y * float(X["scope_edge"])
 	for i in 6:
 		var k := float(i) / 6.0
 		_scope.draw_arc(c, r - rim * k - rim / 12.0, 0.0, TAU, 192, Color(0, 0, 0, 0.16 * (1.0 - k)), rim / 6.0 + 1.0, true)
-	var lw := maxf(float(X["scope_line_px"]) * sz.y / 1080.0, 1.0)
+	var px := sz.y / 1080.0
+	if dot:
+		var col: Array = X["scope_dot_color"]
+		_scope.draw_circle(c, maxf(float(X["scope_dot_px"]) * px, 1.0), Color(float(col[0]), float(col[1]), float(col[2])), true, -1.0, true)
+		return
+	var lw := maxf(float(X["scope_line_px"]) * px, 1.0)
 	_scope.draw_line(Vector2(0, c.y), Vector2(sz.x, c.y), Color.BLACK, lw, true)
 	_scope.draw_line(Vector2(c.x, 0), Vector2(c.x, sz.y), Color.BLACK, lw, true)
 
@@ -1445,6 +1488,11 @@ func _test_box(body: StaticBody3D, size: Vector3, at: Vector3) -> StaticBody3D:
 	main.add_child(body)
 	body.global_position = at
 	return body
+
+## --wtest: a readable name for a test body ("none" when null).
+static func _tname(o: Variant, objs: Array, names: Array) -> String:
+	var i := objs.find(o)
+	return "none" if o == null else (String(names[i]) if i >= 0 else str(o))
 
 func _test_ball(body: StaticBody3D, radius: float, at: Vector3) -> StaticBody3D:
 	var cs := CollisionShape3D.new()
@@ -1809,6 +1857,23 @@ func _selftest() -> void:
 	var hull_hit := knife_target(space, Vector3(0, -1050, 0), Vector3(0, 0, -1), kreach, ex)
 	var tp_wall: Object = through.get("collider")
 	_check("knife_wall", tp_wall == kwall and not tp_wall.has_method("hit") and hull_hit.get("collider") == hpart, "through a wall -> %s, hull past the reach -> %s" % [tp_wall, hull_hit.get("collider")])
+	# the swept knife hull: a part 20 units ahead and 15 to the side is struck though the ray misses it; a part 34
+	# units ahead with a wall plate first in the sweep (22 units) is safe (CS's hull trace stops at the wall)
+	var side := _test_box(TestPart.new(), Vector3(0.1, 0.1, 0.1), Vector3(15.0 * u, -1300, -20.0 * u))
+	var side2 := _test_box(TestPart.new(), Vector3(0.1, 0.1, 0.1), Vector3(15.0 * u, -1350, -34.0 * u))
+	var plate := _test_box(StaticBody3D.new(), Vector3(0.4, 0.6, 1.0 * u), Vector3(0.4, -1350, -22.0 * u))
+	made += [side, side2, plate]
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var swept := knife_target(space, Vector3(0, -1300, 0), Vector3(0, 0, -1), kreach, ex)
+	var walled := knife_target(space, Vector3(0, -1350, 0), Vector3(0, 0, -1), kreach, ex)
+	_check("knife_hull_swept", swept.get("collider") == side and walled.get("collider") != side2, "part 20 u ahead, 15 u aside -> %s; 34 u ahead behind a plate at 22 u -> %s" % [_tname(swept.get("collider"), [side, side2, plate], ["part", "part", "plate"]), _tname(walled.get("collider"), [side, side2, plate], ["part", "part", "plate"])])
+	# penetration: a collider's pen_mod meta (a wood or metal surface) replaces pen_mod_world
+	var keep_meta: Variant = kwall.get_meta("pen_mod") if kwall.has_meta("pen_mod") else null
+	kwall.set_meta("pen_mod", 1.0)
+	var pm_meta := pen_mod(kwall, false)
+	kwall.remove_meta("pen_mod")
+	_check("pen_mod_surface", is_equal_approx(pm_meta, 1.0) and is_equal_approx(pen_mod(kwall, false), float(X["pen_mod_world"])) and is_equal_approx(pen_mod(side, true), float(X["pen_mod_body"])) and keep_meta == null, "meta 1.0 -> %.2f, plain wall %.2f, body %.2f" % [pm_meta, pen_mod(kwall, false), pen_mod(side, true)])
 	# shotgun pellets: each lands on its own part with its own hitgroup; one bullet hits a target once
 	var hits: Array = []
 	for at in [Vector3(0, -1100, 0), Vector3(1, -1100, 0), Vector3(1, -1100, 0)]:
@@ -2006,6 +2071,41 @@ func _selftest() -> void:
 	_attack2("cs2_m4a1_silencer")
 	_check("silencer_sound", snd_on == String(rows["cs2_m4a1_silencer"]["sound_shot"]) and snd_off == String(rows["cs2_m4a1_silencer"]["sound_unsilenced"]) and snd_off != snd_on and busy and still_off and _alt_on["cs2_m4a1_silencer"] and shot_sound("cs2_ak47") == String(rows["cs2_ak47"]["sound_shot"]), "on %s, off %s, toggle %.1f s, mid-toggle press ignored=%s" % [snd_on.get_file(), snd_off.get_file(), float(X["silencer_time"]), still_off])
 	_toggle_until = 0.0
+	# CS's Holster: putting the M4A1-S away mid-toggle undoes the press, a finished toggle stays
+	_alt_on["cs2_m4a1_silencer"] = true
+	_next_fire = 0.0
+	_attack2("cs2_m4a1_silencer")
+	var mid_off: bool = not _alt_on["cs2_m4a1_silencer"]
+	_holster("cs2_m4a1_silencer")
+	var undone: bool = _alt_on["cs2_m4a1_silencer"]
+	_next_fire = 0.0
+	_toggle_until = 0.0
+	_attack2("cs2_m4a1_silencer")
+	_toggle_until = _now() - 0.01
+	_holster("cs2_m4a1_silencer")
+	var kept: bool = not _alt_on["cs2_m4a1_silencer"]
+	_alt_on["cs2_m4a1_silencer"] = true
+	_toggle_until = 0.0
+	_next_fire = 0.0
+	_check("silencer_holster_cancel", mid_off and undone and kept, "detach pressed=%s, put away mid-turn comes back silenced=%s, a finished detach stays off=%s" % [mid_off, undone, kept])
+	# a tap after a rest recovers the recoil index up to the tap before the tap's own kick (CS order)
+	slots["primary"] = "cs2_ak47"
+	current = "primary"
+	ammo["cs2_ak47"] = [30, 0]
+	var tap0 := _now()
+	_last_shot = tap0 - 3.0
+	_decay_at = tap0 - 3.0
+	_recoil_index = 5.0
+	_next_fire = 0.0
+	_reload_until = 0.0
+	_shell_next = 0.0
+	_shoot("cs2_ak47", tap0, false)
+	var tap_index := _recoil_index
+	_check("tap_after_rest", is_equal_approx(tap_index, 1.0), "index 5 rested 3 s, then a tap: index after it %.3f (want 1)" % tap_index)
+	_recoil_index = 0.0
+	_punch_reset(_now())
+	# the overlay: a rifle scope (AUG, SG 553) draws the red dot, a sniper the cross lines
+	_check("scope_style", scope_style("cs2_aug") == "dot" and scope_style("cs2_sg556") == "dot" and scope_style("cs2_awp") == "sniper" and scope_style("cs2_ssg08") == "sniper", "aug %s, sg553 %s, awp %s, ssg08 %s" % [scope_style("cs2_aug"), scope_style("cs2_sg556"), scope_style("cs2_awp"), scope_style("cs2_ssg08")])
 	# empty gun: a held trigger dry-fires and does not reload; letting go reloads; R is refused mid-draw
 	slots["primary"] = "cs2_ak47"
 	current = "primary"

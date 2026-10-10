@@ -4,7 +4,9 @@ usage: prep.py --rust <Rust dir> --cs2 <CS2 dir> --out <data dir> --tools <dir> 
 Writes done-<version>.txt only when every content.json row and every weapons.json weapon is in place, each
 file checked whole, and the player's CS2 files name every weapon's stats; otherwise exits 1 with the reasons
 on screen, in prep.log and in prep_status.json (the game shows them), and on Windows in a message box, since
-a launcher's console window can close before anyone reads it (--no-dialog turns that off)."""
+a launcher's console window can close before anyone reads it (--no-dialog turns that off).
+prep_status.json also keeps the CS2 files' size and modified time (prep_cs2.cs2_fingerprint): the game removes the
+done file when CS2 has updated since, and the next run then exports every CS2 file fresh."""
 import os, sys, json, glob, argparse, time, threading, traceback
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -136,7 +138,8 @@ def finish(a, problems, warnings, log):
     player = ["Prep: " + p for p in problems] + ["Prep warning: " + w for w in warnings]
     if problems:
         player.append("Prep: setup is not done, so Melty runs it again on the next start; details in data/prep.log")
-    status = {"version": a.version, "ok": not problems, "problems": problems, "warnings": warnings, "player": player}
+    status = {"version": a.version, "ok": not problems, "problems": problems, "warnings": warnings, "player": player,
+              "cs2_fingerprint": getattr(a, "fingerprint", None) if getattr(a, "cs2_exported", False) else getattr(a, "old_fingerprint", None)}
     done = os.path.join(a.out, "done-%s.txt" % a.version)
     if problems and os.path.exists(done):
         os.remove(done)  # first, so no crash below can leave a stale done file next to a failed run
@@ -168,7 +171,17 @@ def started(a):
     msg = "setup started but did not finish (closed, killed or crashed before the end)"
     prep_cs2.write_json(os.path.join(a.out, "prep_status.json"), {
         "version": a.version, "ok": False, "problems": [msg], "warnings": [],
-        "player": ["Prep: " + msg, "Prep: setup is not done, so Melty runs it again on the next start; details in data/prep.log"]})
+        "player": ["Prep: " + msg, "Prep: setup is not done, so Melty runs it again on the next start; details in data/prep.log"],
+        "cs2_fingerprint": getattr(a, "old_fingerprint", None)})  # the last finished export's, so a killed run still exports fresh next time
+
+
+def old_fingerprint(out):
+    """The cs2_fingerprint the last run left in prep_status.json (None when there is none or it is unreadable)."""
+    try:
+        with open(os.path.join(out, "prep_status.json"), encoding="utf-8") as f:
+            return json.load(f).get("cs2_fingerprint")
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 def main(argv=None, steps=None, runner=None, show=None):
@@ -195,6 +208,13 @@ def main(argv=None, steps=None, runner=None, show=None):
         LOG = prep_cs2.LOG = both
         t = time.time()
         problems, warnings = [], []
+        a.old_fingerprint = old_fingerprint(a.out)
+        try:
+            a.fingerprint = prep_cs2.cs2_fingerprint(a.cs2, prep_cs2.settings())
+        except Exception as e:  # a damaged prep.json is reported by the steps; the fingerprint is then just not kept
+            both("cs2 fingerprint not taken (%s: %s)" % (type(e).__name__, e))
+            a.fingerprint = None
+        a.cs2_changed = bool(a.fingerprint) and prep_cs2.fingerprint_changed(a.old_fingerprint, a.fingerprint)
         started(a)
         try:
             both("prep %s start; rust=%s cs2=%s" % (a.version, a.rust, a.cs2))

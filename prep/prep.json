@@ -43,6 +43,38 @@
       "verified": "build choice, unverified against a real 40-model call"
     },
     {
+      "id": "vrf_file_timeout_s",
+      "value": 600,
+      "unit": "seconds",
+      "used_by": "prep_cs2.vrf_runner: the limit for a VRF call of one file (every retry), instead of vrf_timeout_s, which is sized for a batch of vrf_batch_files",
+      "note": "one model, clip or sound per call; the limit only matters when VRF hangs, where it bounds each retry instead of holding the setup window for half an hour per file",
+      "verified": "build choice, unverified: how long a real single-model VRF 20 export takes on a slow disk was not measured; the timeout path is tested in prep/tests/test_export.py"
+    },
+    {
+      "id": "vrf_hang_limit",
+      "value": 3,
+      "unit": "timed-out calls",
+      "used_by": "prep_cs2.vrf_runner: after this many VRF calls time out in one run, setup stops with a reason naming the files (verify CS2, allow the prep folder in antivirus) instead of waiting out every remaining file",
+      "note": "a VRF that hangs once in a while is retried; one that hangs on everything (a damaged VPK, an antivirus holding the exe) is named within minutes, not hours",
+      "verified": "build choice; tested in prep/tests/test_export.py with a stand-in VRF that sleeps past the limit"
+    },
+    {
+      "id": "cs2_update_files",
+      "value": "game/csgo/pak01_dir.vpk,game/csgo/steam.inf",
+      "unit": "paths in the CS2 folder",
+      "used_by": "prep_cs2.cs2_fingerprint: the size and modified time of each that exists go into prep_status.json; Main._cs2_updated compares them with the live files at every start and removes the done file when one changed, so Melty sets up again and the guns get the new CS2 version's stats; prep then exports every CS2 file fresh",
+      "note": "pak01_dir.vpk is the VPK directory prep exports from, so it is rewritten whenever a file inside it (items_game.txt among them) changes; steam.inf is skipped when absent",
+      "verified": "unverified: that every CS2 patch rewrites pak01_dir.vpk and that CS2 keeps a game/csgo/steam.inf were not checked on an install here (CS:GO did both); the comparison is tested in prep/tests/test_prep.py"
+    },
+    {
+      "id": "cs2_update_mtime_tolerance_s",
+      "value": 2,
+      "unit": "seconds",
+      "used_by": "prep_cs2.fingerprint_changed and Main._cs2_updated: a modified time this close to the recorded one is the same file",
+      "note": "Python and Godot both read whole seconds from the same NTFS timestamp; 2 s also covers FAT32's 2-second resolution on a library drive",
+      "verified": "build choice; FAT32's 2-second write-time resolution is documented by Microsoft, the Python vs Godot agreement on Windows is unverified here (no Windows)"
+    },
+    {
       "id": "weapons_vdata",
       "value": "scripts/weapons.vdata_c",
       "unit": "VPK path",
