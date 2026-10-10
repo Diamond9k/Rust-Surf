@@ -359,7 +359,7 @@
       "step": 1,
       "default": 2,
       "choices": "Default|Default Static|Classic|Classic Dynamic|Classic Static|Legacy",
-      "applies_to": "Hud.draw_crosshair: 1/4 static, 0/3 dynamic, 2 split dynamic, 5 moves only when firing",
+      "applies_to": "Hud.draw_crosshair: 1/4 static, 3 dynamic, 0 split dynamic (hud.json default_xh_split*), 2 split dynamic (the cl_crosshair_dynamic_* convars), 5 moves only when firing",
       "verified": "style numbering from CS:GO; fallback 2 per hooks.cs2_user_convars; CS2 behaviour of each style unverified: not checked against the CS2 client"
     },
     {

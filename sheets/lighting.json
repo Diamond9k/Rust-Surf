@@ -433,6 +433,28 @@
       "value": false,
       "note": "whether the bounce light also lights the ground and what grows on it (Backdrop.LAND_LAYER); off, the hills and trees facing away from the sun fall into shade instead of washing flat and pale",
       "tuned": "2026-10-10 world_r2b renders (gauntlet round 2), by eye: false (hills and trees facing away from the sun were lit flat and pale by the bounce fill); a look, unverified against Rust"
+    },
+    {
+      "id": "flare_strength",
+      "value": 0.16,
+      "note": "strength of the lens flare ghosts strung from the sun through the screen centre (Backdrop.sun_shafts), dimmed by how much of the sun is hidden; 0 turns them off. Our look (gauntlet r2 critics: the sun has no lens flare), unverified against Rust's own post stack",
+      "tuned": "2026-10-10 world_r3 renders (gauntlet round 3), by eye"
+    },
+    {
+      "id": "flare_size",
+      "value": 0.06,
+      "note": "radius of the middle flare ghost as a share of the screen height (the others are 0.35 to 2.2 times it)",
+      "tuned": "2026-10-10 world_r3 renders (gauntlet round 3), by eye"
+    },
+    {
+      "id": "flare_color",
+      "value": [
+        1.0,
+        0.86,
+        0.66
+      ],
+      "note": "flare ghost colour (each ghost also takes its own blue or amber tint)",
+      "tuned": "2026-10-10 world_r3 renders (gauntlet round 3), by eye"
     }
   ]
 }

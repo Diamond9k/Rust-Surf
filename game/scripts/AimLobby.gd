@@ -22,6 +22,7 @@ var _state := "idle"   # idle | countdown | round | summary
 var _left := 0.0
 var _clock := 0.0      # round clock: advances by the Weapons clock's step, so it stands still in menus
 var _step_at := -1.0   # Weapons clock at the last _process
+var _phys_at := -1.0   # Weapons clock at the last track physics tick
 var _gen := 0
 var _quick := false    # --wtest / --shots / --lobbytest: no countdown, the round starts at once
 var _shots := 0
@@ -92,10 +93,10 @@ class Bot extends Node3D:
 	var hp_max := 100.0
 	var kevlar := 0.0
 	var helmet := false
-	var first_hit_at := -1.0
+	var first_hit_at := -1.0   # every bot time is on the lobby's one clock, _t() (the Weapons clock)
 	var last_hit_at := -1.0
 	var alive := true
-	var up_at := 0.0       # lobby _t() when it last stood up
+	var up_at := 0.0       # when it last stood up
 	var down_at := 0.0
 	var kick := 0.0
 	var phase := 0.0       # idle sway offset, so the range never moves in step
@@ -880,15 +881,16 @@ func _hud() -> void:
 	_ui.add_child(top)
 	_top_kills = _top_box(top, "KILLS", ct)
 	var mid := _pc(top, _f("ui_alpha") + 0.1)
+	(mid.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = Color(_col("ui_clock_bg"), _f("ui_alpha") + 0.1)
 	var mv := VBoxContainer.new()
 	mv.add_theme_constant_override("separation", -6)
 	mid.add_child(mv)
 	_top_time = _lab(mv, 34, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
 	_top_time.custom_minimum_size.x = 150
-	_top_mode = _lab(mv, 13, GREY, HORIZONTAL_ALIGNMENT_CENTER)
+	_top_mode = _spaced(_lab(mv, 13, GREY, HORIZONTAL_ALIGNMENT_CENTER))
 	_top_score = _top_box(top, "SCORE", tt)
 	# stats panel top left, where CS2 keeps the radar (the range has none)
-	var panel := _fade_panel(_ui, _f("ui_alpha"), tt)
+	var panel := _fade_panel(_ui, _f("ui_alpha"), Color(_col("ui_panel_accent"), float(V["ui_panel_accent"][3])))
 	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	panel.offset_left = 0
 	panel.offset_top = 24
@@ -897,18 +899,30 @@ func _hud() -> void:
 	pv.add_theme_constant_override("separation", 2)
 	panel.add_child(pv)
 	var fs: Array = V["ui_panel_font"]
-	_panel_title = _lab(pv, int(fs[2]), tt)
+	_panel_title = _spaced(_lab(pv, int(fs[2]), Color.WHITE))
 	var line := ColorRect.new()
 	line.color = Color(1, 1, 1, 0.14)
 	line.custom_minimum_size = Vector2(0, 1)
 	pv.add_child(line)
+	# rows on alternating faint stripes, like the CS2 scoreboard's; names in small spaced caps, values bold white
 	for i in int(_f("ui_panel_rows")) + 1:
+		var stripe := PanelContainer.new()
+		stripe.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var ss := StyleBoxFlat.new()
+		ss.bg_color = Color(1, 1, 1, _f("ui_row_stripe") if i % 2 == 0 else 0.0)
+		ss.content_margin_left = 6
+		ss.content_margin_right = 6
+		ss.content_margin_top = 1
+		ss.content_margin_bottom = 1
+		stripe.add_theme_stylebox_override("panel", ss)
+		pv.add_child(stripe)
 		var hb := HBoxContainer.new()
-		pv.add_child(hb)
-		var nl := _lab(hb, int(fs[0]), GREY)
+		stripe.add_child(hb)
+		var nl := _spaced(_lab(hb, int(fs[0]), GREY))
 		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		nl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		var vl := _lab(hb, int(fs[1]), Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
-		_rows.append([hb, nl, vl])
+		_rows.append([stripe, nl, vl])
 	# kill feed, top right like CS2
 	_feed = VBoxContainer.new()
 	_feed.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -982,17 +996,31 @@ func _layout_ui() -> void:
 	_ui.position = Vector2.ZERO
 	_ui.size = vp / s
 
-## A side box of the top bar: a team-tinted translucent panel (ui_team_box: darken, opacity) with white digits.
+## A side box of the top bar, CS2's way: a dark panel only tinted by its team colour (ui_team_box: darken,
+## opacity, digit lighten), the team colour in the digits and a thin strip along the bottom edge.
 func _top_box(parent: Node, cap: String, col: Color) -> Label:
-	var p := _pc(parent, _f("ui_alpha"), col)
 	var tb: Array = V["ui_team_box"]
-	(p.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = Color(col.darkened(float(tb[0])), float(tb[1]))
+	var p := _pc(parent, _f("ui_alpha"), col, SIDE_BOTTOM)
+	var sb := p.get_theme_stylebox("panel") as StyleBoxFlat
+	sb.bg_color = Color(col.darkened(float(tb[0])), float(tb[1]))
+	sb.set_border_width(SIDE_BOTTOM, int(_f("ui_team_strip")))
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", -6)
 	p.add_child(v)
-	var l := _lab(v, 30, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
+	var l := _lab(v, 30, col.lightened(float(tb[2])), HORIZONTAL_ALIGNMENT_CENTER)
 	l.custom_minimum_size.x = 92
-	_lab(v, 12, GREY, HORIZONTAL_ALIGNMENT_CENTER, cap)
+	_spaced(_lab(v, 12, GREY, HORIZONTAL_ALIGNMENT_CENTER, cap))
+	return l
+
+## Panorama's small caps run wide: ui_letter_spacing pixels between glyphs on a label's font.
+func _spaced(l: Label) -> Label:
+	var f: Font = l.get_theme_font("font")
+	if f == null:
+		return l
+	var fv := FontVariation.new()
+	fv.base_font = f
+	fv.spacing_glyph = int(_f("ui_letter_spacing"))
+	l.add_theme_font_override("font", fv)
 	return l
 
 func _acc() -> float:
@@ -1073,15 +1101,35 @@ func _best_key() -> String:
 	var w := String(_used.keys()[0]) if _used.size() == 1 else (String(main.weapons.held()) if main.weapons else "")
 	var thin: Variant = main.weapons.get("thin") if main.weapons else null
 	if thin is Dictionary and (thin as Dictionary).has(w):
-		return "%s|%s|avg|r%s" % [mode, w, rules_hash()]  # a gun on class-average stats ranks apart: its score never stands for the real gun
-	return "%s|%s|r%s" % [mode, w, rules_hash()]
+		return "%s|%s|avg|r%s" % [mode, w, rules_hash(w)]  # a gun on class-average stats ranks apart: its score never stands for the real gun
+	return "%s|%s|r%s" % [mode, w, rules_hash(w)]
 
-## A short hash of every best_rules row's value: a best set under other scoring rules never stands for this one.
-func rules_hash() -> String:
+## A short hash of everything a score depends on: every best_rules row, Weapons' mechanics (weapon_defaults.json,
+## less the look-and-sound rows best_ignore_mechanics names; an entry ending in _ is a prefix) and the gun's own
+## resolved stats with its class fallback row. A best set under other rules, other ballistics or a CS2 update
+## that changed the gun never stands for this one.
+func rules_hash(weapon: String = "") -> String:
 	var vals := []
 	for id in V["best_rules"]:
 		vals.append([id, V[String(id)]])
+	var w: Node = main.weapons if main else null
+	if w != null:
+		var mech := {}
+		for k in w.X:
+			if not _ignored_mechanic(String(k)):
+				mech[k] = w.X[k]
+		vals.append(mech)
+		if weapon != "":
+			vals.append(w._st.get(weapon, {}))
+			vals.append(w.defaults.get(w._cls(weapon), {}))
 	return JSON.stringify(vals).md5_text().substr(0, 8)
+
+func _ignored_mechanic(k: String) -> bool:
+	for e in V["best_ignore_mechanics"]:
+		var s := String(e)
+		if k == s or (s.ends_with("_") and k.begins_with(s)):
+			return true
+	return false
 
 func _refresh_hud() -> void:
 	_top_kills.text = str(_kills if mode == "bots" else _hits)
@@ -1099,7 +1147,7 @@ func _refresh_hud() -> void:
 		var r: Array = _rows[i]
 		(r[0] as Control).visible = i < st.size()
 		if i < st.size():
-			(r[1] as Label).text = String(st[i][0])
+			(r[1] as Label).text = String(st[i][0]).to_upper()
 			(r[2] as Label).text = String(st[i][1])
 	_big.visible = _state == "countdown"
 	if _state == "countdown":
@@ -1323,7 +1371,7 @@ func register_hit(unit: Node3D, dmg: float, head: bool, _at: Vector3, group: Str
 			_count(head)
 			if b.first_hit_at < 0.0:
 				b.first_hit_at = _last_shot_at
-			b.last_hit_at = _clock
+			b.last_hit_at = _last_shot_at
 			var d := minf(_hit_damage(b, dmg, head, group, _shot_weapon), b.hp)
 			b.hp -= d
 			_damage += d
@@ -1342,9 +1390,13 @@ func _hit_damage(b: Bot, dmg: float, head: bool, group: String, weapon: String) 
 	return _hit_health(b, dmg, head, group, id == "knife", float(w.stat(id, "armor ratio")) * float(w.X["armor_ratio_scale"]), float(w.X["armor_bonus"]))
 
 ## _hit_damage with the armour terms given (the --lobbytest shots-to-kill table feeds CS2's own numbers).
+## A fixed-damage knife (knife_hitgroups false) also meets the armour as one group, knife_armour_group, wherever
+## it lands: a slash to a helmeted head never does less than the same slash to the unarmoured legs.
 func _hit_health(b: Bot, dmg: float, head: bool, group: String, knife: bool, ratio: float, bonus: float) -> float:
-	var scale := 1.0 if head or (knife and not bool(V["knife_hitgroups"])) else _f("hitgroup_" + group)
-	var split := armour_split(dmg * scale, "head" if head else group, ratio, bonus, b.kevlar, b.helmet)
+	var fixed := knife and not bool(V["knife_hitgroups"])
+	var scale := 1.0 if head or fixed else _f("hitgroup_" + group)
+	var g := String(V["knife_armour_group"]) if fixed else ("head" if head else group)
+	var split := armour_split(dmg * scale, g, ratio, bonus, b.kevlar, b.helmet)
 	b.kevlar -= float(split[1])
 	return floorf(split[0]) if bool(V["damage_floor"]) else float(split[0])
 
@@ -1378,7 +1430,8 @@ func _count(head: bool) -> bool:
 
 ## Track: one physics tick of time on target when the trigger is held while the gun is firing (_firing), from
 ## behind the firing line, with the crosshair ray on the live track bot. A tick is a tick whatever the fire
-## rate; shots only count toward accuracy and the miss cost.
+## rate; shots only count toward accuracy and the miss cost. dt is the tick's step on the round's own clock
+## (_track_step), so time on target and the round clock agree at any frame rate.
 func _track_tick(dt: float, trigger: bool, on_bot: bool, firing: bool) -> void:
 	if not (active and _state == "round" and mode == "track") or _paused():
 		return
@@ -1404,7 +1457,9 @@ func _firing() -> bool:
 		return false
 	if int(w.ammo[id][0]) <= 0 or float(w._reload_until) > 0.0 or float(w._shell_next) > 0.0:
 		return false
-	var cyc := float(w.mstat(id, "cycletime"))
+	# the gun's per-round cycle: a burst mode's cooldown (its 'cycletime alt') is the wait between pulls, so a
+	# burst pistol is held to track_fire_window between pulls exactly like a semi-auto
+	var cyc := minf(float(w.mstat(id, "cycletime")), float(w.stat(id, "cycletime")))
 	if float(w._now()) + 0.0005 < maxf(maxf(float(w._next_fire) - cyc, _draw_end), float(w._toggle_until)):
 		return false  # still drawing, or a silencer turn
 	return _t() - _last_shot_at <= maxf(cyc, _f("track_fire_window"))
@@ -1426,7 +1481,7 @@ func _crosshair_on(unit: Node3D) -> bool:
 
 func _kill(b: Bot, head: bool) -> void:
 	b.alive = false
-	b.down_at = _clock
+	b.down_at = _t()
 	b.fall_side = 1.0 if _rng.randf() < 0.5 else -1.0
 	_kills += 1
 	if head:
@@ -1447,7 +1502,7 @@ func _set_live(b: Bot, live: bool) -> void:
 		(o as CollisionObject3D).collision_layer = 1 if live else 0
 
 ## Live bots sway on their feet (bot_idle); downed bots tip over backwards with a twist, then stand back up
-## after bot_respawn_s on the round clock.
+## after bot_respawn_s. Heal and respawn run on _t(), the clock hits and kills are stamped on.
 func _tick_bots(dt: float) -> void:
 	var fall_s := maxf(_f("bot_fall_s"), 0.01)
 	var idle: Array = V["bot_idle"]
@@ -1456,11 +1511,11 @@ func _tick_bots(dt: float) -> void:
 		if b == null or not is_instance_valid(b):
 			continue
 		b.kick = move_toward(b.kick, 0.0, dt * 1.2)
-		if b.alive and b.first_hit_at >= 0.0 and _clock - b.last_hit_at >= _f("bot_heal_s"):
+		if b.alive and b.first_hit_at >= 0.0 and _t() - b.last_hit_at >= _f("bot_heal_s"):
 			_heal(b)  # left alone, a wounded bot is fresh again: the next time to kill starts from scratch
 		var fall := 0.0
 		if not b.alive:
-			var since := _clock - b.down_at
+			var since := _t() - b.down_at
 			fall = clampf(since / fall_s, 0.0, 1.0)
 			fall = fall * fall
 			if since >= _f("bot_respawn_s") and _state == "round":
@@ -1951,12 +2006,23 @@ func _bot(at: Vector3, yaw_deg: float, outfit: int, tag: String, crouch := false
 		on.add_child(mi)
 	return b
 
+## One physics tick's step on _t(), the clock the round runs on: a hitch that drops physics ticks still moves
+## the bot and counts time as far as the round clock went, but one sample never stands for more than
+## track_max_sample_s (a stall earns at most that, it never banks a long held frame).
+func _track_step(dt: float) -> float:
+	var now := _t()
+	var d := clampf(now - _phys_at, 0.0, _f("track_max_sample_s")) if _phys_at >= 0.0 else dt
+	_phys_at = now
+	return d
+
 func _physics_process(dt: float) -> void:
 	if not (active and _state == "round" and mode == "track" and _targets.size() > 0) or _paused():
+		_phys_at = -1.0
 		return
 	var t := _targets[0]
 	if not is_instance_valid(t):
 		return
+	dt = _track_step(dt)
 	var firing := _firing()  # every tick, so it sees each draw
 	_track_tick(dt, Input.is_action_pressed("surf_attack"), _crosshair_on(t), firing)
 	var half := _f("track_half_range")
@@ -2116,6 +2182,14 @@ func _selftest() -> void:
 		_track_tick(tick, true, true, true)
 	var one := _on_target
 	ok = _check("track: ten ticks on target = ten ticks, whatever the gun", is_equal_approx(one - base, 10.0 * tick), "%.4f s" % (one - base)) and ok
+	# a tick's step is the round clock's own step, and a stall counts at most track_max_sample_s
+	var keep_phys := _phys_at
+	_phys_at = _t() - 0.05
+	var st_short := _track_step(tick)
+	_phys_at = _t() - 5.0
+	var st_long := _track_step(tick)
+	_phys_at = keep_phys
+	ok = _check("track: a tick steps on the round clock, a stall counts at most track_max_sample_s", absf(st_short - 0.05) < 0.02 and is_equal_approx(st_long, _f("track_max_sample_s")), "%.4f s, %.4f s" % [st_short, st_long]) and ok
 	_part(tb, "chest").hit(30.0, false, Vector3.ZERO)
 	ok = _check("track: hit without a shot earns nothing", _on_target == one and _hits == 0, _on_target) and ok
 	_fire()
@@ -2253,7 +2327,7 @@ func _selftest() -> void:
 	_fire()
 	_part(bhl, "chest").hit(30.0, false, Vector3.ZERO)
 	var hurt := bhl.hp < bhl.hp_max and bhl.first_hit_at >= 0.0
-	bhl.last_hit_at = _clock - _f("bot_heal_s") - 0.01
+	bhl.last_hit_at = _t() - _f("bot_heal_s") - 0.01
 	await get_tree().process_frame
 	ok = _check("wounded bot heals after bot_heal_s with no hits", hurt and bhl.hp == bhl.hp_max and bhl.first_hit_at < 0.0 and bhl.kevlar == _f("bot_armor"), "hp %.0f first hit %.2f" % [bhl.hp, bhl.first_hit_at]) and ok
 	# armour, CS order: hitgroup scale first, then the split; legs never armoured, the head only with a helmet
@@ -2284,6 +2358,15 @@ func _selftest() -> void:
 	bk.kevlar = 0.0
 	_fire("knife")
 	_part(bk, "thigh_l").hit(65.0, false, Vector3.ZERO)
+	var bkh := _targets[10] as Bot
+	bkh.kevlar = 100.0
+	bkh.helmet = true
+	var bkl := _targets[11] as Bot
+	bkl.kevlar = 100.0
+	_fire("knife")
+	_part(bkh, "head").hit(65.0, true, Vector3.ZERO)
+	_part(bkl, "thigh_r").hit(65.0, false, Vector3.ZERO)
+	ok = _check("knife: a helmeted head never takes less than the legs", bool(V["knife_hitgroups"]) or (bkh.hp == bkl.hp), "head %.0f legs %.0f" % [bkh.hp, bkl.hp]) and ok
 	ok = _check("knife: legs take the full stab", is_equal_approx(bk.hp, 100.0 - (65.0 if not bool(V["knife_hitgroups"]) else floorf(65.0 * _f("hitgroup_legs")))), bk.hp) and ok
 	# the shot's own weapon decides the armour, not the one held when the hit lands (here the knife is held)
 	var bw := _targets[7] as Bot
@@ -2329,12 +2412,34 @@ func _selftest() -> void:
 		print("LTEST SKIP shots to kill from the loaded stats (no CS2 weapon stats in this data folder; the PC run checks them)")
 	ok = _check("sheet: bots wear kevlar and helmet", ba.helmet == bool(V["bot_helmet"]) and (_targets[5] as Bot).kevlar == _f("bot_armor"), _f("bot_armor")) and ok
 	# a best is keyed by the scoring rules: changing one (bot armour, say) starts fresh bests
-	var h0 := rules_hash()
+	var hw := String(_best_key().get_slice("|", 1))
+	var h0 := rules_hash(hw)
 	var keep_armor: Variant = V["bot_armor"]
 	V["bot_armor"] = 0.0 if _f("bot_armor") > 0.0 else 100.0
-	var h1 := rules_hash()
+	var h1 := rules_hash(hw)
 	V["bot_armor"] = keep_armor
-	ok = _check("best key changes with the scoring rules", h0 != h1 and rules_hash() == h0 and _best_key().ends_with("|r" + h0), [h0, h1, _best_key()]) and ok
+	ok = _check("best key changes with the scoring rules", h0 != h1 and rules_hash(hw) == h0 and _best_key().ends_with("|r" + h0), [h0, h1, _best_key()]) and ok
+	# ... and with the ballistics: a mechanics row or the gun's own stats (a CS2 update), not with a look-only row
+	var keep_rs: Variant = w.X["recoil_scale"]
+	w.X["recoil_scale"] = float(keep_rs) + 1.0
+	var h_mech := rules_hash("cs2_ak47")
+	w.X["recoil_scale"] = keep_rs
+	var had_st: bool = w._st.has("cs2_ak47")
+	var keep_st: Dictionary = (w._st.get("cs2_ak47", {}) as Dictionary).duplicate()
+	var hk := rules_hash("cs2_ak47")
+	var st2 := keep_st.duplicate()
+	st2["damage"] = float(st2.get("damage", 36.0)) + 1.0
+	w._st["cs2_ak47"] = st2
+	var h_stat := rules_hash("cs2_ak47")
+	if had_st:
+		w._st["cs2_ak47"] = keep_st
+	else:
+		w._st.erase("cs2_ak47")
+	var keep_vol: Variant = w.X["shot_volume_db"]
+	w.X["shot_volume_db"] = float(keep_vol) - 3.0
+	var h_look := rules_hash("cs2_ak47")
+	w.X["shot_volume_db"] = keep_vol
+	ok = _check("best key changes with the mechanics and the gun's stats, not a sound row", h_mech != hk and h_stat != hk and h_look == hk and rules_hash("cs2_ak47") == hk, [hk, h_mech, h_stat, h_look]) and ok
 	# best file: whole-file save through a temp file; an unparsable file is set aside, not silently lost
 	var keep := String(V["best_file"])
 	var keep_best := _best

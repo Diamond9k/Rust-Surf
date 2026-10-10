@@ -367,6 +367,11 @@ if "--wtest" in a:
              "srcmiscount": ["reequip_idle idle clip on three equips: []"]}.get(mode, [])
     for f in fails:
         print("WTEST FAIL " + f)
+    arms = os.path.join(a[a.index("--data") + 1], "cs2", "weapons", "models", "shared", "arms", "weapon_arms.glb")
+    if os.path.isfile(arms) and mode not in ("novm", "srcnovm"):  # what the game prints for the rig checks when the data folder has a viewmodel
+        for c in ("viewmodel_inside_hull", "reequip_idle", "knife_in_palm"):
+            if not any(f.startswith(c) for f in fails):
+                print("WTEST PASS %s ok" % c)
     if not src or mode == "srcskip":  # the exported pck has no prep/tests beside it, so the game skips these
         print("WTEST PASS items_game_parity skipped: no prep/tests fixture beside this build")
         print("WTEST PASS fixture_stats skipped: no prep/tests fixture beside this build")
@@ -406,7 +411,9 @@ class Gate(unittest.TestCase):
             f.write(FAKE_GODOT)
         os.chmod(self.godot, 0o755)
         self.data = os.path.join(self.r, "data")
-        os.makedirs(self.data)
+        arms = os.path.join(self.data, "cs2", "weapons", "models", "shared", "arms")
+        os.makedirs(arms)
+        open(os.path.join(arms, "weapon_arms.glb"), "w").close()  # the fake game passes the rig checks when it finds the arms
         shutil.copytree(os.path.join(REPO, "prep"), os.path.join(self.r, "prep"), ignore=shutil.ignore_patterns("__pycache__"))
         os.makedirs(os.path.join(self.r, "tools"))
         shutil.copy(os.path.join(REPO, "tools", "kv_parity.gd"), os.path.join(self.r, "tools"))
@@ -452,7 +459,8 @@ class Gate(unittest.TestCase):
 
     def test_no_verdict_is_a_failure(self):
         errs, _ = self.gate("hang")
-        self.assertEqual(errs, ["Godot --wtest on the exported pck: exit 0, no pass line"])
+        self.assertEqual(len(errs), 1, errs)
+        self.assertTrue(errs[0].startswith("Godot --wtest on the exported pck: exit 0, no pass line"), errs)
 
     def test_script_error_with_exit_0(self):
         errs, _ = self.gate("werr")
@@ -521,7 +529,7 @@ class Ci(unittest.TestCase):
         os.environ["FAKE_GODOT"] = mode
         lines = []
         return package.game_tests(self.godot, ["--path", os.path.join(self.r, "game")], self.data, "on the source project", 60, lines.append,
-                                  package.CONTENT_CHECKS), lines
+                                  True, {"--wtest": package.content_expect("the synthetic viewmodel")}), lines
 
     def test_source_project_passes(self):
         errs, lines = self.ci("src")
@@ -529,13 +537,22 @@ class Ci(unittest.TestCase):
         self.assertIn("gate: --wtest WTEST weapons checks=21 failed=0", lines)
         self.assertFalse(os.path.exists(os.path.join(self.r, "dist")))  # nothing exported
 
-    def test_only_content_checks_are_excused(self):
-        errs, lines = self.ci("srccontent")
-        self.assertEqual(errs, [])
-        self.assertTrue(any("1 check(s) that need extracted content not passing: viewmodel_inside_hull" in l for l in lines), lines)
-        errs, _ = self.ci("srcreal")  # a real regression next to an excused one still fails
+    def test_content_checks_are_not_excused(self):
+        """--ci plays on a synthetic viewmodel, so a rig check that fails there fails the push."""
+        errs, _ = self.ci("srccontent")
+        self.assertEqual(len(errs), 1, errs)
+        self.assertIn("WTEST FAIL viewmodel_inside_hull", errs[0])
+        errs, _ = self.ci("srcreal")
         self.assertEqual(len(errs), 1, errs)
         self.assertIn("spray_fps_independent", errs[0])
+        self.assertIn("viewmodel_inside_hull", errs[0])
+
+    def test_rig_checks_must_run(self):
+        """A game that never loads the viewmodel prints no rig check at all: knife_in_palm then tested nothing."""
+        errs, _ = self.ci("srcnovm")
+        self.assertEqual(len(errs), 1, errs)
+        for c in package.CONTENT_CHECKS:
+            self.assertIn("the %s check ran" % c, errs[0])
 
     def test_empty_data_errors_excused_only_there(self):
         """--ci runs with an empty data folder, so "Error opening file" under it is expected; any other engine
@@ -553,7 +570,7 @@ class Ci(unittest.TestCase):
         self.assertIn("items_game_parity passed only by skipping", errs[0])
         self.assertIn("fixture_stats passed only by skipping", errs[0])
 
-    def test_excuse_needs_the_test_own_count_to_agree(self):
+    def test_a_failed_rig_check_fails_whatever_the_count(self):
         errs, _ = self.ci("srcmiscount")
         self.assertEqual(len(errs), 1, errs)
         self.assertTrue(errs[0].startswith("Godot --wtest on the source project: exit 1"), errs)
@@ -561,6 +578,18 @@ class Ci(unittest.TestCase):
     def test_release_gate_excuses_nothing(self):
         errs, _ = self.gate("srccontent")  # the same output on the exported pck is a refusal
         self.assertTrue(any(e.startswith("Godot --wtest on the exported pck: exit 1") for e in errs), errs)
+
+    def test_release_gate_needs_the_rig_checks(self):
+        """On real data the rig checks must PASS too, not just stay silent (knife_in_palm prints nothing without a rig)."""
+        errs, _ = self.gate("novm")
+        self.assertTrue(any("the knife_in_palm check ran" in e for e in errs), errs)
+
+    def test_ci_annotates_the_ack_backlog_on_github(self):
+        with unittest.mock.patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}):
+            errs, lines, _ = self.repo_ci()
+        self.assertEqual(errs, [], errs)
+        self.assertTrue(any(l.startswith("::warning title=Release blocked::") for l in lines) or
+                        any(l.startswith("gate: 0 gameplay-critical") for l in lines), lines)
 
     def test_ci_end_to_end_on_this_repo(self):
         """The repo's own --ci with the fake Godot: game/data synced, preflight and copies clean, every step logged.
@@ -570,6 +599,7 @@ class Ci(unittest.TestCase):
         errs, lines, envs = self.repo_ci()
         self.assertEqual(errs, [], errs)
         for want in ("gate: preflight clean", "gate: prep unit tests OK", "gate: synthetic stats install: prep read every gun's stats",
+                     "gate: synthetic viewmodel: 5 glb file(s)",
                      "gate: kv parity items_game.txt", "gate: --wtest", "gate: --uitest UITEST ok"):
             self.assertTrue(any(l.startswith(want) for l in lines), (want, lines))
         self.assertEqual(sum(l.startswith("gate: kv parity items_game.txt") for l in lines), 2, lines)  # the fixture and the synthetic install

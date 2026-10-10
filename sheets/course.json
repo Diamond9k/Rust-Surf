@@ -1976,6 +1976,31 @@
         "line_opacity": 1.0,
         "edge_inset": 0.6,
         "tuned": "2026-10-09 world_r1x renders (gauntlet round 1, batch 3), by eye"
+      },
+      "decay": {
+        "_doc": "Wear on the terrain roads, cut from the roads.lines texture (Rust's road_decals atlas, bands read from the png alpha: the asphalt patch splat fills u 0.005-0.5, v 0.504-1.0; the crack strip runs the full width at v 0.305-0.359). patch_rect [u0, v0, u1, v1] and patch_size [min, max] metres; at most one patch per patch_cell metres of road, kept with probability patch_density; crack_v the [v0, v1] of the crack band, one crack crack_len metres long and crack_width wide per crack_cell metres, kept with probability crack_density; edge_eat: metres of road edge the verge bites back into, in bays covering about edge_bite of the edge (gauntlet r2 critics: roads are flat grey strips with no edge decay, potholes or blending into the terrain). Our layout of Rust's decals, unverified against Rust's roads.",
+        "patch_rect": [
+          0.005,
+          0.504,
+          0.5,
+          1.0
+        ],
+        "patch_size": [
+          2.5,
+          5.0
+        ],
+        "patch_cell": 13,
+        "patch_density": 0.6,
+        "crack_v": [
+          0.305,
+          0.359
+        ],
+        "crack_cell": 9,
+        "crack_density": 0.55,
+        "crack_len": 7,
+        "crack_width": 0.6,
+        "edge_eat": 1.6,
+        "edge_bite": 0.45
       }
     },
     "blend_materials": [
@@ -2324,7 +2349,31 @@
       "grime": [
         0.6,
         4.0
-      ]
+      ],
+      "roof_units": {
+        "_doc": "Rust's large_vent mesh (6 x 3.3 x 6.3 m) set on every hall roof as plant: one every metres along the length, alternating side to side of the ridge at side x the half width, sunk sink metres into the roof slope, at scale. Our arrangement (gauntlet r2 critics: flat roofs with no roof clutter), unverified against Rust's roofs. on_props: the same unit on props' roofs, [x, y, z, yaw deg] in the prop mesh's frame (the warehouse roof deck is at y 8.7-8.8, read off the mesh's vertices).",
+        "mesh": "large_vent_LOD0",
+        "every": 16,
+        "side": 0.45,
+        "sink": 0.6,
+        "scale": 1.0,
+        "on_props": {
+          "warehouse_launch_site_a_LOD0": [
+            [
+              -3.5,
+              8.6,
+              -8.0,
+              0
+            ],
+            [
+              3.0,
+              8.7,
+              7.5,
+              90
+            ]
+          ]
+        }
+      }
     }
   },
   "shell": {
@@ -2342,7 +2391,7 @@
     "tuned": "2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): v0 1.17 -> 1.66 (critics: over-bright white ridge strip), band found by reading the png rows, by eye; 2026-10-09 world_r3_14 ramp1 render (gauntlet 3): v0 0.1 -> 1.17 (r2 critics: smeared wood-brown ridge), by eye; 2026-10-09 world_r3_1x renders (gauntlet 3): a 7 cm thick, 0.4 m capping (r2 critics: no bevel or clean trim), by eye; 2026-10-09 world_r3 renders, by eye"
   },
   "weathering": {
-    "_doc": "Decal atlas the ramp shader hangs leaks and gravel from (materials.json leaks/debris set the strength per material): leak_v is the atlas v at the top and bottom of the drip band (found by reading the png alpha: drips run v 0.595-0.925; the first rows are speckled, so the band starts at 0.607, left half dark green, right half rust), debris_v the v at the middle and edge of the gravel/litter band (alpha 1 at v 0.33, fading out by 0.175). leak_len: metres the drips hang down a face; leak_width: metres of face per half-atlas tile; debris_width: metres up from a face's foot the gravel reaches. Our use of Rust's decals, not a CS2 map's (unverified as a match for any real surf map). groove: how far the normal tilts into each cast-slab joint (a V groove groove_width metres either side, so one lip catches the sun); edge_wear: smooth, polished arris along each face's top metre with rough chipped pits. Our look (unverified against a CS2 surf map's materials). leak_vary: each atlas tile of drips hangs between (1 - leak_vary) and (1 + leak_vary/2) times leak_len; leak_gap: the share of tiles that hang no drips at all (gauntlet 3 critics: the drips read as one decal tiled uniformly along both walls). Our look (unverified). tie_pitch [along, down] metres between form-tie holes on ramp faces, tie_hole their radius; rust_len, rust_width (metres) and rust_keep (share of ties that bleed) shape the rust runs below them, tinted rust_tint (linear multiplier). Our look for cast concrete, unverified against Rust surfaces. crease_reach: metres up a face over which the crease occlusion fades out; crease_gutter: extra darkening (times crease_ao) in the last 0.3 m that hides the shadow-map leak where two faces meet; crease_bounce: light bounced into the foot of a face (an emission of its own albedo, fading out over 1.5 x crease_reach), so a valley trough shades off softly instead of to a black slit (gauntlet r1 critics). Our look, unverified.",
+    "_doc": "Decal atlas the ramp shader hangs leaks and gravel from (materials.json leaks/debris set the strength per material): leak_v is the atlas v at the top and bottom of the drip band (found by reading the png alpha: drips run v 0.595-0.925; the first rows are speckled, so the band starts at 0.607, left half dark green, right half rust), debris_v the v at the middle and edge of the gravel/litter band (alpha 1 at v 0.33, fading out by 0.175). leak_len: metres the drips hang down a face; leak_width: metres of face per half-atlas tile; debris_width: metres up from a face's foot the gravel reaches. Our use of Rust's decals, not a CS2 map's (unverified as a match for any real surf map). groove: how far the normal tilts into each cast-slab joint (a V groove groove_width metres either side, so one lip catches the sun); edge_wear: smooth, polished arris along each face's top metre with rough chipped pits. Our look (unverified against a CS2 surf map's materials). leak_vary: each atlas tile of drips hangs between (1 - leak_vary) and (1 + leak_vary/2) times leak_len; leak_gap: the share of tiles that hang no drips at all (gauntlet 3 critics: the drips read as one decal tiled uniformly along both walls). Our look (unverified). tie_pitch [along, down] metres between form-tie holes on ramp faces, tie_hole their radius; rust_len, rust_width (metres) and rust_keep (share of ties that bleed) shape the rust runs below them, tinted rust_tint (linear multiplier). Our look for cast concrete, unverified against Rust surfaces. crease_reach: metres up a face over which the crease occlusion fades out; crease_gutter: extra darkening (times crease_ao) in the last 0.3 m that hides the shadow-map leak where two faces meet; crease_bounce: light bounced into the foot of a face (an emission of its own albedo, fading out over 1.5 x crease_reach), so a valley trough shades off softly instead of to a black slit (gauntlet r1 critics). Our look, unverified. slab_shuffle: each cast slab cut from its own part of the texture (whole strips along u where the texture has baked seams, any offset down v; 1 on, 0 off) so the same stain never repeats slab after slab; runoff: darkening of the rain runoff streaks hanging up to runoff_len metres from a face's top edge (each its own length), times the material's grime; macro_tone: broad paler/darker patches over a whole face (about 23 m across); moss and moss_reach: damp green staining (tint moss_tint, linear multiplier) in patches over a face's lowest metres, times grime (gauntlet r2 critics: identical rust smears every tile, a flat even tone, no macro variation). Our look, unverified against Rust or a CS2 surf map.",
     "texture": "tex_dirt_stains_leaks",
     "leak_v": [
       0.607,
@@ -2361,7 +2410,7 @@
     "crease_reach": 5.0,
     "crease_gutter": 0.6,
     "crease_bounce": 0.18,
-    "tuned": "2026-10-10 world_r2b renders (gauntlet round 2): crease_reach 3.5 -> 5, crease_gutter 1.3 -> 0.6, crease_bounce 0.18 (r1 critics: a hard black slit at the valley bottom, no AO falloff or bounce light), by eye; 2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): leak_vary, leak_gap by eye, edge_wear 0.7 -> 0.3 (critics: an over-bright strip along the ridge, the polished arris glaring in the sun); 2026-10-09 world_r3_1x renders (gauntlet 3): groove, groove_width, edge_wear by eye; 2026-10-09 world_r1 (gauntlet 2) renders, by eye",
+    "tuned": "2026-10-10 world_r3 renders (gauntlet round 3): rust_keep 0.22 -> 0.09 (r2 critics: identical rust smears in rows), slab_shuffle, runoff, runoff_len, macro_tone, moss, moss_reach, moss_tint added, by eye; 2026-10-10 world_r2b renders (gauntlet round 2): crease_reach 3.5 -> 5, crease_gutter 1.3 -> 0.6, crease_bounce 0.18 (r1 critics: a hard black slit at the valley bottom, no AO falloff or bounce light), by eye; 2026-10-09 world_r1_n renders (gauntlet round 1, batch 3): leak_vary, leak_gap by eye, edge_wear 0.7 -> 0.3 (critics: an over-bright strip along the ridge, the polished arris glaring in the sun); 2026-10-09 world_r3_1x renders (gauntlet 3): groove, groove_width, edge_wear by eye; 2026-10-09 world_r1 (gauntlet 2) renders, by eye",
     "leak_vary": 0.55,
     "leak_gap": 0.3,
     "tie_pitch": [
@@ -2371,11 +2420,22 @@
     "tie_hole": 0.035,
     "rust_len": 3.0,
     "rust_width": 0.16,
-    "rust_keep": 0.22,
+    "rust_keep": 0.09,
     "rust_tint": [
       0.78,
       0.52,
       0.34
+    ],
+    "slab_shuffle": 1.0,
+    "runoff": 0.5,
+    "runoff_len": 14.0,
+    "macro_tone": 0.24,
+    "moss": 0.6,
+    "moss_reach": 2.5,
+    "moss_tint": [
+      0.82,
+      0.9,
+      0.68
     ]
   },
   "paint_columns": [

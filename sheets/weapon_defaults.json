@@ -351,10 +351,24 @@
   },
   {
    "id": "view_punch_decay",
-   "value": 12.0,
+   "value": 18.0,
    "used_in": "camera-only kick exponential decay per second",
-   "source": "mashup tuning",
-   "verified": "unverified: mashup tuning, not a CS2 value"
+   "source": "CS:GO cvar view_punch_decay (recalled default 18, exponential decay of m_viewPunchAngle per second)",
+   "verified": "unverified: recalled CS:GO SDK default, not checked against the SDK source or CS2"
+  },
+  {
+   "id": "reload_inacc_fallback",
+   "value": 0.0,
+   "used_in": "accuracy penalty base added while reloading when items_game gives no 'inaccuracy reload' (0 adds nothing)",
+   "source": "CS:GO UpdateAccuracyPenalty adds GetInaccuracyReload() while m_bInReload",
+   "verified": "unverified: fallback only; the player's items_game value wins"
+  },
+  {
+   "id": "reload_inacc_shells",
+   "value": 1,
+   "used_in": "1: a shotgun loading shells counts as reloading for 'inaccuracy reload' (a shot that breaks off the load gets it), 0: only magazine reloads",
+   "source": "mashup choice",
+   "verified": "unverified: whether CS2 treats a shell-by-shell load as m_bInReload was not checked"
   },
   {
    "id": "recoil_suppression_shots",

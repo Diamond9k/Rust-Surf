@@ -41,6 +41,7 @@ var _wgap := NAN          # the held gun's crosshair gap when cl_crosshairgap_us
 func setup(cv: Dictionary, cs2_dir: String = "") -> void:
 	convars = cv
 	H = Sheets.values("hud")
+	process_priority = 100  # after Weapons' _process: the arms show the cone the next shot uses, not last frame's
 	font = _load_font(cs2_dir, 700)
 	menu_font = _load_font(cs2_dir, int(H["menu_weight"]))
 	var root := Control.new()
@@ -309,15 +310,20 @@ static func xh_segs(cv: Dictionary, h: float, hv: Dictionary, spread_px: float, 
 	elif style == 5:
 		move = roundf(fire_px)
 	var segs: Array = []
-	if style == 2:
-		# Classic: the whole arm opens with the spread up to splitdist; past it the inner pip stays at splitdist and
-		# the outer pip (splitratio of the length) keeps moving, each at its alpha mod (unverified against CS2 captures)
-		var ratio := clampf(num(cv, "cl_crosshair_dynamic_maxdist_splitratio", 0.35), 0.0, 1.0)
-		var split := roundf(maxf(num(cv, "cl_crosshair_dynamic_splitdist", 7), 0.0) * yres)
+	if style == 0 or style == 2:
+		# Default and Classic split: the whole arm opens with the spread up to splitdist; past it the inner pip stays
+		# at splitdist and the outer pip (splitratio of the length) keeps moving, each at its alpha mod. Default
+		# (style 0) splits by hud.json's fixed default_xh_split* values, Classic by the player's convars
+		# (unverified against CS2 captures)
+		var d0 := style == 0
+		var ratio := clampf(float(hv["default_xh_splitratio"]) if d0 else num(cv, "cl_crosshair_dynamic_maxdist_splitratio", 0.35), 0.0, 1.0)
+		var split := roundf(maxf(float(hv["default_xh_splitdist"]) if d0 else num(cv, "cl_crosshair_dynamic_splitdist", 7), 0.0) * yres)
 		var inner := roundf(size * (1.0 - ratio))
 		var apart := move > split
-		segs.append([gap + minf(move, split), inner, num(cv, "cl_crosshair_dynamic_splitalpha_innermod", 1) if apart else 1.0])
-		segs.append([gap + move + inner, size - inner, num(cv, "cl_crosshair_dynamic_splitalpha_outermod", 0.5) if apart else 1.0])
+		var in_a := float(hv["default_xh_inner_alpha"]) if d0 else num(cv, "cl_crosshair_dynamic_splitalpha_innermod", 1)
+		var out_a := float(hv["default_xh_outer_alpha"]) if d0 else num(cv, "cl_crosshair_dynamic_splitalpha_outermod", 0.5)
+		segs.append([gap + minf(move, split), inner, in_a if apart else 1.0])
+		segs.append([gap + move + inner, size - inner, out_a if apart else 1.0])
 	else:
 		segs.append([gap + move, size, 1.0])
 	return segs

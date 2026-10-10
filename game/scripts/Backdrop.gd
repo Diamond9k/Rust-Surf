@@ -30,6 +30,7 @@ var _pit := PackedByteArray()
 var _tmat: ShaderMaterial
 var scattered := {}
 var _avoid: Array[AABB] = []
+var _htop := 0.0  # eave height of the hall being built: wall UV2 is metres below it and above the ground
 
 func build(c: Content, offset: Vector3, yaw_deg: float) -> void:
 	content = c
@@ -82,6 +83,7 @@ func _props() -> void:
 		props += 1
 		var box := mi.global_transform * mesh.get_aabb()
 		_avoid.append(box)
+		_prop_units(String(p["mesh"]), mi)
 		if String(p["mesh"]) in with_apron:
 			aprons.append(Vector4(box.position.x - mg, box.position.z - mg, box.end.x + mg, box.end.z + mg))
 
@@ -104,7 +106,7 @@ func _halls() -> void:
 			var st: SurfaceTool = sts[k]
 			st.generate_tangents()
 			st.commit(mesh)
-			mesh.surface_set_material(mesh.get_surface_count() - 1, _row_mat(String(roles[k])))
+			mesh.surface_set_material(mesh.get_surface_count() - 1, _hall_mat(String(roles[k])))
 		var mi := MeshInstance3D.new()
 		mi.name = String(h["id"])
 		mi.mesh = mesh
@@ -112,6 +114,7 @@ func _halls() -> void:
 		add_child(mi)
 		var at: Array = h["pos"]
 		mi.global_transform = Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(float(h["yaw"])), 0)), Vector3(at[0], height(at[0], at[1]) + float(h["dy"]), at[1]))
+		_roof_units(h, mi)
 		var box := mi.global_transform * mesh.get_aabb()
 		_avoid.append(box)
 		halls += 1
@@ -132,6 +135,7 @@ func _hall(h: Dictionary, sts: Dictionary) -> Dictionary:
 	var rise := float(h["rise"])
 	var bh := float(h["base"])
 	var pl := float(T["halls"]["plinth"])
+	_htop = top
 	var used := {}
 	# plinth, sunk into the ground so a hall on a slope never floats
 	_hbox(sts["plinth"], Vector3(-L - 0.3, -2.0, -W - 0.3), Vector3(L + 0.3, pl, W + 0.3))
@@ -186,7 +190,9 @@ func _hall(h: Dictionary, sts: Dictionary) -> Dictionary:
 		if n.y < 0.0:
 			n = -n
 		var sl := a.distance_to(d)
-		_hquad(sts["roof"], [a, b, c, d], n, [Vector2(a.x, 0), Vector2(b.x, 0), Vector2(c.x, sl), Vector2(d.x, sl)])
+		# a pitched roof weathers down from its ridge (UV2 metres below the ridge, above the eave); a flat one has no such edge
+		var r2: Array = [Vector2(0, sl), Vector2(0, sl), Vector2(sl, 0), Vector2(sl, 0)] if rise > 0.0 else []
+		_hquad(sts["roof"], [a, b, c, d], n, [Vector2(a.x, 0), Vector2(b.x, 0), Vector2(c.x, sl), Vector2(d.x, sl)], r2)
 		var dn := Vector3(0, -0.05, 0)
 		_hquad(sts["roof"], [a + dn, b + dn, c + dn, d + dn], -n, [Vector2(a.x, 0), Vector2(b.x, 0), Vector2(c.x, sl), Vector2(d.x, sl)])
 		# fascia along the eave
@@ -240,15 +246,26 @@ func _hbox(st: SurfaceTool, lo: Vector3, hi: Vector3) -> void:
 	_hquad(st, [Vector3(lo.x, hi.y, lo.z), Vector3(hi.x, hi.y, lo.z), Vector3(hi.x, hi.y, hi.z), Vector3(lo.x, hi.y, hi.z)], Vector3.UP,
 		[Vector2(lo.x, lo.z), Vector2(hi.x, lo.z), Vector2(hi.x, hi.z), Vector2(lo.x, hi.z)])
 
-## Godot front faces are clockwise: every triangle is wound to face along n (as Course._quad).
-func _hquad(st: SurfaceTool, pts: Array, n: Vector3, uv: Array) -> void:
+## Godot front faces are clockwise: every triangle is wound to face along n (as Course._quad). UV2 is
+## what Course's weathering shader reads (metres below the top edge, metres above the foot): uv2 when
+## given, else metres below the eave and above the ground on a wall that stays under the eave, and
+## (-1, -1), no edge weathering, on everything else (roofs, gables, the lantern).
+func _hquad(st: SurfaceTool, pts: Array, n: Vector3, uv: Array, uv2: Array = []) -> void:
 	var p0: Vector3 = pts[0]
 	var flip := ((pts[1] as Vector3) - p0).cross((pts[2] as Vector3) - p0).dot(n) > 0.0
+	var wall := absf(n.y) < 0.3
+	for q in pts:
+		wall = wall and (q as Vector3).y <= _htop + 0.15
 	for tri in ([[0, 2, 1], [0, 3, 2]] if flip else [[0, 1, 2], [0, 2, 3]]):
 		for i in tri:
-			st.set_color(_grime((pts[i] as Vector3).y))
+			var y := (pts[i] as Vector3).y
+			st.set_color(_grime(y))
 			st.set_normal(n)
 			st.set_uv(uv[i])
+			if not uv2.is_empty():
+				st.set_uv2(uv2[i])
+			else:
+				st.set_uv2(Vector2(maxf(_htop - y, 0.0), maxf(y, 0.0)) if wall else Vector2(-1, -1))
 			st.add_vertex(pts[i])
 
 ## Vertex shade of a hall: dirt splashed up the lowest metres of the walls (course.json halls grime).
@@ -265,7 +282,67 @@ func _htri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, n: Vector3, ua: 
 		st.set_color(_grime((pts[i] as Vector3).y))
 		st.set_normal(n)
 		st.set_uv(uv[i])
+		st.set_uv2(Vector2(-1, -1))
 		st.add_vertex(pts[i])
+
+## A hall part's material: rows with grime or leaks go through Course's weathering shader (rain runoff and
+## Rust's leak decals hanging from the eaves, dirt and damp at the foot, broad tone patches: gauntlet r2
+## critics, clean grey box hangars with no rust or grime); the rest are plain materials.
+func _hall_mat(id: String) -> Material:
+	var key := "hall:" + id
+	if mats.has(key):
+		return mats[key]
+	var out: Material = _row_mat(id)
+	for r in Sheets.load_sheet("materials")["rows"]:
+		if r["id"] == id and (float(r["grime"]) > 0.0 or float(r["leaks"]) > 0.0):
+			var sm := Course.surface_material(r, content, Sheets.load_sheet("course")["weathering"])
+			if sm:
+				out = sm
+	mats[key] = out
+	return out
+
+## course.json halls.roof_units: Rust's large_vent mesh set along each hall's roof as plant and vents
+## (rows of units either side of the ridge, every metres apart, alternate ones turned a quarter), so the
+## roofs stop reading as bare slabs. Our arrangement (unverified against Rust's own roofs).
+func _roof_units(h: Dictionary, hall: MeshInstance3D) -> void:
+	var R: Dictionary = T["halls"]["roof_units"]
+	var mesh := _mesh(String(R["mesh"]))
+	if mesh == null:
+		return
+	var sz: Array = h["size"]
+	var L := float(sz[0]) * 0.5
+	var W := float(sz[1]) * 0.5
+	var top := float(sz[2])
+	var rise := float(h["rise"])
+	var every := float(R["every"])
+	var n := int(floor(L * 2.0 / every))
+	var side := float(R["side"])
+	for k in n:
+		var x := -L + every * (k + 0.5)
+		var z := W * side * (1.0 if k % 2 == 0 else -1.0)
+		var y := top + rise * (1.0 - absf(z) / W) - float(R["sink"])
+		var u := MeshInstance3D.new()
+		u.mesh = mesh
+		u.transform = Transform3D(Basis.from_euler(Vector3(0, PI * 0.5 * (k % 2), 0)).scaled(Vector3.ONE * float(R["scale"])), Vector3(x, y, z))
+		hall.add_child(u)
+		props += 1
+
+## course.json halls.roof_units.on_props: the same roof units on a prop's roof, at [x, y, z, yaw deg] in the
+## prop mesh's own frame (y read off the mesh: the warehouse roof deck is at 8.7 m).
+func _prop_units(name: String, prop: MeshInstance3D) -> void:
+	var R: Dictionary = T["halls"]["roof_units"]
+	var at: Dictionary = R["on_props"]
+	if not at.has(name):
+		return
+	var mesh := _mesh(String(R["mesh"]))
+	if mesh == null:
+		return
+	for a: Array in at[name]:
+		var u := MeshInstance3D.new()
+		u.mesh = mesh
+		u.transform = Transform3D(Basis.from_euler(Vector3(0, deg_to_rad(float(a[3])), 0)), Vector3(a[0], a[1], a[2]))
+		prop.add_child(u)
+		props += 1
 
 ## A materials.json row as a plain StandardMaterial3D (UV in metres, scaled by the row's uv_scale).
 func _row_mat(id: String) -> StandardMaterial3D:
@@ -941,6 +1018,14 @@ func _terrain_material() -> ShaderMaterial:
 		sm.set_shader_parameter(k, Vector2(a[0], a[1]))
 	for k in ["line_width", "line_tile", "line_opacity", "edge_inset"]:
 		sm.set_shader_parameter(k, float(ln[k]))
+	var dc: Dictionary = rd["decay"]
+	var pr: Array = dc["patch_rect"]
+	sm.set_shader_parameter("patch_rect", Vector4(pr[0], pr[1], pr[2], pr[3]))
+	for k in ["patch_size", "crack_v"]:
+		var a: Array = dc[k]
+		sm.set_shader_parameter(k, Vector2(a[0], a[1]))
+	for k in ["patch_cell", "patch_density", "crack_cell", "crack_density", "crack_len", "crack_width", "edge_eat", "edge_bite"]:
+		sm.set_shader_parameter(k, float(dc[k]))
 	sm.set_shader_parameter("roughness_val", float(rows[layers[0]]["roughness"]))
 	return sm
 
@@ -984,6 +1069,17 @@ uniform float line_tile = 8.0;
 uniform vec2 dash = vec2(9.0, 0.5);
 uniform float line_opacity = 0.8;
 uniform float edge_inset = 0.5;
+uniform vec4 patch_rect = vec4(0.0, 0.5, 0.5, 1.0);
+uniform vec2 patch_size = vec2(2.0, 4.0);
+uniform float patch_cell = 14.0;
+uniform float patch_density = 0.0;
+uniform vec2 crack_v = vec2(0.305, 0.359);
+uniform float crack_cell = 10.0;
+uniform float crack_density = 0.0;
+uniform float crack_len = 6.0;
+uniform float crack_width = 0.5;
+uniform float edge_eat = 0.0;
+uniform float edge_bite = 0.5;
 uniform int apron_count = 0;
 uniform vec4 aprons[32];
 uniform float scrub_cell = 4.0;
@@ -1114,6 +1210,7 @@ void fragment() {
 	float ra = 0.0;  // metres along the nearest road
 	float rl = 0.0;  // metres across it (signed)
 	float rfade = 0.0;  // 0 at a road's ends: no markings through junctions
+	float ri = 0.0;  // which road
 	for (int i = 0; i < road_count; i++) {
 		vec2 ab = roads[i].zw - roads[i].xy;
 		float len = max(length(ab), 1e-3);
@@ -1126,13 +1223,38 @@ void fragment() {
 			ra = t;
 			rl = dot(ap, vec2(-dir.y, dir.x));
 			rfade = smoothstep(road_width * 0.6, road_width * 1.4, t) * smoothstep(road_width * 0.6, road_width * 1.4, len - t);
+			ri = float(i);
 		}
 	}
 	rd += (fbm(p / 3.0 + vec2(9.0, 4.0)) - 0.5) * 1.6;
 	float road = (1.0 - smoothstep(road_width * 0.5 - 0.6, road_width * 0.5 + 0.4, rd)) * (1.0 - low);
+	// a neglected road: its edge bitten back by the verge in ragged bays edge_eat metres deep
+	float bite = smoothstep(1.0 - edge_bite - 0.1, 1.0 - edge_bite + 0.1, fbm(p / 2.6 + vec2(33.0, 8.0)) * 0.6 + fbm(p / 9.0 + vec2(5.0, 1.0)) * 0.4);
+	road *= 1.0 - bite * smoothstep(road_width * 0.5 - edge_eat, road_width * 0.5 - 0.3, rd);
 	float shoulder = (1.0 - smoothstep(road_width * 0.5, road_width * 0.5 + 3.0, rd)) * (1.0 - road) * (1.0 - low);
 	vec2 ruv = p / road_scale;
 	vec3 rc = texture(tex_road, ruv).rgb * mix(0.85, 1.1, fbm(p / 17.0 + vec2(2.0, 8.0)));
+	if (has_lines) {
+		// Rust's asphalt patch splats and crack strips (road_decals atlas) dropped along each road: at most
+		// one patch per patch_cell metres and one crack per crack_cell, each its own place, size and turn
+		float pcell = floor(ra / patch_cell);
+		vec2 ph = vec2(hash(vec2(pcell, ri + 3.0)), hash(vec2(pcell, ri + 17.0)));
+		float psz = mix(patch_size.x, patch_size.y, hash(vec2(pcell, ri + 29.0)));
+		vec2 pq = vec2(ra - (pcell + 0.25 + 0.5 * ph.x) * patch_cell, rl - (ph.y - 0.5) * max(road_width - psz, 0.0));
+		float pa = hash(vec2(pcell, ri + 41.0)) * 6.2832;
+		pq = mat2(vec2(cos(pa), sin(pa)), vec2(-sin(pa), cos(pa))) * pq / psz + 0.5;
+		vec2 puv = mix(patch_rect.xy, patch_rect.zw, clamp(pq, 0.0, 1.0));
+		vec4 pt = textureGrad(tex_lines, puv, dFdx(pq) * (patch_rect.zw - patch_rect.xy), dFdy(pq) * (patch_rect.zw - patch_rect.xy));
+		float pin = step(0.0, pq.x) * step(pq.x, 1.0) * step(0.0, pq.y) * step(pq.y, 1.0) * step(hash(vec2(pcell, ri + 53.0)), patch_density);
+		rc = mix(rc, pt.rgb, pt.a * pin);
+		float ccell = floor(ra / crack_cell);
+		float cl = (hash(vec2(ccell, ri + 61.0)) - 0.5) * (road_width - 1.5);
+		float cv = (rl - cl) / crack_width + 0.5;
+		float cu = (ra - ccell * crack_cell) / crack_len;
+		vec4 ct = textureGrad(tex_lines, vec2(cu * 0.5 + hash(vec2(ccell, ri + 67.0)) * 0.5, mix(crack_v.x, crack_v.y, clamp(cv, 0.0, 1.0))), dFdx(vec2(ra / crack_len * 0.5, cv * (crack_v.y - crack_v.x))), dFdy(vec2(ra / crack_len * 0.5, cv * (crack_v.y - crack_v.x))));
+		float cin = step(0.0, cv) * step(cv, 1.0) * step(cu, 1.0) * step(hash(vec2(ccell, ri + 71.0)), crack_density);
+		rc = mix(rc, ct.rgb, ct.a * cin * (1.0 - far * 0.5));
+	}
 	c = mix(c, c * 0.82, shoulder);
 	c = mix(c, rc, road);
 	if (has_lines) {
@@ -1206,8 +1328,10 @@ static func sun_shafts(L: Dictionary, toward_sun: Vector3) -> MeshInstance3D:
 	var c: Array = L["shaft_color"]
 	sm.set_shader_parameter("shaft_color", Vector3(c[0], c[1], c[2]))
 	sm.set_shader_parameter("samples", int(L["shaft_samples"]))
-	for k in ["shaft_strength", "shaft_reach", "shaft_decay", "shaft_spread_deg", "shaft_air", "shaft_sky", "shaft_ground"]:
+	for k in ["shaft_strength", "shaft_reach", "shaft_decay", "shaft_spread_deg", "shaft_air", "shaft_sky", "shaft_ground", "flare_strength", "flare_size"]:
 		sm.set_shader_parameter(k, float(L[k]))
+	var fc: Array = L["flare_color"]
+	sm.set_shader_parameter("flare_color", Vector3(fc[0], fc[1], fc[2]))
 	mi.material_override = sm
 	return mi
 
@@ -1224,6 +1348,9 @@ uniform float shaft_spread_deg = 45.0;
 uniform float shaft_air = 80.0;
 uniform float shaft_sky = 0.4;
 uniform float shaft_ground = 1.0;
+uniform float flare_strength = 0.0;
+uniform float flare_size = 0.06;
+uniform vec3 flare_color = vec3(1.0, 0.85, 0.6);
 
 void vertex() {
 	POSITION = vec4(VERTEX.xy, 1.0, 1.0);
@@ -1242,7 +1369,32 @@ void fragment() {
 	vec3 ray = normalize(vp.xyz / vp.w);
 	float ang = degrees(acos(clamp(dot(ray, sv), -1.0, 1.0)));
 	float fall = pow(clamp(1.0 - ang / shaft_spread_deg, 0.0, 1.0), 2.0) * ahead;
-	if (fall <= 0.0) {
+	// lens flare: soft ghost discs strung along the line from the sun through the screen centre, as bright
+	// as the share of the sun disc left uncovered (five taps round it), fading as the sun leaves the frame
+	float flare = 0.0;
+	vec3 fcol = vec3(0.0);
+	if (flare_strength > 0.0) {
+		float vis = 0.0;
+		for (int k = 0; k < 5; k++) {
+			vec2 o = k == 0 ? vec2(0.0) : vec2(cos(float(k) * 1.5708), sin(float(k) * 1.5708)) * 0.006;
+			vis += open_sky(suv + o) * 0.2;
+		}
+		vec2 inb = smoothstep(vec2(-0.05), vec2(0.15), suv) * smoothstep(vec2(-0.05), vec2(0.15), 1.0 - suv);
+		vis *= ahead * inb.x * inb.y;
+		float asp = VIEWPORT_SIZE.x / VIEWPORT_SIZE.y;
+		vec4 gk = vec4(-0.3, -0.62, -1.05, 0.42);  // where each ghost sits along the sun-to-centre line
+		vec4 gs = vec4(0.6, 1.4, 2.2, 0.35);  // and its size, times flare_size
+		for (int k = 0; k < 4; k++) {
+			vec2 g = 0.5 + (suv - 0.5) * gk[k];
+			float d = length((uv - g) * vec2(asp, 1.0)) / (flare_size * gs[k]);
+			float disc = (1.0 - smoothstep(0.6, 1.0, d)) * (0.55 + 0.45 * smoothstep(0.3, 0.95, d));  // a brighter rim
+			vec3 tint = k == 0 ? vec3(0.7, 0.85, 1.0) : (k == 1 ? vec3(1.0, 0.8, 0.55) : (k == 2 ? vec3(0.55, 0.75, 1.0) : vec3(1.0)));
+			fcol += tint * disc * (k == 2 ? 0.5 : 1.0);
+		}
+		fcol *= flare_color * flare_strength * vis;
+		flare = max(max(fcol.r, fcol.g), fcol.b);
+	}
+	if (fall <= 0.0 && flare <= 0.0) {
 		discard;
 	}
 	float sky = step(d, 1.0e-6);
@@ -1261,7 +1413,7 @@ void fragment() {
 		w *= shaft_decay;
 		p += stp;
 	}
-	ALBEDO = shaft_color * shaft_strength * (acc / max(wsum, 1.0e-4)) * fall * air;
+	ALBEDO = shaft_color * shaft_strength * (acc / max(wsum, 1.0e-4)) * fall * air + fcol;
 }
 "
 

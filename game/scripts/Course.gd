@@ -25,7 +25,8 @@ func build(c: Content) -> void:
 	checkpoint_yaw = spawn_yaw
 	for m in Sheets.load_sheet("materials")["rows"]:
 		materials[m["id"]] = _material(m)
-		surfaces[m["id"]] = _surface(m)
+		var sm := surface_material(m, content, sheet["weathering"])
+		surfaces[m["id"]] = sm if sm else materials[m["id"]]
 		uv_scales[m["id"]] = float(m["uv_scale"])
 	for r in sheet["rows"]:
 		rows[r["id"]] = r
@@ -95,30 +96,34 @@ func _material(m: Dictionary) -> StandardMaterial3D:
 
 ## A row's normal map; "(none)" for textures Rust ships without one (glass_industrial).
 func _normal(m: Dictionary) -> Texture2D:
-	return null if m["normal"] == "(none)" else content.texture(m["normal"], "BumpMap")
+	return _nrm(m, content)
+
+static func _nrm(m: Dictionary, c: Content) -> Texture2D:
+	return null if m["normal"] == "(none)" else c.texture(m["normal"], "BumpMap")
 
 ## The course's own surfaces: the same textures through the weathering shader (materials.json
-## weather, grime, detail). AimLobby still borrows the plain StandardMaterial3D from materials.
-func _surface(m: Dictionary) -> Material:
+## weather, grime, detail; course.json weathering W). Null for a row with no texture. AimLobby still
+## borrows the plain StandardMaterial3D from materials; Backdrop's halls use this for their walls and roofs.
+static func surface_material(m: Dictionary, ct: Content, W: Dictionary) -> ShaderMaterial:
 	if m["albedo"] == "(none)":
-		return materials[m["id"]]
-	var t := content.texture(m["albedo"], "MainTex")
+		return null
+	var t := ct.texture(m["albedo"], "MainTex")
 	if t == null:
-		return materials[m["id"]]
+		return null
 	var sm := ShaderMaterial.new()
 	var sh := Shader.new()
 	sh.code = SURFACE_SHADER
 	sm.shader = sh
 	sm.set_shader_parameter("tex_a", t)
-	sm.set_shader_parameter("nrm_a", _normal(m))
-	sm.set_shader_parameter("has_nrm", _normal(m) != null)
+	sm.set_shader_parameter("nrm_a", _nrm(m, ct))
+	sm.set_shader_parameter("has_nrm", _nrm(m, ct) != null)
 	var w: Texture2D = null
 	if m["weather"] != "(none)":
-		w = content.texture(m["weather"], "MainTex")
+		w = ct.texture(m["weather"], "MainTex")
 	sm.set_shader_parameter("has_b", w != null)
 	if w:
 		sm.set_shader_parameter("tex_b", w)
-		sm.set_shader_parameter("nrm_b", content.texture(m["weather"], "BumpMap"))
+		sm.set_shader_parameter("nrm_b", ct.texture(m["weather"], "BumpMap"))
 	sm.set_shader_parameter("scale_a", float(m["uv_scale"]))
 	sm.set_shader_parameter("weather", float(m["weather_cover"]))
 	sm.set_shader_parameter("grime", float(m["grime"]))
@@ -134,8 +139,7 @@ func _surface(m: Dictionary) -> Material:
 	sm.set_shader_parameter("tile_crop_v", float(m["tile_crop_v"]))
 	var tn: Array = m["tint"]
 	sm.set_shader_parameter("tint", Vector3(tn[0], tn[1], tn[2]))
-	var W: Dictionary = sheet["weathering"]
-	var lk := content.texture(W["texture"], "MainTex")
+	var lk := ct.texture(W["texture"], "MainTex")
 	sm.set_shader_parameter("has_leak", lk != null and (float(m["leaks"]) > 0.0 or float(m["debris"]) > 0.0))
 	if lk:
 		sm.set_shader_parameter("tex_leak", lk)
@@ -144,13 +148,14 @@ func _surface(m: Dictionary) -> Material:
 	for k in ["leak_v", "debris_v"]:
 		var a: Array = W[k]
 		sm.set_shader_parameter(k, Vector2(a[0], a[1]))
-	for k in ["leak_len", "leak_width", "debris_width", "groove", "groove_width", "edge_wear", "leak_vary", "leak_gap", "tie_hole", "rust_len", "rust_width", "rust_keep", "crease_reach", "crease_gutter", "crease_bounce"]:
+	for k in ["leak_len", "leak_width", "debris_width", "groove", "groove_width", "edge_wear", "leak_vary", "leak_gap", "tie_hole", "rust_len", "rust_width", "rust_keep", "crease_reach", "crease_gutter", "crease_bounce", "slab_shuffle", "runoff", "runoff_len", "macro_tone", "moss", "moss_reach"]:
 		sm.set_shader_parameter(k, float(W[k]))
 	sm.set_shader_parameter("ties", float(m["ties"]))
 	var tpi: Array = W["tie_pitch"]
 	sm.set_shader_parameter("tie_pitch", Vector2(tpi[0], tpi[1]))
-	var rt: Array = W["rust_tint"]
-	sm.set_shader_parameter("rust_tint", Vector3(rt[0], rt[1], rt[2]))
+	for k in ["rust_tint", "moss_tint"]:
+		var a: Array = W[k]
+		sm.set_shader_parameter(k, Vector3(a[0], a[1], a[2]))
 	return sm
 
 func _piece(r: Dictionary) -> Node3D:
@@ -421,6 +426,13 @@ uniform float crease_reach = 3.5;
 uniform float crease_gutter = 1.3;
 uniform float crease_bounce = 0.0;
 uniform vec3 rust_tint = vec3(0.8, 0.55, 0.38);
+uniform float slab_shuffle = 0.0;
+uniform float runoff = 0.0;
+uniform float runoff_len = 12.0;
+uniform float macro_tone = 0.0;
+uniform float moss = 0.0;
+uniform float moss_reach = 2.0;
+uniform vec3 moss_tint = vec3(0.8, 0.85, 0.65);
 varying vec3 wpos;
 varying vec3 wn;
 varying flat vec2 face_off;  // flat: interpolation jitter fed into hash() speckled the leak decals and slab joints per pixel
@@ -440,6 +452,10 @@ float fbm(vec2 p) {
 vec2 vcrop(vec2 p) { return vec2(p.x, fract(p.y) * (1.0 - 2.0 * tile_crop_v) + tile_crop_v); }
 vec3 ta(vec2 p) { return textureGrad(tex_a, vcrop(p), dFdx(p), dFdy(p)).rgb; }
 vec3 tn(vec2 p) { return textureGrad(nrm_a, vcrop(p), dFdx(p), dFdy(p)).rgb; }
+// the same with the mip gradients taken from g: a slab's own texture offset jumps at its joints, and
+// gradients across that jump would pick the smallest mip in a line along every joint
+vec3 tag(vec2 p, vec2 g) { return textureGrad(tex_a, vcrop(p), dFdx(g), dFdy(g)).rgb; }
+vec3 tng(vec2 p, vec2 g) { return textureGrad(nrm_a, vcrop(p), dFdx(g), dFdy(g)).rgb; }
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	wn = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
@@ -471,9 +487,38 @@ void fragment() {
 		m = an.y > max(an.x, an.z) ? wpos.xz : (an.x > an.z ? wpos.zy : wpos.xy);
 	}
 	vec2 mo = m + (world_map ? vec2(0.0) : face_off);  // texture space only; slab joints stay on m
+	float face = world_map ? 0.0 : step(0.0, UV2.y);  // boxes have no UV2: no edge wear
+	float top = max(UV2.x, 0.0);
+	float bot = max(UV2.y, 0.0);
+	// rows of cast slabs, each row with its own slab length and offset so the joints never line up into
+	// a grid down a long ramp; found before the texture so each slab can be cut from its own part of it
+	bool slabs = panel > 0.0 && face > 0.5;
+	vec2 ps = vec2(panel);
+	vec2 pc = vec2(0.0);
+	if (slabs) {
+		float row = floor(m.y / panel);
+		ps = vec2(panel * mix(1.2, 2.4, hash(vec2(row, 5.0) + face_off)), panel);
+		pc = vec2(m.x / ps.x + hash(vec2(row, 9.0) + face_off), m.y / ps.y);
+		if (seam_lock > 0.0) {
+			// the texture's own cast seams run every strip metres along u: slabs one to three strips long,
+			// each row offset by whole strips, so every vertical joint lands on a baked seam
+			float strip = scale_a / seam_lock;
+			float ns = 1.0 + floor(hash(vec2(row, 5.0) + face_off) * 3.0);
+			ps.x = strip * ns;
+			pc.x = ((m.x + face_off.x) / strip + floor(hash(vec2(row, 9.0) + face_off) * ns)) / ns;
+		}
+	}
+	// slab_shuffle: each slab cast from its own part of the texture (whole strips along u when the texture
+	// has baked seams, any distance down v), so the same stain never repeats slab after slab
+	vec2 so = vec2(0.0);
+	if (slabs && slab_shuffle > 0.0) {
+		vec2 cell = floor(pc);
+		float su = hash(cell + vec2(41.0, 3.0));
+		so = vec2(seam_lock > 0.0 ? floor(su * seam_lock) / seam_lock : su, hash(cell + vec2(17.0, 29.0))) * slab_shuffle;
+	}
 	vec2 uv = mo / scale_a;
-	vec3 c = ta(uv);
-	vec3 nm = has_nrm ? tn(uv) : vec3(0.5, 0.5, 1.0);
+	vec3 c = tag(uv + so, uv);
+	vec3 nm = has_nrm ? tng(uv + so, uv) : vec3(0.5, 0.5, 1.0);
 	// a second, larger sampling of the same texture over half the surface by noise: no visible repeat
 	vec2 uv3 = mo / (scale_a * 2.37) + vec2(0.21, 0.67);
 	if (seam_lock > 0.0) {
@@ -482,8 +527,8 @@ void fragment() {
 		uv3 = uv + vec2(1.0 / seam_lock, 0.0);
 	}
 	float k3 = atlas ? 0.0 : 0.6 * smoothstep(0.35, 0.65, fbm(mo / (scale_a * 3.1) + vec2(8.0, 2.0)));
-	c = mix(c, ta(uv3), k3);
-	if (has_nrm) { nm = mix(nm, tn(uv3), k3); }
+	c = mix(c, tag(uv3 + so, uv3), k3);
+	if (has_nrm) { nm = mix(nm, tng(uv3 + so, uv3), k3); }
 	float rough = roughness_val * mix(1.0, 0.72, smoothstep(0.5, 0.75, fbm(m / 9.0 + vec2(23.0, 5.0))));  // worn, smoother patches catch the sun
 	if (has_b) {
 		float w = smoothstep(1.0 - weather - 0.1, 1.0 - weather + 0.1, fbm(mo / (scale_a * 2.7) + vec2(5.3, 1.7)));
@@ -494,8 +539,8 @@ void fragment() {
 		float kb = smoothstep(0.4, 0.6, fbm(mo / (scale_a * 1.9) + vec2(27.0, 13.0)));
 		// weather_crop trims the dark border some Rust textures carry round each tile (a grid of lines
 		// across the ramp otherwise); gradients from the unwrapped uv keep the mips seamless
-		vec2 cb1 = fract(uvb) * (1.0 - 2.0 * weather_crop) + weather_crop;
-		vec2 cb2 = fract(uvb2) * (1.0 - 2.0 * weather_crop) + weather_crop;
+		vec2 cb1 = fract(uvb + so * 1.37) * (1.0 - 2.0 * weather_crop) + weather_crop;  // cracks stop at the slab joints
+		vec2 cb2 = fract(uvb2 + so.yx * 1.61) * (1.0 - 2.0 * weather_crop) + weather_crop;
 		vec3 cb = mix(textureGrad(tex_b, cb1, dFdx(uvb), dFdy(uvb)).rgb, textureGrad(tex_b, cb2, dFdx(uvb2), dFdy(uvb2)).rgb, kb);
 		vec3 nb = mix(textureGrad(nrm_b, cb1, dFdx(uvb), dFdy(uvb)).rgb, textureGrad(nrm_b, cb2, dFdx(uvb2), dFdy(uvb2)).rgb, kb);
 		c = mix(c, cb * mix(c, vec3(dot(c, vec3(0.333))), 0.5) / max(vec3(dot(c, vec3(0.333))), vec3(0.05)), w * 0.85);
@@ -517,24 +562,20 @@ void fragment() {
 		c *= 1.0 + panel_tone * (hash(vec2(strip, face_off.x + 7.0)) * 2.0 - 1.0);
 	}
 	c *= tint;
-	float face = world_map ? 0.0 : step(0.0, UV2.y);  // boxes have no UV2: no edge wear
-	float top = max(UV2.x, 0.0);
-	float bot = max(UV2.y, 0.0);
 	float occ = 1.0;
-	if (panel > 0.0 && face > 0.5) {
-		// rows of cast slabs, each row with its own slab length and offset so the joints never line
-		// up into a grid down a long ramp
-		float row = floor(m.y / panel);
-		vec2 ps = vec2(panel * mix(1.2, 2.4, hash(vec2(row, 5.0) + face_off)), panel);
-		vec2 pc = vec2(m.x / ps.x + hash(vec2(row, 9.0) + face_off), m.y / ps.y);
-		if (seam_lock > 0.0) {
-			// the texture's own cast seams run every strip metres along u: slabs one to three strips long,
-			// each row offset by whole strips, so every vertical joint lands on a baked seam
-			float strip = scale_a / seam_lock;
-			float ns = 1.0 + floor(hash(vec2(row, 5.0) + face_off) * 3.0);
-			ps.x = strip * ns;
-			pc.x = ((m.x + face_off.x) / strip + floor(hash(vec2(row, 9.0) + face_off) * ns)) / ns;
-		}
+	// weathering at the scale of the whole face: broad paler and darker patches, rain runoff hanging in
+	// long soft streaks of its own length from the top edge, and damp green staining at the foot
+	c *= mix(1.0 - macro_tone, 1.0 + macro_tone * 0.5, fbm(m / 23.0 + face_off * 0.1 + vec2(3.0, 71.0)));
+	if (face > 0.5) {
+		float rcol = fbm(vec2((m.x + face_off.x) / 2.3, top / 40.0) + vec2(5.0, 3.0));
+		float rlen = runoff_len * mix(0.25, 1.0, vnoise(vec2((m.x + face_off.y) / 3.7, 1.0)));
+		float ro = smoothstep(0.45, 0.75, rcol) * (1.0 - smoothstep(0.0, rlen, top));
+		c *= 1.0 - runoff * grime * ro;  // scaled by the material's grime: clean steel takes little
+		rough = mix(rough, 1.0, ro * runoff * grime);
+		float mz = smoothstep(0.4, 0.7, fbm((m + face_off) / 4.0 + vec2(91.0, 7.0))) * (1.0 - smoothstep(0.0, moss_reach, bot));
+		c = mix(c, c * moss_tint, mz * moss * grime);
+	}
+	if (slabs) {
 		vec2 f = fract(pc);
 		c *= mix(0.9, 1.07, hash(floor(pc) + vec2(3.0, 7.0)));
 		rough *= mix(0.86, 1.08, hash(floor(pc) + vec2(19.0, 2.0)));  // each pour cured its own way: some slabs sheen more

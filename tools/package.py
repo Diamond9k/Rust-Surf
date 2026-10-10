@@ -10,7 +10,8 @@ usage: package.py [<version>] --godot <Godot binary> --data <prep output folder>
   -> "CI: clean" or the problems, exit 1; no zip. Every push runs it (.github/workflows/ci.yml): the checks that
      need neither the games' files nor export templates (see ci()), so a script change is tested before release.
      Its headless tests play on a synthetic CS2 stats install (prep/tests/ci_data.py) that prep's own
-     write_stats turns into weapon_stats.json, so all 35 guns' stats travel the release path on every push.
+     write_stats turns into weapon_stats.json, so all 35 guns' stats travel the release path on every push, and
+     on a synthetic CS2 viewmodel (prep/tests/ci_content.py), so the arms / knife / clip checks run there too.
 First any dist/RustSurf-<version>.zip and .entries.json of the same version are deleted, so a refused build
 never leaves an older zip that looks released. The sheets are copied over game/data/ and prep/ (game/data/ is
 not in git, so a fresh clone holds none or stale ones; --no-sync only checks). Then the gates, each must pass:
@@ -31,7 +32,7 @@ not in git, so a fresh clone holds none or stale ones; --no-sync only checks). T
   (--export-release; needs the Godot 4.7.2 export templates), and --lobbytest ("LTEST ALL PASS"), --wtest
   ("WTEST weapons checks=N failed=0") and --uitest ("UITEST ok") run on that exported RustSurf.pck
   (--main-pack), each with exit 0, no FAIL / SCRIPT ERROR / Parse Error / engine ERROR: line and a wall-clock
-  limit (--ci excuses only "Error opening file" under its content-free data folder), and no check that PASSes
+  limit (--ci excuses only "Error opening file" for the Rust files its synthetic data folder lacks), and no check that PASSes
   only by skipping unless another gate covers it (RELEASE_SKIPS), on --data
   (so the real CS2 stats reach the gun model) with empty Rust and CS2 folders so the packager's own CS2 config
   cannot change a result. The zip therefore holds exactly the tested export.
@@ -478,12 +479,12 @@ def scripts_gate(root, godot, timeout=600, log=print):
     return errs
 
 
-def game_tests(godot, launch, data, where, timeout=TEST_TIMEOUT, log=print, allowed=(), expect=None, skips=()):
+def game_tests(godot, launch, data, where, timeout=TEST_TIMEOUT, log=print, contentless=False, expect=None, skips=()):
     """--lobbytest, --wtest and --uitest with launch (["--main-pack", pck] or ["--path", game]) on data, with empty
     Rust and CS2 folders (the packager's own CS2 config cannot change a result), each under a wall-clock limit.
-    A test passes on exit 0, its pass line and no FAIL / SCRIPT ERROR / engine ERROR: line. allowed: check names
-    whose FAIL alone is accepted (--ci, which has no extracted content); the test's own failed=N must then count
-    exactly those, and there "Error opening file" lines for files under the data folder are expected.
+    A test passes on exit 0, its pass line and no FAIL / SCRIPT ERROR / engine ERROR: line; no FAIL is ever
+    excused. contentless: data holds only the synthetic stats and viewmodel (--ci), so "Error opening file" lines
+    for the Rust files it lacks are expected there.
     expect: {flag: [(regex, what it proves)]} lines a test must also print (--ci: every stats reference compared).
     skips: check names that may PASS as "skipped" (covered by another gate); any other skipped check fails the test,
     since its PASS would count a check that tested nothing."""
@@ -496,20 +497,14 @@ def game_tests(godot, launch, data, where, timeout=TEST_TIMEOUT, log=print, allo
             cmd = [godot, "--headless"] + launch + ["--", "--data", data, "--rust", os.path.join(empty, "rust"), "--cs2", os.path.join(empty, "cs2"), flag]
             code, out = _run(cmd, os.path.join(empty, "cwd"), timeout, log)
             fails = [l for l in out.splitlines() if SCRIPT_ERR.search(l) or TEST_FAIL.match(l)]
-            fails += [l for l in engine_errors(out, data if allowed else None) if l not in fails]
-            excused = [l for l in fails if TEST_FAIL.match(l) and len(l.split()) > 2 and l.split()[2] in allowed]
-            hard = [l for l in fails if l not in excused]
-            hard += ["no line %s (%s)" % (rx.pattern, what) for rx, what in (expect or {}).get(flag, []) if not rx.search(out)]
+            fails += [l for l in engine_errors(out, data if contentless else None) if l not in fails]
+            hard = ["no line %s (%s)" % (rx.pattern, what) for rx, what in (expect or {}).get(flag, []) if not rx.search(out)]
             skipped = TEST_SKIP.findall(out)
             hard += ["%s passed only by skipping (it tested nothing here)" % n for n in skipped if n not in skips]
             if skipped:
                 log("gate: %s skipped %s (covered elsewhere)" % (flag, ", ".join(n for n in skipped if n in skips) or "nothing allowed"))
             fails += [l for l in hard if l not in fails]
-            counted = re.search(r"^\w+ \w+ checks=[1-9]\d* failed=(\d+)\s*$", out, re.M)
-            if excused and not hard and counted and int(counted.group(1)) == len(excused) and code in (0, 1):
-                log("gate: %s %s with %d check(s) that need extracted content not passing: %s"
-                    % (flag, counted.group(0).strip(), len(excused), ", ".join(l.split()[2] for l in excused)))
-            elif code != 0 or fails or not ok.search(out):
+            if code != 0 or fails or not ok.search(out):
                 errs.append("Godot %s %s: exit %d, %s%s" % (flag, where, code, "no pass line" if not ok.search(out) else "pass line present",
                                                             "; " + " | ".join(fails)[:600] if fails else ""))
             else:
@@ -540,12 +535,13 @@ def godot_gate(root, godot, data, timeout=600, log=print):
     if errs:
         return errs
     pck = os.path.abspath(os.path.join(root, "dist", "RustSurf", "RustSurf.pck"))
-    return game_tests(godot, ["--main-pack", pck], data, "on the exported pck", min(timeout, TEST_TIMEOUT), log, skips=RELEASE_SKIPS)
+    return game_tests(godot, ["--main-pack", pck], data, "on the exported pck", min(timeout, TEST_TIMEOUT), log,
+                      expect={"--wtest": content_expect("the release data's CS2 viewmodel")}, skips=RELEASE_SKIPS)
 
 
-# --wtest checks that need CS2's arms and knife from a prep run. A --ci machine holds none of the games' files
-# (they are never in the repo), so there these two may fail on their own; the release gate runs them on real data.
-CONTENT_CHECKS = ("viewmodel_inside_hull", "reequip_idle")
+# --wtest checks that need CS2's arms, knife and clips. A --ci machine holds none of the games' files (they are never
+# in the repo), so --ci writes a synthetic rig (prep/tests/ci_content.py) and each of these must PASS on it.
+CONTENT_CHECKS = ("viewmodel_inside_hull", "reequip_idle", "knife_in_palm")
 
 
 def unit_tests(root, godot, log=print):
@@ -583,6 +579,26 @@ def ci_stats_data(root, data, log=print):
     return errs, {"--wtest": [(want, "the game read all %d reference stats from prep's weapon_stats.json" % n)]}
 
 
+def ci_viewmodel(root, data, log=print):
+    """The synthetic viewmodel --ci plays on (prep/tests/ci_content.py), written under data at the content.json paths.
+    Returns (errors, the --wtest lines that must show each CONTENT_CHECKS check passing on it)."""
+    tests = os.path.join(root, "prep", "tests")
+    if tests not in sys.path:
+        sys.path.insert(0, tests)
+    import ci_content
+    try:
+        paths = ci_content.build(root, data)
+    except (OSError, KeyError, ValueError) as e:
+        return ["synthetic viewmodel: could not write it (%s)" % e], []
+    log("gate: synthetic viewmodel: %d glb file(s) at their content.json paths" % len(paths))
+    return [], content_expect("the synthetic viewmodel")
+
+
+def content_expect(what):
+    """--wtest lines that show every CONTENT_CHECKS check passed (knife_in_palm prints nothing when no rig loaded)."""
+    return [(re.compile(r"^WTEST PASS %s\b" % c, re.M), "the %s check ran on %s" % (c, what)) for c in CONTENT_CHECKS]
+
+
 def ci(root, godot, timeout=600, log=print):
     """The checks a push can run without the games or export templates (a Linux Godot 4.7.2 headless binary is
     enough): one version in the recipe and README, sheets/ copied to game/data/ and equal to prep/'s copies,
@@ -590,7 +606,9 @@ def ci(root, godot, timeout=600, log=print):
     script, the game-vs-prep items_game parity on prep/tests/fixtures/items_game.txt and on the synthetic
     install, and --lobbytest, --wtest and --uitest on the source project with that synthetic install as the data
     folder: every gun's stats come from an items_game.txt through prep into the game, and --wtest must compare
-    every reference stat (CONTENT_CHECKS, which need the games' models, are excused there). Returns errors."""
+    every reference stat. The data folder also holds a synthetic viewmodel (arms, knife, draw / idle / inspect
+    clips at their content.json paths), and --wtest must PASS every CONTENT_CHECKS check on it: nothing is
+    excused, so a Viewmodel.equip or knife regression fails the push. Returns errors."""
     rver, errs = recipe_version(root)
     errs += check_readme(root, rver)
     for n in sync_copies(root, prep=False):
@@ -602,7 +620,11 @@ def ci(root, godot, timeout=600, log=print):
     errs += ["preflight: " + p for p in problems]
     log("gate: preflight %s, %d cell(s) labelled unverified" % ("clean" if not problems else "%d problem(s)" % len(problems), len(unsure)))
     # only a release refuses unacknowledged gameplay-critical rows (gates()); a push just says how many wait on review
-    log("gate: %d gameplay-critical unverified row(s) not yet acknowledged for release" % len(preflight.critical_unacked(root)))
+    crit = len(preflight.critical_unacked(root))
+    log("gate: %d gameplay-critical unverified row(s) not yet acknowledged for release" % crit)
+    if crit and os.environ.get("GITHUB_ACTIONS") == "true":  # an annotation on the run, so the backlog shows before release day
+        log("::warning title=Release blocked::%d gameplay-critical unverified sheet row(s) are not acknowledged; a release refuses "
+            "them (python3 tools/preflight.py --critical lists them, --ack records the review)" % crit)
     godot = os.path.abspath(godot) if godot and os.path.isfile(godot) else ""
     errs += unit_tests(root, godot, log)
     if not godot:
@@ -612,12 +634,15 @@ def ci(root, godot, timeout=600, log=print):
         g, expect = ci_stats_data(root, data, log)
         if not g:
             log("gate: synthetic stats install: prep read every gun's stats")
+            g, vm = ci_viewmodel(root, data, log)
+            expect["--wtest"] += vm
+        if not g:
             g = scripts_gate(root, godot, timeout, log)
         if not g:
             g = kv_parity(root, godot, [os.path.join(root, FIXTURE), os.path.join(data, "cs2", "scripts", "items", "items_game.txt")], timeout, log)
         if not g:
-            g = game_tests(godot, ["--path", os.path.abspath(os.path.join(root, "game"))], data, "on the source project (synthetic stats, no game content)",
-                           min(timeout, TEST_TIMEOUT), log, CONTENT_CHECKS, expect)
+            g = game_tests(godot, ["--path", os.path.abspath(os.path.join(root, "game"))], data, "on the source project (synthetic stats and viewmodel, no game content)",
+                           min(timeout, TEST_TIMEOUT), log, True, expect)
     finally:
         shutil.rmtree(data, ignore_errors=True)
     return errs + g

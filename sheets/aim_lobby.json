@@ -200,6 +200,7 @@
         "hitgroup_arms",
         "hitgroup_legs",
         "knife_hitgroups",
+        "knife_armour_group",
         "damage_floor",
         "flick_radius",
         "flick_dist",
@@ -208,10 +209,34 @@
         "track_half_range",
         "track_speed_u",
         "track_flip_s",
-        "track_fire_window"
+        "track_fire_window",
+        "track_max_sample_s"
       ],
       "what": "the rows a score depends on: the best key carries a short hash of their values (|r<hash>), so changing a scoring rule (an unverified armour, heal or hitgroup value checked against CS2 later) starts fresh bests instead of comparing new scores with old rules",
       "verified": "2026-10-10 design value (lobby Gauntlet round 2): scored headless (--lobbytest); not yet playtested on the PC"
+    },
+    {
+      "id": "best_ignore_mechanics",
+      "value": [
+        "vm_",
+        "scope_lens",
+        "scope_line_px",
+        "scope_blur_",
+        "scope_edge",
+        "scope_dot_",
+        "shot_voices",
+        "shot_volume_db",
+        "zoom_sensitivity_ratio",
+        "no_crosshair_classes",
+        "burst_messages",
+        "walk_key",
+        "unzoom_key",
+        "silencer_mesh_match",
+        "viewmodel_shrink",
+        "shoot_clips"
+      ],
+      "what": "weapon_defaults.json mechanics rows left out of the best key's hash because they change only the look, the sound, the player's own sensitivity or the keys, never where a round goes or what it does (an entry ending in _ is a prefix). Every other mechanics row, and the gun's own resolved stats, is in the hash, so a ballistics change or a CS2 update starts fresh bests",
+      "verified": "2026-10-10 design value (lobby Gauntlet round 3): answers the round 2 code critics' rules_hash finding; scored headless (--lobbytest best key cases)"
     },
     {
       "id": "killfeed_n",
@@ -1198,6 +1223,12 @@
       "verified": "unverified: CS:GO knife damage reads as fixed per swing in community damage tables (from memory); not checked in CS2 here"
     },
     {
+      "id": "knife_armour_group",
+      "value": "chest",
+      "what": "with knife_hitgroups false, the armour group a knife hit meets wherever it lands (kevlar applies, the helmet and the unarmoured legs do not single it out), so a slash to a helmeted head never does less than the same slash to the legs",
+      "verified": "unverified: how CS2 armour treats a knife hit by hitgroup is not checked here; 2026-10-10 design value (lobby Gauntlet round 3) answering the round 2 code critics' head-vs-legs knife finding, scored headless (--lobbytest knife armour case)"
+    },
+    {
       "id": "damage_floor",
       "value": true,
       "what": "true: each hit's health damage, after hitgroup and armour, is cut to whole points (CS keeps health as an integer), so fractional damage never piles up into an early kill",
@@ -1265,6 +1296,12 @@
       "value": 0.25,
       "what": "track mode: on-target time counts only while a round of the held gun went off within max(its cycletime, this many seconds), so holding the trigger on an empty gun, the knife or an unclicked semi-auto earns nothing",
       "verified": "2026-10-09 design value (Gauntlet round 3): scored headless (--lobbytest track gate cases); not playtested on the PC"
+    },
+    {
+      "id": "track_max_sample_s",
+      "value": 0.1,
+      "what": "track mode: the most round time one physics tick may count on target. Each tick counts its step on the round clock (the Weapons clock), so time on target and the round clock agree at any frame rate; a frame stall longer than this earns only this much, so a hitch never banks a long held sample",
+      "verified": "2026-10-10 design value (lobby Gauntlet round 3): answers the round 2 code critics' physics-dt finding; scored headless (--lobbytest track step case); not playtested on the PC"
     },
     {
       "id": "color_flick",
@@ -1360,12 +1397,12 @@
       "value": [
         0.55,
         0.72,
-        0.3,
+        0.42,
         0.5,
         0.3
       ],
       "what": "bot shading in place of baked AO: [albedo on faces pointing straight down, albedo at the part's grazing rim, cloth sheen (rim light), albedo at the soles, metres above the soles the darkening fades out]",
-      "verified": "2026-10-09 design value (Gauntlet round 2 ultracode, lobby_r2 renders): tuned by eye on the range at 960x540; a stand-in for the baked AO and PBR maps of a real character model, not taken from CS2 or Rust"
+      "verified": "2026-10-10 lobby Gauntlet round 3 (lobby_r3 renders): cloth sheen raised from 0.3 to 0.42 so bot silhouettes separate from the grey floor and walls; design value by eye; earlier: 2026-10-09 design value (Gauntlet round 2 ultracode, lobby_r2 renders): tuned by eye on the range at 960x540; a stand-in for the baked AO and PBR maps of a real character model, not taken from CS2 or Rust"
     },
     {
       "id": "bot_slot_pbr",
@@ -1479,11 +1516,51 @@
     {
       "id": "ui_team_box",
       "value": [
-        0.3,
-        0.86
+        0.82,
+        0.72,
+        0.25
       ],
-      "what": "top bar side boxes: how far the team colour (ui_ct for kills, ui_t for score) is darkened for the box fill, and the fill's opacity; the digits are white",
-      "verified": "2026-10-09 design value (Gauntlet round 1 of the lobby, lobby_r1 renders): team-tinted score boxes chosen by eye after critics asked for a team-coloured score bar; not taken from CS2 files; 2026-10-09 design value (lobby Gauntlet round 2, lobby_r2 renders): more saturated team blue and gold, darkened less, after critics read the old boxes as grey-blue and tan instead of CT and T colours; chosen by eye, not taken from CS2 files"
+      "what": "top bar side boxes: [how far the team colour is darkened for the panel, panel opacity, how far it is lightened for the digits]: a dark panel only tinted by the team, with the colour in the digits and a strip along the bottom edge, as CS2's top bar does",
+      "verified": "2026-10-10 design value (lobby Gauntlet round 3, lobby_r3 renders): answers the round 2 critics' 'flatter than CS2's translucent HUD' and 'orange-titled box unlike CS2' notes; set by eye from memory of CS2's HUD, not taken from CS2 files (unverified against a CS2 capture)"
+    },
+    {
+      "id": "ui_team_strip",
+      "value": 3,
+      "what": "top bar side boxes: height in 1080p pixels of the team-colour strip along the bottom edge",
+      "verified": "2026-10-10 design value (lobby Gauntlet round 3, lobby_r3 renders): answers the round 2 critics' 'flatter than CS2's translucent HUD' and 'orange-titled box unlike CS2' notes; set by eye from memory of CS2's HUD, not taken from CS2 files (unverified against a CS2 capture)"
+    },
+    {
+      "id": "ui_clock_bg",
+      "value": [
+        0.03,
+        0.035,
+        0.045
+      ],
+      "what": "top bar clock box colour (its opacity is ui_alpha + 0.1): near black, so the clock box reads darker than the team boxes",
+      "verified": "2026-10-10 design value (lobby Gauntlet round 3, lobby_r3 renders): answers the round 2 critics' 'flatter than CS2's translucent HUD' and 'orange-titled box unlike CS2' notes; set by eye from memory of CS2's HUD, not taken from CS2 files (unverified against a CS2 capture)"
+    },
+    {
+      "id": "ui_letter_spacing",
+      "value": 1,
+      "what": "extra pixels between glyphs on the HUD's small caps (captions, stat names, panel title), the wide-set look of CS2's panorama labels",
+      "verified": "2026-10-10 design value (lobby Gauntlet round 3, lobby_r3 renders): answers the round 2 critics' 'flatter than CS2's translucent HUD' and 'orange-titled box unlike CS2' notes; set by eye from memory of CS2's HUD, not taken from CS2 files (unverified against a CS2 capture)"
+    },
+    {
+      "id": "ui_panel_accent",
+      "value": [
+        1.0,
+        1.0,
+        1.0,
+        0.45
+      ],
+      "what": "stats panel: colour and opacity of the thin edge down its left side (the title is white); was the T orange",
+      "verified": "2026-10-10 design value (lobby Gauntlet round 3, lobby_r3 renders): answers the round 2 critics' 'flatter than CS2's translucent HUD' and 'orange-titled box unlike CS2' notes; set by eye from memory of CS2's HUD, not taken from CS2 files (unverified against a CS2 capture)"
+    },
+    {
+      "id": "ui_row_stripe",
+      "value": 0.05,
+      "what": "stats panel: white opacity of the faint stripe behind every other row, as on the CS2 scoreboard",
+      "verified": "2026-10-10 design value (lobby Gauntlet round 3, lobby_r3 renders): answers the round 2 critics' 'flatter than CS2's translucent HUD' and 'orange-titled box unlike CS2' notes; set by eye from memory of CS2's HUD, not taken from CS2 files (unverified against a CS2 capture)"
     },
     {
       "id": "ui_panel_w",
@@ -1500,12 +1577,12 @@
     {
       "id": "ui_panel_font",
       "value": [
-        19,
+        15,
         21,
-        19
+        18
       ],
       "what": "stats panel font px at the hud ref_height: caption, value, title (readable at 540p captures)",
-      "verified": "2026-10-09 design value (Gauntlet round 3): panel text sized to read at 960x540; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
+      "verified": "2026-10-10 design value (lobby Gauntlet round 3, lobby_r3 renders): answers the round 2 critics' 'flatter than CS2's translucent HUD' and 'orange-titled box unlike CS2' notes; set by eye from memory of CS2's HUD, not taken from CS2 files (unverified against a CS2 capture); stat names now in spaced capitals, so they drop from 19 to 15 px and the title from 19 to 18; earlier: 2026-10-09 design value (Gauntlet round 3): panel text sized to read at 960x540; rendered in lobby_r3 renders and scored headless (--lobbytest); not taken from aim_botz files"
     },
     {
       "id": "ui_hint_bottom",
@@ -3398,9 +3475,9 @@
     {
       "id": "fullmetal",
       "shirt": [
-        0.19,
-        0.205,
-        0.18
+        0.24,
+        0.255,
+        0.22
       ],
       "pants": [
         0.24,
@@ -3418,9 +3495,9 @@
         0.09
       ],
       "rig": [
-        0.21,
-        0.22,
-        0.18
+        0.11,
+        0.115,
+        0.1
       ],
       "skin": [
         0.66,
@@ -3459,7 +3536,7 @@
         "kilt",
         "cargo"
       ],
-      "verified": "2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files; 2026-10-09 lobby Gauntlet round 1 (lobby_r1 close-up renders): pants darkened from 0.33/0.30/0.23, which read as bright khaki in sun; built by eye, not taken from Rust or CS2 files; shirt darkened from 0.25/0.27/0.24, which read as a light sage green under the range sun (lobby_r1 close-up renders)"
+      "verified": "2026-10-10 lobby Gauntlet round 3 (lobby_r3 renders): rig darkened from 0.21 to 0.11 and shirt lifted from 0.19 to 0.24 so the vest reads apart from the shirt at range, the value split CS2 agents carry (critics: 'low-detail, flat shading'); design value by eye, not from Rust or CS2 files; earlier: 2026-10-09 design value (Gauntlet round 3, lobby_r3 renders): one kit for every bot, built by eye to read like Rust's full metal kit (hood, metal facemask with eye slits, metal chest plate, road sign kilt) the way every aim_botz bot wears the same agent; shapes placed in the bot frame against the existing parts; not taken from Rust or CS2 files; 2026-10-09 lobby Gauntlet round 1 (lobby_r1 close-up renders): pants darkened from 0.33/0.30/0.23, which read as bright khaki in sun; built by eye, not taken from Rust or CS2 files; shirt darkened from 0.25/0.27/0.24, which read as a light sage green under the range sun (lobby_r1 close-up renders)"
     },
     {
       "id": "fullmetal_charcoal",

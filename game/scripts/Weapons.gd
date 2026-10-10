@@ -105,6 +105,8 @@ var _decay_at := -1.0    # weapons-clock time the fire inaccuracy and recoil ind
 var _burst_pull := 0.0   # when the burst under way was pulled
 var _zoom_full_at := 0.0 # weapons-clock time the scope in progress is fully zoomed (CS's m_zoomFullyActiveTime)
 var _scope_band := 0.0   # the scope cross's blur band last drawn, px (redrawn while it changes)
+var _press_at := -1.0    # weapons-clock time the attack press event was dispatched, -1 when none is pending
+var _frame_from := -1.0  # weapons-clock time of the previous frame (the earliest a press read this frame can have landed)
 
 func setup(m: Node) -> void:
 	main = m
@@ -364,6 +366,12 @@ func _hold_clock(stop: bool) -> void:
 		_paused_total += w - _pause_from
 		_pause_from = -1.0
 
+## The attack press is stamped when its event is dispatched (the start of the frame, before physics and
+## _process), not when _process gets to it, so a tap reads the recovery and punch of its own moment.
+func _input(event: InputEvent) -> void:
+	if event.is_action_pressed("surf_attack") and not event.is_echo() and _press_at < 0.0:
+		_press_at = _now()
+
 func _blocked() -> bool:
 	return (main.settings and main.settings.is_open) or (_buy and _buy.visible) or main.player == null or main.player.frozen
 
@@ -373,8 +381,10 @@ func _process(dt: float) -> void:
 	_hold_clock(_blocked())
 	var t := _now()
 	var gdt := clampf(t - _tick_at, 0.0, maxf(dt, 0.0)) if _tick_at >= 0.0 else 0.0
+	_frame_from = _tick_at if _tick_at >= 0.0 else t
 	_tick_at = t
 	_tick(held(), t, gdt)
+	_press_at = -1.0
 	_decay_to(held(), t)  # after the frame's rounds: each of them recovered only up to its own slot time
 	_punch_to(t)  # the rounds of this frame read the punch at their own slot times; the camera reads it now
 	_camera()
@@ -430,7 +440,7 @@ func _tick(id: String, t: float, dt: float) -> void:
 		return
 	var auto := stat(id, "is full auto") > 0.5
 	if Input.is_action_just_pressed("surf_attack"):
-		fire()
+		fire(click_time(t))
 	elif (auto and Input.is_action_pressed("surf_attack")) or _fan:
 		hold_fire(id, t, dt)
 
@@ -527,12 +537,23 @@ func _part_tick(t: float) -> void:
 	if _part_id == held() and main.viewmodel:
 		main.viewmodel.set_parts(String(X["silencer_mesh_match"]).split(","), bool(_alt_on.get(_part_id, false)))
 
-func fire() -> void:
+## A trigger pull at weapons-clock time t (the frame's time when omitted).
+func fire(t: float = -1.0) -> void:
 	var id := held()
 	if id == "knife":
 		_knife(false)
 		return
-	_shoot(id, _now(), false)
+	_shoot(id, t if t >= 0.0 else _now(), false)
+
+## When this frame's press went off: its dispatch stamp (never after the frame's time t). The press landed
+## somewhere after the previous frame; when the gun came ready inside that window the press is taken at the
+## ready moment (the earliest it can have been) so the round keeps its cycletime slot, and the shot reads the
+## recovery and punch of that moment. A gun not yet ready at t refuses the press as before.
+func click_time(t: float) -> float:
+	var at := clampf(_press_at, _frame_from, t) if _press_at >= 0.0 and _frame_from >= 0.0 else t
+	if _next_fire > _frame_from and _next_fire <= at:
+		at = _next_fire
+	return at
 
 ## One round (or one shotgun blast). from_burst is a follow-up round of a burst already pulled.
 func _shoot(id: String, t: float, from_burst: bool) -> void:
@@ -563,7 +584,8 @@ func _shoot(id: String, t: float, from_burst: bool) -> void:
 			_next_fire = burst_next(t, _burst_pull, _burst_left, stat(id, "cycletime alt") if _has(id, "cycletime alt") else float(X["burst_cooldown"]))
 	else:
 		_burst_left = 0
-		_next_fire = cadence(_next_fire, t, cyc, get_process_delta_time())
+		# the slot is kept only when the shot can have landed on it: inside this frame's window since the last frame
+		_next_fire = cadence(_next_fire, t, cyc, minf(get_process_delta_time(), maxf(t - _frame_from, 0.0)))
 	a[0] = int(a[0]) - 1
 	if int(a[0]) <= 0 and int(a[1]) <= 0 and rows.has(id) and rows[id]["slot"] == "gear":
 		_recharge[id] = t + float(X["taser_recharge"])
@@ -996,13 +1018,22 @@ func _inacc(id: String) -> float:
 		a += air_inacc(_jump_inacc(id), absf(p.velocity.y) / u)
 	return a
 
-## The base of the accuracy penalty now: the crouch cone while ducked, else the stand cone (the held mode's).
+## The base of the accuracy penalty now: the crouch cone while ducked, else the stand cone (the held mode's),
+## plus items_game's "inaccuracy reload" while a reload is under way, like CS's UpdateAccuracyPenalty: the
+## penalty climbs at once when the reload starts and is still settling over the recovery time when it ends.
 func base_inacc(id: String) -> float:
 	if id == "knife" or id == "" or main == null or main.player == null or not rows.has(id):
 		return 0.0
 	var p: SurfPlayer = main.player
 	var crouch: bool = p.ducked and (p.grounded or float(X["air_crouch_cone"]) > 0.0)
-	return mstat(id, "inaccuracy crouch") if crouch else mstat(id, "inaccuracy stand")
+	var b := mstat(id, "inaccuracy crouch") if crouch else mstat(id, "inaccuracy stand")
+	if id == held() and (_reload_until > 0.0 or (_shell_next > 0.0 and float(X["reload_inacc_shells"]) > 0.0)):
+		b += reload_inacc(id)
+	return b
+
+## items_game's "inaccuracy reload" (the reload_inacc_fallback mechanics row when the file has none).
+func reload_inacc(id: String) -> float:
+	return stat(id, "inaccuracy reload") if _has(id, "inaccuracy reload") else float(X["reload_inacc_fallback"])
 
 ## CS2's walk (+speed, held): a grounded player holding walk_action moves at walk_speed_scale of the weapon's
 ## speed and gets the linear movement cone.
@@ -1651,6 +1682,56 @@ func _selftest_r2() -> void:
 	slots["secondary"] = keep[1]
 	current = keep[2]
 	_next_fire = keep[3]
+
+## --wtest, Gauntlet round 3 checks: items_game's "inaccuracy reload" lifts the penalty while reloading and
+## settles after it; a tap is stamped at its press, on the cycletime slot when the gun came ready that frame.
+func _selftest_r3() -> void:
+	var keep := [slots["primary"], current, _next_fire, _frame_from, _press_at]
+	slots["primary"] = "cs2_ak47"
+	current = "primary"
+	var st: Dictionary = _st.get("cs2_ak47", {})
+	var had: bool = st.has("inaccuracy reload")
+	var old: Variant = st.get("inaccuracy reload")
+	var stand := base_inacc("cs2_ak47")
+	st["inaccuracy reload"] = maxf(stand, 1.0) * 4.0
+	_st["cs2_ak47"] = st
+	var t0 := _now()
+	_decay_at = t0
+	_penalty = stand
+	_reload_until = t0 + 1.0
+	_decay_to("cs2_ak47", t0 + 0.5)
+	var during := _inacc("cs2_ak47")
+	_reload_until = 0.0
+	var after := _inacc("cs2_ak47")
+	_decay_to("cs2_ak47", t0 + 0.5 + stat("cs2_ak47", "recovery time stand") * 2.0)
+	var settled := _inacc("cs2_ak47")
+	var want := stand + float(st["inaccuracy reload"])
+	var p: SurfPlayer = main.player
+	var still := p.speed_units() < 1.0 and p.grounded
+	_check("reload_inaccuracy", not still or (absf(during - want) < 0.001 and absf(after - want) < 0.001 and absf(settled - stand) < 0.05 * want), "stand %.2f, reloading %.2f (want %.2f), the instant it ends %.2f, two recovery times later %.2f%s" % [stand, during, want, after, settled, "" if still else " (skipped: player moving)"])
+	if had:
+		st["inaccuracy reload"] = old
+	else:
+		st.erase("inaccuracy reload")
+	_penalty = base_inacc("cs2_ak47")
+	# click stamps: previous frame at 10.000, press dispatched at 10.010, frame read at 10.016
+	_frame_from = 10.0
+	_press_at = 10.010
+	_next_fire = 10.005
+	var on_slot := click_time(10.016)
+	_next_fire = 9.0
+	var stamped := click_time(10.016)
+	_next_fire = 10.012
+	var early := click_time(10.016)
+	_press_at = -1.0
+	_next_fire = 9.0
+	var none := click_time(10.016)
+	_check("click_stamp", is_equal_approx(on_slot, 10.005) and is_equal_approx(stamped, 10.010) and is_equal_approx(early, 10.010) and is_equal_approx(none, 10.016), "ready mid-frame -> %.3f, ready long ago -> %.3f, ready after the press -> %.3f (refused), no stamp -> %.3f" % [on_slot, stamped, early, none])
+	slots["primary"] = keep[0]
+	current = keep[1]
+	_next_fire = keep[2]
+	_frame_from = keep[3]
+	_press_at = keep[4]
 
 ## --wtest's stand-in for an aim lobby part: one hittable body that records the hits it takes.
 class TestPart extends StaticBody3D:
@@ -2334,6 +2415,7 @@ func _selftest() -> void:
 			if absf(stat(wid, String(r["key"])) - float(r["value"])) > 0.0005:
 				wrong.append("%s %s=%s (want %s)" % [wid, r["key"], stat(wid, String(r["key"])), r["value"]])
 	_selftest_r2()
+	_selftest_r3()
 	_check("stats_reference", wrong.is_empty(), "%d known value(s) compared with the files, %s" % [compared, "all equal" if wrong.is_empty() else "; ".join(wrong)] + ("" if compared > 0 else " (no CS2 stats in this data folder)"))
 	# the aim lobby counts a real traced shot on a target the eye can see, one hit per shot
 	var lob: Node = main.lobby

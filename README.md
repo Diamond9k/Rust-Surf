@@ -100,8 +100,8 @@ tools such as `Source2Viewer-CLI.exe`).
   panel, which reads `data/prep_status.json`.
 - Weapon constants CS2 does not publish (recoil decay, penetration, armor) are CS:GO SDK defaults or
   estimates. `python3 tools/preflight.py --list` prints every sheet cell labelled unverified
-  (328 in this build: weapon defaults, weapon alt/reload modes, HUD and settings values, prep's
-  vdata map and others); `tools/package.py` records the count in the release's entries file. The 218 of
+  (342 when this README was last checked: weapon defaults, weapon alt/reload modes, HUD and settings values, prep's
+  vdata map and others); `tools/package.py` records the count in the release's entries file. The 232 of
   them that decide play (the weapon, weapon-defaults, aim-lobby scoring and crosshair sheets, named in
   `tools/unverified_ack.json`) are a release decision, not a count: the release build refuses while any
   of them is new or has changed since someone reviewed it and recorded it with
@@ -136,8 +136,14 @@ tools such as `Source2Viewer-CLI.exe`).
   `prep/tests/ci_data.py` (an `items_game.txt` in CS:GO's layout naming all 35 guns, with test values,
   never CS2's), which prep's own stats reader turns into `weapon_stats.json`, so every gun's stats go
   file -> prep -> game on every push, and `--wtest` must compare every reference stat with that file.
-  The two `--wtest` checks that need CS2's arms are excused there (and only there); the release gate
-  below runs them on real data. Inside CI the reader parity unit test fails instead of skipping when
+  The same data folder holds a synthetic viewmodel from `prep/tests/ci_content.py` (box arms, a box
+  knife and three short clips, written as glb files at their `content.json` paths in the layout VRF
+  exports; nothing in them is CS2's), so the `--wtest` rig checks (`viewmodel_inside_hull`,
+  `reequip_idle`, `knife_in_palm`) must pass on every push too: CI excuses no failing check, and a
+  regression in `Viewmodel.equip` or the knife attachment fails it. They show the rig code works, not
+  that CS2's real arms look right; the release gate below runs the same checks on real data and also
+  needs all three to print PASS. When CI runs on GitHub, the count of gameplay-critical rows still
+  waiting on review is posted as a warning annotation on the run. Inside CI the reader parity unit test fails instead of skipping when
   no Godot binary is given.
 - `tools/package.py --godot <Godot 4.7.2> --data <prep output folder>` builds the release zip. It
   copies the sheets into `game/data/` and `prep/`, then refuses to package unless preflight is clean,

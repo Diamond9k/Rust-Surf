@@ -22,7 +22,11 @@ const KP := {"KP_INS": KEY_KP_0, "KP_END": KEY_KP_1, "KP_DOWNARROW": KEY_KP_2, "
 	"KP_DEL": KEY_KP_PERIOD, "KP_SLASH": KEY_KP_DIVIDE, "KP_MULTIPLY": KEY_KP_MULTIPLY, "KP_MINUS": KEY_KP_SUBTRACT,
 	"KP_PLUS": KEY_KP_ADD, "KP_ENTER": KEY_KP_ENTER, "PAUSE": KEY_PAUSE, "NUMLOCK": KEY_NUMLOCK, "SCROLLLOCK": KEY_SCROLLLOCK,
 	"APP": KEY_MENU}
-const SIDED := {"RCTRL": [KEY_CTRL, KEY_LOCATION_RIGHT], "RSHIFT": [KEY_SHIFT, KEY_LOCATION_RIGHT],
+# Source's SHIFT, CTRL and ALT are the left keys (the right ones are RSHIFT, RCTRL, RALT), so each side is its own bind.
+# Godot's InputMap matches these keys on either side whatever the event's location, so sided keys never go in it:
+# _input presses and releases their actions itself.
+const SIDED := {"SHIFT": [KEY_SHIFT, KEY_LOCATION_LEFT], "CTRL": [KEY_CTRL, KEY_LOCATION_LEFT], "ALT": [KEY_ALT, KEY_LOCATION_LEFT],
+	"RCTRL": [KEY_CTRL, KEY_LOCATION_RIGHT], "RSHIFT": [KEY_SHIFT, KEY_LOCATION_RIGHT],
 	"RALT": [KEY_ALT, KEY_LOCATION_RIGHT], "LWIN": [KEY_META, KEY_LOCATION_LEFT], "RWIN": [KEY_META, KEY_LOCATION_RIGHT]}
 # the preview frame's background: the screen at 1:1 around its centre, wherever the frame sits
 const VIEW := """shader_type canvas_item;
@@ -61,9 +65,12 @@ var is_open := false
 var vals := {}
 var rows := {}           # id -> settings.json row
 var _changed := {}
+var _kept := {}          # saved values this build cannot use (unknown key, unreadable type): written back as found
 var _keys := {}          # input.json id -> [key, key] in slot order (CS2 key names, upper case)
 var _keys_set := {}      # input.json ids whose keys the player set here (saved)
 var _dead := {}          # key names no key answers to (left out of the InputMap, shown red)
+var _sided := {}         # SIDED key name -> the godot actions bound to it (driven by _input, see SIDED)
+var _sided_down := {}    # SIDED key names held now
 var _root: Control
 var _tab := "game"
 var _pages := {}
@@ -178,6 +185,7 @@ func _fit(r: Dictionary, v: Variant, snap: bool = true) -> Variant:
 	return v
 
 func _load() -> void:
+	_kept.clear()
 	for id in rows:
 		if rows[id]["kind"] != "binds":
 			vals[id] = _initial(rows[id])
@@ -208,12 +216,23 @@ func _load() -> void:
 				saved[OLD[k]] = d[k]
 		if d.get("volume") is float:
 			saved["volume"] = float(d["volume"]) / 100.0
+	var dropped: Array = []
 	for k in saved:
-		if vals.has(k) and (saved[k] is float or saved[k] is bool):
-			if _lim.has(k) and saved[k] is float:  # a value the player set here earlier is in range by definition
-				_lim[k] = [minf(float(_lim[k][0]), float(saved[k])), maxf(float(_lim[k][1]), float(saved[k]))]
-			vals[k] = _fit(rows[k], saved[k], false)
-			_changed[k] = true
+		var sv: Variant = _coerce(saved[k]) if vals.has(k) else null
+		if sv == null:
+			if d.has("values"):
+				_kept[k] = saved[k]  # a newer build's key or a hand edit: never silently lost by the next save
+			if vals.has(k):
+				dropped.append(k)
+			continue
+		if _lim.has(k) and sv is float:  # a value the player set here earlier is in range by definition
+			_lim[k] = [minf(float(_lim[k][0]), float(sv)), maxf(float(_lim[k][1]), float(sv))]
+		vals[k] = _fit(rows[k], sv, false)
+		_changed[k] = true
+	if not dropped.is_empty():
+		var why := "settings.json: could not read %s (kept in the file, your CS2 value used)" % ", ".join(dropped)
+		push_warning(why)
+		main.hud.message(why, 6.0)
 	if d.get("keys") is Dictionary:  # v0.2.1: id -> [key, key]
 		for id in d["keys"]:
 			if _keys.has(id) and d["keys"][id] is Array:
@@ -225,6 +244,21 @@ func _load() -> void:
 		for id in d["binds"]:
 			if _keys.has(id) and d["binds"][id] is String:
 				_set_keys(id, [String(d["binds"][id]).to_upper()])
+
+## A saved value as a float or bool: numbers and booleans as they are, a number or true/false written as text
+## (a hand edit) read as one; anything else null.
+func _coerce(v: Variant) -> Variant:
+	if v is float or v is bool:
+		return v
+	if v is int:
+		return float(v)
+	if v is String:
+		var t := (v as String).strip_edges().to_lower()
+		if t.is_valid_float() or t.is_valid_int():
+			return float(t)
+		if t == "true" or t == "false":
+			return t == "true"
+	return null
 
 ## The parsed file, or null when it is missing or does not parse (parse() reports it to us, not the log).
 func _read(path: String) -> Variant:
@@ -244,13 +278,20 @@ func _flush() -> void:
 	if _save_due:
 		_save()
 
+## Closing the window (Alt-F4, the title bar) writes a pending slider change too.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_flush()
+	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_sided_release()  # the key-up goes to another window
+
 ## Writes a temp file and renames it over the old one, so a crash mid-write never loses the settings.
 func _save() -> void:
 	_save_due = false
 	if _no_save:
 		return
 	saves += 1
-	var out := {}
+	var out := _kept.duplicate()
 	for k in _changed:  # only what the player changed here, so the rest keeps following their CS2 config
 		out[k] = vals[k]
 	var keys := {}
@@ -401,6 +442,8 @@ func _set_keys(id: String, ks: Array) -> void:
 ## game does not know) is left out of the map and shown red in the bind list, never registered as a dead event.
 func _apply_keys() -> void:
 	_dead.clear()
+	_sided_release()
+	_sided.clear()
 	for r in _input_rows():
 		var action: String = r["godot_action"]
 		if not InputMap.has_action(action):
@@ -408,7 +451,12 @@ func _apply_keys() -> void:
 		InputMap.action_erase_events(action)
 		for k in _keys.get(r["id"], []):
 			var ev := _event(String(k))
-			if ev == null:
+			if SIDED.has(String(k).to_upper()):
+				var sk := String(k).to_upper()
+				if not _sided.has(sk):
+					_sided[sk] = []
+				(_sided[sk] as Array).append(action)
+			elif ev == null:
 				_dead[String(k)] = true
 			else:
 				InputMap.action_add_event(action, ev)
@@ -457,7 +505,41 @@ func _key_name(ev: InputEvent) -> String:
 		return "F%d" % (kc - KEY_F1 + 1)
 	return OS.get_keycode_string(kc).to_upper()
 
+## The SIDED key name of a key event (an unspecified side counts as the left key, Source's plain name), else "".
+func _sided_name(ev: InputEventKey) -> String:
+	for n in SIDED:
+		if SIDED[n][0] == ev.keycode and (SIDED[n][1] == ev.location or (ev.location == KEY_LOCATION_UNSPECIFIED and SIDED[n][1] == KEY_LOCATION_LEFT)):
+			return n
+	return ""
+
+## Presses or releases the actions bound to a sided key; an action stays down while any of its sided keys is held.
+func _sided_key(ev: InputEventKey) -> void:
+	var n := _sided_name(ev)
+	if n == "" or ev.is_echo():
+		return
+	if ev.pressed:
+		_sided_down[n] = true
+	else:
+		_sided_down.erase(n)
+	for a in _sided.get(n, []):
+		var held := false
+		for k in _sided_down:
+			held = held or (_sided.get(k, []) as Array).has(a)
+		if held:
+			Input.action_press(a)
+		else:
+			Input.action_release(a)
+
+## Lets go of every action a held sided key pressed (rebinding, focus lost).
+func _sided_release() -> void:
+	for k in _sided_down:
+		for a in _sided.get(k, []):
+			Input.action_release(a)
+	_sided_down.clear()
+
 func _input(ev: InputEvent) -> void:
+	if _capture == "" and ev is InputEventKey:
+		_sided_key(ev as InputEventKey)
 	if _capture == "" or not ev.is_pressed() or ev.is_echo():
 		return
 	if not (ev is InputEventKey or ev is InputEventMouseButton):
@@ -688,7 +770,9 @@ func _build() -> void:
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hb.add_child(sp)
-	_nav_button(hb, "power", "", "Quit", nav_h).pressed.connect(func() -> void: get_tree().quit())
+	_nav_button(hb, "power", "", "Quit", nav_h).pressed.connect(func() -> void:
+		_flush()  # a slider still waiting on menu_save_delay is written before the game goes
+		get_tree().quit())
 	# one full-width page under the nav bar: tabs from its left edge (the open one underlined), then the rows
 	var margin := _px(float(main.hud.H["menu_margin"]))
 	var w := _area_w()
@@ -1316,6 +1400,30 @@ func _uitest() -> void:
 	main.player.input.sensitivity = sens0
 	_changed.clear()
 	_load()
+	# a value saved as text (a hand edit) is read, and one no build can read stays in the file with a message
+	bf = FileAccess.open(FILE, FileAccess.WRITE)
+	bf.store_string(JSON.stringify({"values": {"sensitivity": " 2.75", "invert_mouse": "true", "volume": {"x": 1}, "future_key": [1, 2]}, "keys": {}}))
+	bf.close()
+	_changed.clear()
+	_load()
+	ok.call(is_equal_approx(float(vals["sensitivity"]), 2.75) and vals["invert_mouse"] == true and _changed.has("sensitivity"), "text values ' 2.75' and 'true' read as numbers/booleans")
+	_change("snd_musicvolume", 0.3)
+	var kb: Variant = _read(FILE)
+	ok.call(kb is Dictionary and kb["values"].get("volume") is Dictionary and kb["values"].get("future_key") is Array and is_equal_approx(float(kb["values"].get("sensitivity", 0.0)), 2.75), "unreadable and unknown saved values survive the next save")
+	for p in [FILE, FILE + ".tmp", FILE + ".bad"]:
+		DirAccess.remove_absolute(gp.call(p))
+	_changed.clear()
+	_load()
+	# a slider change still waiting on menu_save_delay is written when the window closes
+	_change("volume", 0.61, true, true)
+	notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	var wc: Variant = _read(FILE)
+	ok.call(wc is Dictionary and is_equal_approx(float(wc["values"].get("volume", 0.0)), 0.61) and not _save_due, "closing the window flushes a pending slider save")
+	for p in [FILE, FILE + ".tmp", FILE + ".bad"]:
+		DirAccess.remove_absolute(gp.call(p))
+	_changed.clear()
+	_load()
+	_apply("volume")
 	# a slider drag writes the file once after it settles, not once per value_changed
 	_rebuild()
 	var n0 := saves
@@ -1443,6 +1551,15 @@ func _uitest() -> void:
 	ok.call(q3[0][0] == g2 + 3.0 and q3[1][0] == g2 + 3.0 + inner and q3[1][2] == 1.0, "style 2 opens 3 px as one arm below splitdist (%s)" % [q3])
 	ok.call(qb[0][0] == qa[0][0] and qb[1][0] == qa[1][0] + 1.0, "style 2 has no jump at splitdist (%s -> %s)" % [qa, qb])
 	ok.call(qw[0][0] == g2 + spl and qw[1][0] == g2 + spl + 20.0 + inner and is_equal_approx(float(qw[1][2]), 0.5), "style 2 past splitdist: inner stays, outer moves at outermod (%s)" % [qw])
+	# style 0 (Default) splits too, by hud.json's fixed default_xh_split* values whatever the convars say
+	var c0 := {"cl_crosshairstyle": "0", "cl_crosshair_dynamic_splitdist": "2", "cl_crosshair_dynamic_maxdist_splitratio": "0.9"}
+	var spl0 := roundf(float(hv["default_xh_splitdist"]) * 1080 / float(hv["yres_base"]))
+	var g0: float = Hud.xh_px(c0, 1080, hv)["gap"]
+	var z0: Array = Hud.xh_segs(c0, 1080, hv, spl0 + 20.0, 0.0)
+	var in0 := roundf(float(Hud.xh_px(c0, 1080, hv)["size"]) * (1.0 - float(hv["default_xh_splitratio"])))
+	ok.call(z0.size() == 2 and z0[0][0] == g0 + spl0 and z0[0][1] == in0 and z0[1][0] == g0 + spl0 + 20.0 + in0 and is_equal_approx(float(z0[1][2]), float(hv["default_xh_outer_alpha"])), "style 0 splits at hud.json default_xh_splitdist, not the convar (%s)" % [z0])
+	# the HUD reads Weapons' spread after Weapons has run this frame
+	ok.call(main.hud.process_priority > main.weapons.process_priority, "Hud processes after Weapons (%d > %d)" % [main.hud.process_priority, main.weapons.process_priority])
 	# keypad and right-hand keys keep their own events and CS2 names; an unknown name is never a dead bind
 	var kp := InputEventKey.new()
 	kp.keycode = KEY_KP_1
@@ -1455,6 +1572,35 @@ func _uitest() -> void:
 	var er: InputEvent = _event("RCTRL")
 	ok.call(e5 is InputEventKey and (e5 as InputEventKey).keycode == KEY_KP_5 and (e1 as InputEventKey).keycode == KEY_KP_1
 		and (er as InputEventKey).location == KEY_LOCATION_RIGHT and _event("KP_NOPE") == null and _event("NOTAKEY") == null, "KP_5, KP_1, RCTRL map to their keys; unknown names map to none")
+	# SHIFT is the left Shift only: bound beside RSHIFT, each key fires its own action
+	var ls := InputEventKey.new()
+	ls.keycode = KEY_SHIFT
+	ls.location = KEY_LOCATION_LEFT
+	ls.pressed = true
+	var rs := ls.duplicate() as InputEventKey
+	rs.location = KEY_LOCATION_RIGHT
+	_rebind("duck:0", "CTRL")
+	_rebind("jump:1", "RCTRL")
+	var lc := InputEventKey.new()
+	lc.keycode = KEY_CTRL
+	lc.location = KEY_LOCATION_LEFT
+	lc.pressed = true
+	var rcp := lc.duplicate() as InputEventKey
+	rcp.location = KEY_LOCATION_RIGHT
+	_input(rcp)
+	var r_only := Input.is_action_pressed("surf_jump") and not Input.is_action_pressed("surf_duck")
+	rcp.pressed = false
+	_input(rcp)
+	_input(lc)
+	var l_only := Input.is_action_pressed("surf_duck") and not Input.is_action_pressed("surf_jump")
+	lc.pressed = false
+	_input(lc)
+	var none := not Input.is_action_pressed("surf_duck") and not Input.is_action_pressed("surf_jump")
+	var in_map := false
+	for ev in InputMap.action_get_events("surf_duck") + InputMap.action_get_events("surf_jump"):
+		in_map = in_map or (ev is InputEventKey and (ev as InputEventKey).keycode == KEY_CTRL)
+	ok.call(_key_name(ls) == "SHIFT" and _key_name(rs) == "RSHIFT" and r_only and l_only and none and not in_map, "CTRL (left) and RCTRL are separate binds: each Ctrl presses only its own action")
+	_reset_binds()
 	_rebind("reload:1", "NOTAKEY")
 	var dead_ev := false
 	for ev in InputMap.action_get_events("surf_reload"):
